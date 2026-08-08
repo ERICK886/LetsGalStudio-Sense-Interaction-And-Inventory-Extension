@@ -826,11 +826,11 @@ export function parseBackpackScreenJson(raw: string): BackpackScreenConfig {
 }
 
 /**
- * 序列化全屏背包布局。
+ * 序列化全屏背包布局（始终写出 version: 2）。
  *
  * @param config - 配置
  * @returns JSON 文本
  */
 export function stringifyBackpackScreen(config: BackpackScreenConfig): string {
-  return JSON.stringify(config);
+  return JSON.stringify({ ...config, version: 2 as const });
 }

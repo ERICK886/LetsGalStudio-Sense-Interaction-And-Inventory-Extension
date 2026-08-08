@@ -186,24 +186,49 @@ export interface InventoryHudConfig {
 }
 
 /**
- * 全屏背包布局配置（编辑器可视化编辑，运行时 BackpackScreen 读取）。
+ * 全屏背包自由布局配置（version 2，节点化）。
+ *
+ * v1 扁平 `pagePaddingX/pagePaddingY/detailRatio/...` 仅在
+ * `normalizeBackpackScreen` 输入侧迁移，不再作为正式字段。
  */
 export interface BackpackScreenConfig {
-  /** 页面水平内边距（设计像素） */
-  pagePaddingX: number;
-
-  /** 页面垂直内边距（设计像素） */
-  pagePaddingY: number;
-
-  /** 右侧详情栏宽度占比（0.25–0.5） */
-  detailRatio: number;
-
-  /** Grid 槽位最小边长（CSS px） */
-  gridCellMin: number;
-
-  /** 详情大图区域高度（CSS px） */
-  heroHeight: number;
-
-  /** 强调色（十六进制，如 #64e0d0） */
+  version: 2;
   accent: string;
+  nodes: {
+    backdrop: { style: UiBoxStyle };
+    panelChrome: { rect: UiRect; style: UiBoxStyle };
+    titleBlock: {
+      rect: UiRect;
+      eyebrow?: UiTextStyle;
+      title?: UiTextStyle;
+      modeLink?: UiTextStyle;
+    };
+    closeButton: { rect: UiRect; style: UiBoxStyle & UiTextStyle };
+    itemGrid: {
+      rect: UiRect;
+      cellMin: number;
+      style: UiBoxStyle;
+      selectedStyle?: UiBoxStyle;
+    };
+    detailPanel: {
+      rect: UiRect;
+      heroHeight: number;
+      padding: number;
+      style: UiBoxStyle;
+    };
+    craftButton: {
+      offsetY?: number;
+      style: UiBoxStyle & UiTextStyle;
+    };
+  };
 }
+
+/** 全屏背包可重置 / 选中的节点 id */
+export type BackpackNodeId =
+  | "backdrop"
+  | "panelChrome"
+  | "titleBlock"
+  | "closeButton"
+  | "itemGrid"
+  | "detailPanel"
+  | "craftButton";

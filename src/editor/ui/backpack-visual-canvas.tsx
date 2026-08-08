@@ -8,6 +8,13 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  bagLegacyDetailRatio,
+  bagLegacyGridCellMin,
+  bagLegacyHeroHeight,
+  bagLegacyPagePaddingX,
+  bagLegacyPagePaddingY,
+} from "../../domain/backpack-screen-config";
 import type { BackpackScreenConfig } from "../../domain/types";
 import { fitDesignToHost } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
@@ -73,7 +80,12 @@ export function BackpackVisualCanvas({
   const scale = world.scale > 0 ? world.scale : 0.001;
   const frameW = designWidth * scale;
   const frameH = designHeight * scale;
-  const detailPct = Math.round(config.detailRatio * 100);
+  const pagePaddingX = bagLegacyPagePaddingX(config);
+  const pagePaddingY = bagLegacyPagePaddingY(config);
+  const detailRatio = bagLegacyDetailRatio(config);
+  const gridCellMin = bagLegacyGridCellMin(config);
+  const heroHeight = bagLegacyHeroHeight(config);
+  const detailPct = Math.round(detailRatio * 100);
   const gridPct = 100 - detailPct;
   const accent = config.accent || "#64e0d0";
 
@@ -117,7 +129,7 @@ export function BackpackVisualCanvas({
               transformOrigin: "0 0",
               background: "#05080c",
               boxSizing: "border-box",
-              padding: `${config.pagePaddingY}px ${config.pagePaddingX}px`,
+              padding: `${pagePaddingY}px ${pagePaddingX}px`,
               display: "flex",
               flexDirection: "column",
               gap: 20,
@@ -175,7 +187,7 @@ export function BackpackVisualCanvas({
                   borderRight: "1px solid rgba(255,255,255,0.08)",
                   padding: 16,
                   display: "grid",
-                  gridTemplateColumns: `repeat(auto-fill, minmax(${config.gridCellMin}px, 1fr))`,
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${gridCellMin}px, 1fr))`,
                   gap: 12,
                   alignContent: "start",
                   background: "rgba(10, 14, 20, 0.55)",
@@ -208,7 +220,7 @@ export function BackpackVisualCanvas({
               >
                 <div
                   style={{
-                    height: config.heroHeight,
+                    height: heroHeight,
                     maxHeight: "34%",
                     borderRadius: 14,
                     border: "1px solid rgba(255,255,255,0.08)",
