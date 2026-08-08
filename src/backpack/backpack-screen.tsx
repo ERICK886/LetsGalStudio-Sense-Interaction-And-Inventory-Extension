@@ -2,7 +2,7 @@
  * backpack-screen.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.1
+ * 版本: 0.5.2
  *
  * 背包全屏幕 UI（v2 节点布局）：
  * - 配置经 useBackpackScreenConfig → resolveBackpackLayout 解析；
@@ -1019,11 +1019,11 @@ export function BackpackScreen({
               <h1
                 style={{
                   margin: 0,
-                  fontSize: 36,
-                  fontWeight: 750,
+                  fontSize: 22,
+                  fontWeight: 700,
                   letterSpacing: "0.04em",
                   color: tokens.text,
-                  lineHeight: 1.1,
+                  lineHeight: 1.15,
                   ...titleCss,
                 }}
               >

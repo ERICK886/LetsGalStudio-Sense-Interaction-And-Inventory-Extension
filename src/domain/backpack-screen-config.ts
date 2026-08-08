@@ -2,9 +2,10 @@
  * backpack-screen-config.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.1
+ * 版本: 0.4.2
  *
  * 全屏背包布局默认值、v1→v2 迁移与 JSON 规范化（参考设计尺寸 1920×1080）。
+ * 默认几何：标题/关闭钮落在面板顶栏内，网格与详情分列于标题下方（对齐设计稿）。
  */
 
 import type {
@@ -46,6 +47,15 @@ const DEFAULT_DETAIL_PADDING = 24;
 
 /** 默认合成按钮相对详情底边的竖直偏移 */
 const DEFAULT_CRAFT_OFFSET_Y = 0;
+
+/** 面板内顶栏高度（容纳 INVENTORY / 标题 / 模式链，网格在其下） */
+const DEFAULT_HEADER_H = 128;
+
+/** 面板内容区内边距 */
+const DEFAULT_INNER_PAD = 28;
+
+/** 网格与详情列间距 */
+const DEFAULT_COL_GAP = 24;
 
 /** 强调色默认值 */
 const DEFAULT_ACCENT = "#64e0d0";
@@ -138,12 +148,12 @@ const DEFAULT_EYEBROW: UiTextStyle = {
 };
 
 /**
- * 标题区主标题默认文案样式。
+ * 标题区主标题默认文案样式（顶栏内紧凑字号，避免压住网格）。
  */
 const DEFAULT_TITLE: UiTextStyle = {
   color: "#f2f5f7",
-  fontSize: 36,
-  fontWeight: 750,
+  fontSize: 22,
+  fontWeight: 700,
   label: "道具",
 };
 
@@ -267,11 +277,16 @@ function normalizeBoxAndTextStyle(
 }
 
 /**
- * 按 brief 公式从 v1 扁平边距/占比计算默认节点几何。
+ * 从边距 / 详情占比计算默认节点几何（对齐全屏背包设计稿）。
  *
- * @param padX - 水平内边距
- * @param padY - 垂直内边距
- * @param detailRatio - 详情栏宽度占比
+ * 布局约定（设计分辨率绝对坐标）：
+ * - `panelChrome`：舞台内主面板外框
+ * - `titleBlock` / `closeButton`：**在面板顶栏内**（不再叠到网格上或落到舞台外）
+ * - `itemGrid` / `detailPanel`：顶栏下方左右分栏，中间留列间距
+ *
+ * @param padX - 面板相对舞台的水平外边距
+ * @param padY - 面板相对舞台的垂直外边距
+ * @param detailRatio - 详情栏占内容区宽度的比例（不含列间距）
  * @param refW - 参考设计宽度
  * @param refH - 参考设计高度
  * @returns panel / grid / detail / title / close 的绝对 rect
@@ -280,7 +295,11 @@ function normalizeBoxAndTextStyle(
  * ```ts
  * const g = computeV1Geometry(48, 40, 0.36, 1920, 1080);
  * // g.panel.w === 1824
+ * // g.itemGrid.y > g.titleBlock.y  （网格在标题下方）
  * ```
+ *
+ * @remarks
+ * 不抛异常；非法尺寸由调用方传入的有限正数保证。
  */
 function computeV1Geometry(
   padX: number,
@@ -298,38 +317,56 @@ function computeV1Geometry(
   const panel = {
     x: padX,
     y: padY,
-    w: refW - padX * 2,
-    h: refH - padY * 2,
+    w: Math.max(1, refW - padX * 2),
+    h: Math.max(1, refH - padY * 2),
   };
-  const detailW = Math.round(panel.w * detailRatio);
-  const gridW = panel.w - detailW;
 
-  let titleY = panel.y - 72;
+  const innerPad = DEFAULT_INNER_PAD;
+  const headerH = Math.min(DEFAULT_HEADER_H, Math.max(72, panel.h * 0.18));
+  const colGap = DEFAULT_COL_GAP;
+  const closeSize = 44;
 
-  if (titleY < 0) {
-    titleY = padY;
-  }
+  const titleBlock: Required<UiRect> = {
+    x: panel.x + innerPad,
+    y: panel.y + 18,
+    w: Math.max(120, panel.w - innerPad * 2 - closeSize - 16),
+    h: Math.max(56, headerH - 28),
+  };
+
+  const closeButton: Required<UiRect> = {
+    x: panel.x + panel.w - innerPad - closeSize,
+    y: panel.y + 22,
+    w: closeSize,
+    h: closeSize,
+  };
+
+  const contentX = panel.x + innerPad;
+  const contentY = panel.y + headerH;
+  const contentW = Math.max(1, panel.w - innerPad * 2);
+  const contentH = Math.max(1, panel.h - headerH - innerPad);
+
+  const usableW = Math.max(1, contentW - colGap);
+  const detailW = Math.max(
+    160,
+    Math.min(usableW - 160, Math.round(usableW * detailRatio)),
+  );
+  const gridW = Math.max(160, usableW - detailW);
 
   return {
     panel,
-    itemGrid: { x: panel.x, y: panel.y, w: gridW, h: panel.h },
+    titleBlock,
+    closeButton,
+    itemGrid: {
+      x: contentX,
+      y: contentY,
+      w: gridW,
+      h: contentH,
+    },
     detailPanel: {
-      x: panel.x + gridW,
-      y: panel.y,
+      x: contentX + gridW + colGap,
+      y: contentY,
       w: detailW,
-      h: panel.h,
-    },
-    titleBlock: {
-      x: panel.x + 24,
-      y: titleY,
-      w: panel.w - 80,
-      h: 64,
-    },
-    closeButton: {
-      x: panel.x + panel.w - 56,
-      y: panel.y - 64,
-      w: 44,
-      h: 44,
+      h: contentH,
     },
   };
 }
