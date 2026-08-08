@@ -36,8 +36,10 @@ import { SceneCanvas } from "./canvas/scene-canvas";
 import {
   downloadJsonFile,
   exportItemsLibrary,
+  exportRecipesLibrary,
   exportScenesLibrary,
   tryImportItemsLibrary,
+  tryImportRecipesLibrary,
   tryImportScenesLibrary,
 } from "./io/import-export";
 import {
@@ -72,9 +74,9 @@ export interface EditorShellProps {
   onEditorSectionChange: (section: EditorSection) => void;
 
   /**
-   * 切换编辑/运行模式（写入 save.isEditMode）。
+   * 退出编辑器并打开运行时预览（由 EditorApp 实现：hide editor + show scene-interaction）。
    *
-   * @param enabled - true 进入编辑；false 运行预览
+   * @param enabled - false 时执行「运行预览」；true 忽略
    */
   onSetEditMode: (enabled: boolean) => void;
 }
@@ -206,7 +208,7 @@ function upsertRecipe(
  * <EditorShell
  *   editorSection="scenes"
  *   onEditorSectionChange={setSection}
- *   onSetEditMode={(v) => save.set("isEditMode", v)}
+ *   onSetEditMode={(v) => { if (!v) openRuntimePreview(); }}
  * />
  * ```
  */
@@ -247,9 +249,10 @@ export function EditorShell({
    */
   const [, setHistoryUiTick] = useState(0);
 
-  /** 隐藏文件选择器：场景库 / 物品库 JSON 导入 */
+  /** 隐藏文件选择器：场景库 / 物品库 / 配方库 JSON 导入 */
   const scenesImportInputRef = useRef<HTMLInputElement>(null);
   const itemsImportInputRef = useRef<HTMLInputElement>(null);
+  const recipesImportInputRef = useRef<HTMLInputElement>(null);
 
   // 首次加载后以当前库播种历史，便于后续 undo
   useEffect(() => {
@@ -710,6 +713,16 @@ export function EditorShell({
   }, [itemsLibrary]);
 
   /**
+   * 导出当前配方库 JSON 并触发下载。
+   */
+  const handleExportRecipes = useCallback(() => {
+    downloadJsonFile(
+      exportRecipesLibrary(recipesLibrary),
+      "recipes-library.json",
+    );
+  }, [recipesLibrary]);
+
+  /**
    * 打开场景库 JSON 文件选择器。
    */
   const handlePickScenesImport = useCallback(() => {
@@ -721,6 +734,13 @@ export function EditorShell({
    */
   const handlePickItemsImport = useCallback(() => {
     itemsImportInputRef.current?.click();
+  }, []);
+
+  /**
+   * 打开配方库 JSON 文件选择器。
+   */
+  const handlePickRecipesImport = useCallback(() => {
+    recipesImportInputRef.current?.click();
   }, []);
 
   /**
@@ -801,6 +821,45 @@ export function EditorShell({
     [commitItemsLibrary],
   );
 
+  /**
+   * 读取选中的配方库 JSON；失败时不写 settings。
+   *
+   * @param event - file input change 事件
+   */
+  const handleRecipesImportChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+
+      event.target.value = "";
+
+      if (file === undefined) {
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const raw = typeof reader.result === "string" ? reader.result : "";
+        const result = tryImportRecipesLibrary(raw);
+
+        if (!result.ok) {
+          window.alert(result.error);
+
+          return;
+        }
+
+        commitRecipesLibrary(result.value);
+      };
+
+      reader.onerror = () => {
+        window.alert("读取文件失败");
+      };
+
+      reader.readAsText(file);
+    },
+    [commitRecipesLibrary],
+  );
+
   return (
     <div
       data-testid="editor-shell"
@@ -814,7 +873,7 @@ export function EditorShell({
         color: tokens.textPrimary,
       }}
     >
-      {/* 隐藏 file input：场景 / 物品库导入 */}
+      {/* 隐藏 file input：场景 / 物品 / 配方库导入 */}
       <input
         ref={scenesImportInputRef}
         type="file"
@@ -830,6 +889,14 @@ export function EditorShell({
         data-testid="editor-import-items-input"
         style={{ display: "none" }}
         onChange={handleItemsImportChange}
+      />
+      <input
+        ref={recipesImportInputRef}
+        type="file"
+        accept="application/json,.json"
+        data-testid="editor-import-recipes-input"
+        style={{ display: "none" }}
+        onChange={handleRecipesImportChange}
       />
 
       {/* 顶栏：品牌 + 分区 Tab + 设计分辨率 + 导入导出 + 运行预览 */}
@@ -961,6 +1028,27 @@ export function EditorShell({
               style={topBarButtonStyle(tokens)}
             >
               导入物品 JSON
+            </button>
+          </>
+        ) : null}
+
+        {editorSection === "recipes" ? (
+          <>
+            <button
+              type="button"
+              data-testid="editor-export-recipes"
+              onClick={handleExportRecipes}
+              style={topBarButtonStyle(tokens)}
+            >
+              导出配方 JSON
+            </button>
+            <button
+              type="button"
+              data-testid="editor-import-recipes"
+              onClick={handlePickRecipesImport}
+              style={topBarButtonStyle(tokens)}
+            >
+              导入配方 JSON
             </button>
           </>
         ) : null}

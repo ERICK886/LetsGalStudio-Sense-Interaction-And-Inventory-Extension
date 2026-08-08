@@ -23,7 +23,12 @@ import {
   beginPlayerSessionWait,
   endPlayerSessionWait,
 } from "../runtime/player-session";
+import {
+  EDITOR_MODULE_ID,
+  SCENE_INTERACTION_MODULE_ID,
+} from "../shared/module-ids";
 import { logError } from "../shared/logger";
+import { readAuthorSetting } from "../store/author-settings";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
 import { notifySaveField } from "../store/save-sync";
 import type { SceneInteractionSaveMap } from "../store/save-types";
@@ -32,7 +37,11 @@ import type { SceneInteractionSaveMap } from "../store/save-types";
  * 程序 UI 模块 id（与 `@extension({ id: "scene-interaction" })` 一致）。
  * App / PlayerShell 关闭会话时复用此常量调用 `ctx.ui.hide`。
  */
-export const SCENE_INTERACTION_UI_ID = "scene-interaction";
+/** 游戏运行时程序 UI id（与 `@extension({ id })` 一致） */
+export const SCENE_INTERACTION_UI_ID = SCENE_INTERACTION_MODULE_ID;
+
+/** 编辑器程序 UI id */
+export const EDITOR_UI_ID = EDITOR_MODULE_ID;
 
 /**
  * 将 method run 回调内的 this.save 收窄为本扩展存档形状。
@@ -93,7 +102,7 @@ function normalizeKey(raw: unknown): string | null {
  */
 function loadScenesLibrary(ctx: ExtensionContext): ScenesLibraryFile {
   try {
-    const raw = readScenesLibraryJson((key) => ctx.settings.get(key));
+    const raw = readScenesLibraryJson((key) => readAuthorSetting(ctx, key));
 
     return parseScenesLibraryJson(raw);
   } catch (err) {
@@ -244,7 +253,9 @@ export const openSceneInteraction = method({
       let sceneId = String(save.get("currentSceneId") ?? "").trim();
 
       if (sceneId.length === 0) {
-        sceneId = String(ctx.settings.get("defaultSceneId") ?? "").trim();
+        sceneId = String(
+          readAuthorSetting(ctx, "defaultSceneId") ?? "",
+        ).trim();
       }
 
       if (sceneId.length === 0) {
@@ -339,10 +350,14 @@ export const closeSceneInteraction = method({
 });
 
 /**
- * 切换编辑模式（save.isEditMode）。
+ * 打开 / 关闭编辑器程序 UI（`@extension id: editor`）。
  *
- * @param params.enabled - 是否启用编辑模式
- * @param params.resultVariable - 可选；写入操作是否成功（恒为 true）
+ * @param params.enabled - true 显示编辑器；false 隐藏
+ * @param params.resultVariable - 可选；写入是否成功
+ *
+ * @remarks
+ * v0.2 起编辑器为独立程序，不再依赖 save.isEditMode 在同 UI 内分流。
+ * 仍会同步写入 isEditMode 以兼容旧剧本。
  */
 export const setEditMode = method({
   id: "set-edit-mode",
@@ -351,11 +366,37 @@ export const setEditMode = method({
     enabled: { type: "boolean", label: "启用编辑模式", default: false },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
-  run(ctx, params) {
+  async run(ctx, params) {
     const save = narrowSave(this.save);
 
-    save.set("isEditMode", params.enabled);
-    notifySaveField("isEditMode");
+    try {
+      save.set("isEditMode", params.enabled);
+      notifySaveField("isEditMode");
+    } catch (err) {
+      logError("scene-methods", "setEditMode: 写入 isEditMode 失败", err);
+    }
+
+    try {
+      if (params.enabled) {
+        await ctx.ui.show(
+          EDITOR_UI_ID,
+          {},
+          {
+            size: "(100%, 100%)",
+            position: "(0, 0)",
+            interactable: true,
+          },
+        );
+      } else {
+        await ctx.ui.hide(EDITOR_UI_ID);
+      }
+    } catch (err) {
+      logError("scene-methods", "setEditMode: 显示/隐藏编辑器失败", err);
+      writeResult(ctx, params.resultVariable, false);
+
+      return;
+    }
+
     writeResult(ctx, params.resultVariable, true);
   },
 });

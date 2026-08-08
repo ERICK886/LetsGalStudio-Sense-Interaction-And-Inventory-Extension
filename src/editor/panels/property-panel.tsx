@@ -8,7 +8,7 @@
  * 无场景时提供物品栏 HUD（inventoryHudJson）最小编辑区。
  */
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { defaultHotspotLabel } from "../../domain/hotspot-label";
 import {
@@ -32,6 +32,10 @@ import { FormRenderer } from "../../schema/form-renderer";
 import { hotspotFields } from "../../schema/hotspot-schema";
 import { inventoryHudFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
+import {
+  readRuntimeSetting,
+  writeRuntimeSetting,
+} from "../../store/runtime-settings";
 import { notifySettingsField } from "../../store/settings-sync";
 import {
   FONT_SIZE_DEFAULT,
@@ -151,7 +155,15 @@ export function PropertyPanel({
 }: PropertyPanelProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const [hudJsonRaw] = ctx.settings.useValue(INVENTORY_HUD_JSON_KEY);
+  /**
+   * HUD JSON 声明在 scene-interaction；编辑器内用 cross 读（无本地 useValue）。
+   * 用本地 state + 写回同步，避免跨模块 useValue 不可用。
+   */
+  const [hudJsonRaw, setHudJsonRaw] = useState<string>(() => {
+    const raw = readRuntimeSetting(ctx, INVENTORY_HUD_JSON_KEY);
+
+    return typeof raw === "string" ? raw : String(raw ?? "");
+  });
 
   const selectedHotspot = useMemo((): HotspotElement | null => {
     if (scene === null || selectedHotspotId === null) {
@@ -162,19 +174,14 @@ export function PropertyPanel({
   }, [scene, selectedHotspotId]);
 
   /**
-   * 无场景时展示的 HUD 表单值（来自 settings.inventoryHudJson）。
+   * 无场景时展示的 HUD 表单值（来自 scene-interaction.settings.inventoryHudJson）。
    */
   const hudFormValue = useMemo((): InventoryHudConfig => {
-    const raw =
-      typeof hudJsonRaw === "string"
-        ? hudJsonRaw
-        : String(ctx.settings.get(INVENTORY_HUD_JSON_KEY) ?? "");
-
-    return parseInventoryHudJson(raw);
-  }, [hudJsonRaw, ctx.settings]);
+    return parseInventoryHudJson(hudJsonRaw);
+  }, [hudJsonRaw]);
 
   /**
-   * 写回 inventoryHudJson 并广播进程内订阅。
+   * 写回 inventoryHudJson（cross → scene-interaction）并广播进程内订阅。
    *
    * @param next - 表单写出的 HUD 配置
    */
@@ -183,10 +190,11 @@ export function PropertyPanel({
       const normalized = normalizeInventoryHud(next);
       const json = stringifyInventoryHud(normalized);
 
-      ctx.settings.set(INVENTORY_HUD_JSON_KEY, json);
+      writeRuntimeSetting(ctx, INVENTORY_HUD_JSON_KEY, json);
+      setHudJsonRaw(json);
       notifySettingsField(INVENTORY_HUD_JSON_KEY);
     },
-    [ctx.settings],
+    [ctx],
   );
 
   const panelTitle = useMemo(() => {

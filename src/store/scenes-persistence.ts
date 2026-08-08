@@ -17,6 +17,7 @@ import {
 } from "../domain/serialize";
 import type { ScenesLibraryFile } from "../domain/types";
 import { logError } from "../shared/logger";
+import { readAuthorSetting, writeAuthorSetting } from "./author-settings";
 import { notifySettingsField, subscribeSettingsField } from "./settings-sync";
 
 /** 项目设置中的场景库字段名（与 index.tsx settings 声明一致） */
@@ -110,7 +111,7 @@ export function useScenesLibrary(): [
   const [library, setLocal] = useState<ScenesLibraryFile>(() => {
     try {
       return parseScenesLibraryJson(
-        readScenesLibraryJson((key) => ctx.settings.get(key)),
+        readScenesLibraryJson((key) => readAuthorSetting(ctx, key)),
       );
     } catch (err) {
       logError("scenes-persistence", "初始化场景库失败", err);
@@ -120,18 +121,18 @@ export function useScenesLibrary(): [
   });
 
   /**
-   * 从 settings 拉取并解析为本地 state。
+   * 从 editor settings（本模块或 cross）拉取并解析。
    */
   const pullFromSettings = useCallback(() => {
     const next = parseScenesLibraryJson(
-      readScenesLibraryJson((key) => ctx.settings.get(key)),
+      readScenesLibraryJson((key) => readAuthorSetting(ctx, key)),
     );
 
     setLocal(next);
   }, [ctx]);
 
   /**
-   * 写回 settings 并更新本地 state。
+   * 写回 editor settings 并更新本地 state。
    *
    * @param next - 新场景库
    */
@@ -140,7 +141,7 @@ export function useScenesLibrary(): [
       const json = stringifyScenesLibrary(next);
 
       writeScenesLibraryJson((key, value) => {
-        ctx.settings.set(key, value);
+        writeAuthorSetting(ctx, key, value);
       }, json);
 
       setLocal(parseScenesLibraryJson(json));

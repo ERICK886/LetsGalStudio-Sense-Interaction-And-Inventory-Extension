@@ -2,27 +2,32 @@
  * inventory-methods.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景交互扩展剧本 methods：给予物品、是否持有、数量查询。
- * 物品定义从 settings.itemsLibraryJson 读取；库存读写 save.inventoryJson。
+ * 场景交互扩展剧本 methods：给予物品、是否持有、数量查询、配方合成。
+ * 物品/配方定义从 editor settings（cross）读取；库存读写 save.inventoryJson。
  */
 
 import { method, type ExtensionContext, type SaveAPI } from "@avg-studio/sdk";
+import { craftRecipeInInventory } from "../domain/crafting";
 import {
   getItemCount as domainGetItemCount,
   giveItemToInventory,
   hasItem as domainHasItem,
 } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
+import { findRecipe } from "../domain/recipe-registry";
 import {
   parseInventoryJson,
   parseItemsLibraryJson,
+  parseRecipesLibraryJson,
   stringifyInventory,
 } from "../domain/serialize";
-import type { ItemsLibraryFile } from "../domain/types";
+import type { ItemsLibraryFile, RecipesLibraryFile } from "../domain/types";
 import { logError } from "../shared/logger";
+import { readAuthorSetting } from "../store/author-settings";
 import { readItemsLibraryJson } from "../store/items-persistence";
+import { readRecipesLibraryJson } from "../store/recipes-persistence";
 import { notifySaveField } from "../store/save-sync";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 
@@ -106,13 +111,35 @@ function normalizeItemId(raw: unknown): string | null {
  */
 function loadItemsLibrary(ctx: ExtensionContext): ItemsLibraryFile {
   try {
-    const raw = readItemsLibraryJson((key) => ctx.settings.get(key));
+    const raw = readItemsLibraryJson((key) => readAuthorSetting(ctx, key));
 
     return parseItemsLibraryJson(raw);
   } catch (err) {
     logError("inventory-methods", "读取 settings.itemsLibraryJson 失败", err);
 
     return parseItemsLibraryJson('{"version":1,"items":[]}');
+  }
+}
+
+/**
+ * 从项目设置加载作者端配方库（editor 模块 / cross）。
+ *
+ * @param ctx - 扩展上下文
+ * @returns 解析后的 RecipesLibraryFile
+ */
+function loadRecipesLibrary(ctx: ExtensionContext): RecipesLibraryFile {
+  try {
+    const raw = readRecipesLibraryJson((key) => readAuthorSetting(ctx, key));
+
+    return parseRecipesLibraryJson(raw);
+  } catch (err) {
+    logError(
+      "inventory-methods",
+      "读取 settings.recipesLibraryJson 失败",
+      err,
+    );
+
+    return parseRecipesLibraryJson('{"version":1,"recipes":[]}');
   }
 }
 
@@ -224,5 +251,79 @@ export const getItemCount = method({
     const count = domainGetItemCount(inventory, itemId);
 
     writeNumber(ctx, params.targetVariable, count);
+  },
+});
+
+/**
+ * 按配方 id 或名称在库存中执行一次合成。
+ *
+ * @param params.recipeIdOrName - 配方 id 或显示名（必填）
+ * @param params.resultVariable - 可选；写入是否合成成功（boolean）
+ *
+ * @remarks
+ * 读 editor 配方库 + 物品库，扣原料并发产物，写回 save.inventoryJson。
+ * 原料不足 / 配方不存在 / 产物未定义 → 失败且不改库存。
+ *
+ * @example
+ * // 剧本：调用扩展方法 craft-recipe，recipeIdOrName = "brew-potion"
+ */
+export const craftRecipe = method({
+  id: "craft-recipe",
+  title: "合成配方",
+  schema: {
+    recipeIdOrName: {
+      type: "string",
+      label: "配方 ID 或名称",
+      required: true,
+    },
+    resultVariable: {
+      type: "string",
+      label: "结果写入变量",
+      required: false,
+    },
+  },
+  run(ctx, params) {
+    const save = narrowSave(this.save);
+    const key = normalizeItemId(params.recipeIdOrName);
+
+    if (key === null) {
+      logError("inventory-methods", "craftRecipe: recipeIdOrName 无效");
+      writeBoolResult(ctx, params.resultVariable, false);
+
+      return;
+    }
+
+    const recipesLib = loadRecipesLibrary(ctx);
+    const recipe = findRecipe(recipesLib.recipes, key);
+
+    if (recipe === undefined) {
+      logError("inventory-methods", `craftRecipe: 未找到配方: ${key}`);
+      writeBoolResult(ctx, params.resultVariable, false);
+
+      return;
+    }
+
+    const itemsLib = loadItemsLibrary(ctx);
+    const inventory = parseInventoryJson(save.get("inventoryJson"));
+    const result = craftRecipeInInventory(
+      inventory,
+      recipe,
+      itemsLib.items,
+      Date.now(),
+    );
+
+    if (!result.ok) {
+      logError(
+        "inventory-methods",
+        `craftRecipe: 合成失败 (${key}): ${result.reason}`,
+      );
+      writeBoolResult(ctx, params.resultVariable, false);
+
+      return;
+    }
+
+    save.set("inventoryJson", stringifyInventory(result.state));
+    notifySaveField("inventoryJson");
+    writeBoolResult(ctx, params.resultVariable, true);
   },
 });

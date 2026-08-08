@@ -2,9 +2,10 @@
  * scene-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 运行时场景视图：底图 + 可见交互点 + toast 层（设计分辨率 letterbox）。
+ * 0.1.1：空态与有场景共用同一 host，避免尺寸观测失效导致画面贴边。
  */
 
 import React, {
@@ -202,12 +203,37 @@ export function SceneView({
     ],
   );
 
+  /**
+   * 测量运行时宿主尺寸。
+   *
+   * 外层 host 在空态/有场景时保持同一节点，避免 null→scene 切换后
+   * ResizeObserver 仍挂在已卸载 DOM 上、letterbox 无法按真实视口居中。
+   *
+   * @returns 清理函数
+   */
   useEffect(() => {
     const host = rootRef.current;
 
     if (host === null) {
       return;
     }
+
+    /**
+     * @param width - 宿主宽
+     * @param height - 宿主高
+     */
+    const applySize = (width: number, height: number): void => {
+      const w = width > 1 ? width : 0;
+      const h = height > 1 ? height : 0;
+
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+
+      setHostSize((prev) =>
+        prev.width === w && prev.height === h ? prev : { width: w, height: h },
+      );
+    };
 
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -218,19 +244,13 @@ export function SceneView({
 
       const { width, height } = entry.contentRect;
 
-      setHostSize({
-        width: Math.max(1, width),
-        height: Math.max(1, height),
-      });
+      applySize(width, height);
     });
 
     ro.observe(host);
     const rect = host.getBoundingClientRect();
 
-    setHostSize({
-      width: Math.max(1, rect.width || 800),
-      height: Math.max(1, rect.height || 600),
-    });
+    applySize(rect.width, rect.height);
 
     return () => ro.disconnect();
   }, []);
@@ -243,26 +263,8 @@ export function SceneView({
     return scene.hotspots.filter((hs) => isHotspotVisible(hs, progress));
   }, [scene, progress]);
 
-  if (scene === null) {
-    return (
-      <div
-        ref={rootRef}
-        data-testid="runtime-scene-view"
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: tokens.bgSunken,
-          color: tokens.textMuted,
-          fontSize: 13,
-        }}
-      >
-        暂无场景，请先在编辑器中创建
-      </div>
-    );
-  }
+  const letterbox =
+    scene !== null ? resolveLetterboxColor(scene) : tokens.bgSunken;
 
   return (
     <div
@@ -273,47 +275,65 @@ export function SceneView({
         height: "100%",
         position: "relative",
         overflow: "hidden",
-        background: resolveLetterboxColor(scene),
+        background: letterbox,
       }}
     >
-      <SceneBaseLayer
-        layout={layout}
-        imageUrl={imageUrl}
-        frameBackground={resolveLetterboxColor(scene)}
-        onImageNaturalSize={(w, h) => {
-          setImageNatural({ width: w, height: h });
-        }}
-        onImageError={() => {
-          setImageNatural({ width: 0, height: 0 });
-        }}
-      >
+      {scene === null ? (
         <div
-          data-testid="runtime-hotspot-layer"
+          data-testid="runtime-scene-view-empty"
           style={{
             position: "absolute",
             inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: tokens.textMuted,
+            fontSize: 13,
             pointerEvents: "none",
           }}
         >
-          {visibleHotspots.map((hs) => (
-            <HotspotView
-              key={hs.id}
-              hotspot={hs}
-              contentRect={layout.contentRect}
-              resolveUrl={resolveUrl}
-              onActivate={onHotspotActivate}
-            />
-          ))}
+          暂无场景，请先在编辑器中创建
         </div>
+      ) : (
+        <SceneBaseLayer
+          layout={layout}
+          imageUrl={imageUrl}
+          frameBackground={letterbox}
+          onImageNaturalSize={(w, h) => {
+            setImageNatural({ width: w, height: h });
+          }}
+          onImageError={() => {
+            setImageNatural({ width: 0, height: 0 });
+          }}
+        >
+          <div
+            data-testid="runtime-hotspot-layer"
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+            }}
+          >
+            {visibleHotspots.map((hs) => (
+              <HotspotView
+                key={hs.id}
+                hotspot={hs}
+                contentRect={layout.contentRect}
+                resolveUrl={resolveUrl}
+                onActivate={onHotspotActivate}
+              />
+            ))}
+          </div>
 
-        <ToastLayer
-          queue={toastQueue}
-          onAdvance={onToastAdvance}
-          hotspots={scene.hotspots}
-          contentRect={layout.contentRect}
-          resolveText={resolveToastText}
-        />
-      </SceneBaseLayer>
+          <ToastLayer
+            queue={toastQueue}
+            onAdvance={onToastAdvance}
+            hotspots={scene.hotspots}
+            contentRect={layout.contentRect}
+            resolveText={resolveToastText}
+          />
+        </SceneBaseLayer>
+      )}
     </div>
   );
 }

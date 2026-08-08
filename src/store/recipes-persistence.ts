@@ -17,6 +17,7 @@ import {
 } from "../domain/serialize";
 import type { RecipesLibraryFile } from "../domain/types";
 import { logError } from "../shared/logger";
+import { readAuthorSetting, writeAuthorSetting } from "./author-settings";
 import { notifySettingsField, subscribeSettingsField } from "./settings-sync";
 
 /** 项目设置中的配方库字段名（与 index.tsx settings 声明一致） */
@@ -121,7 +122,7 @@ export function useRecipesLibrary(): [
   const [library, setLocal] = useState<RecipesLibraryFile>(() => {
     try {
       return parseRecipesLibraryJson(
-        readRecipesLibraryJson((key) => ctx.settings.get(key)),
+        readRecipesLibraryJson((key) => readAuthorSetting(ctx, key)),
       );
     } catch (err) {
       logError("recipes-persistence", "初始化配方库失败", err);
@@ -135,7 +136,7 @@ export function useRecipesLibrary(): [
    */
   const pullFromSettings = useCallback(() => {
     const next = parseRecipesLibraryJson(
-      readRecipesLibraryJson((key) => ctx.settings.get(key)),
+      readRecipesLibraryJson((key) => readAuthorSetting(ctx, key)),
     );
 
     setLocal(next);
@@ -151,7 +152,7 @@ export function useRecipesLibrary(): [
       const json = stringifyRecipesLibrary(next);
 
       writeRecipesLibraryJson((key, value) => {
-        ctx.settings.set(key, value);
+        writeAuthorSetting(ctx, key, value);
       }, json);
 
       setLocal(parseRecipesLibraryJson(json));

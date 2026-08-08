@@ -69,7 +69,12 @@ export function createDefaultHotspot(x: number, y: number): HotspotElement {
     name: "未命名交互点",
     x,
     y,
-    visual: { kind: "image", src: "" },
+    visual: {
+      kind: "image",
+      src: "",
+      width: 64,
+      height: 64,
+    },
     hoverShadow: { enabled: true },
     actions: [],
     once: false,

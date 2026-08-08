@@ -17,6 +17,7 @@ import {
   SETTINGS_DESIGN_WIDTH,
   type DesignSize,
 } from "../domain/design-resolution";
+import { readAuthorSetting, writeAuthorSetting } from "./author-settings";
 import { notifySettingsField, subscribeSettingsField } from "./settings-sync";
 
 /**
@@ -49,12 +50,12 @@ export function useDesignSize(): {
    */
   const read = useCallback((): DesignSize => {
     try {
-      const w = ctx.settings.get<number>(SETTINGS_DESIGN_WIDTH);
-      const h = ctx.settings.get<number>(SETTINGS_DESIGN_HEIGHT);
+      const w = readAuthorSetting(ctx, SETTINGS_DESIGN_WIDTH);
+      const h = readAuthorSetting(ctx, SETTINGS_DESIGN_HEIGHT);
 
       return normalizeDesignSize(
-        w ?? settingW ?? DEFAULT_DESIGN_WIDTH,
-        h ?? settingH ?? DEFAULT_DESIGN_HEIGHT,
+        (w as number | undefined) ?? settingW ?? DEFAULT_DESIGN_WIDTH,
+        (h as number | undefined) ?? settingH ?? DEFAULT_DESIGN_HEIGHT,
       );
     } catch {
       return normalizeDesignSize(settingW, settingH);
@@ -97,8 +98,8 @@ export function useDesignSize(): {
     (next: DesignSize): void => {
       const normalized = normalizeDesignSize(next.width, next.height);
 
-      ctx.settings.set(SETTINGS_DESIGN_WIDTH, normalized.width);
-      ctx.settings.set(SETTINGS_DESIGN_HEIGHT, normalized.height);
+      writeAuthorSetting(ctx, SETTINGS_DESIGN_WIDTH, normalized.width);
+      writeAuthorSetting(ctx, SETTINGS_DESIGN_HEIGHT, normalized.height);
       notifySettingsField(SETTINGS_DESIGN_WIDTH);
       notifySettingsField(SETTINGS_DESIGN_HEIGHT);
       setLocal(normalized);

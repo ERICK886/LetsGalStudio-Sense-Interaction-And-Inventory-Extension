@@ -2,19 +2,21 @@
  * import-export.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景库 / 物品库 JSON 导入导出（Task 15）。
+ * 场景库 / 物品库 / 配方库 JSON 导入导出。
  * 仅支持自有格式 version 1；非法输入由 tryImport* 返回 ok:false，
  * import* 走 domain/serialize parse 并回退空库。
  */
 
 import {
   parseItemsLibraryJson,
+  parseRecipesLibraryJson,
   parseScenesLibraryJson,
 } from "../../domain/serialize";
 import type {
   ItemsLibraryFile,
+  RecipesLibraryFile,
   ScenesLibraryFile,
 } from "../../domain/types";
 
@@ -30,6 +32,13 @@ export type TryImportScenesResult =
  */
 export type TryImportItemsResult =
   | { ok: true; value: ItemsLibraryFile }
+  | { ok: false; error: string };
+
+/**
+ * tryImportRecipesLibrary 成功/失败联合结果。
+ */
+export type TryImportRecipesResult =
+  | { ok: true; value: RecipesLibraryFile }
   | { ok: false; error: string };
 
 /**
@@ -63,6 +72,21 @@ export function exportItemsLibrary(lib: ItemsLibraryFile): string {
 }
 
 /**
+ * 导出配方库为格式化 JSON 字符串（version 1）。
+ *
+ * @param lib - 当前配方库
+ * @returns 带缩进的 JSON 文本
+ *
+ * @example
+ * ```ts
+ * downloadJsonFile(exportRecipesLibrary(lib), "recipes-library.json");
+ * ```
+ */
+export function exportRecipesLibrary(lib: RecipesLibraryFile): string {
+  return JSON.stringify(lib, null, 2);
+}
+
+/**
  * 解析场景库 JSON（与 parseScenesLibraryJson 一致；非法回退空库）。
  *
  * @param raw - 文件或设置中的 JSON 文本
@@ -85,6 +109,16 @@ export function importScenesLibrary(raw: string): ScenesLibraryFile {
  */
 export function importItemsLibrary(raw: string): ItemsLibraryFile {
   return parseItemsLibraryJson(raw);
+}
+
+/**
+ * 解析配方库 JSON（与 parseRecipesLibraryJson 一致；非法回退空库）。
+ *
+ * @param raw - 文件或设置中的 JSON 文本
+ * @returns 规范化后的 RecipesLibraryFile；失败时 emptyRecipesLibrary()
+ */
+export function importRecipesLibrary(raw: string): RecipesLibraryFile {
+  return parseRecipesLibraryJson(raw);
 }
 
 /**
@@ -130,6 +164,30 @@ function validateItemsRoot(parsed: unknown): string | null {
 
   if (!Array.isArray(obj.items)) {
     return "缺少 items 数组";
+  }
+
+  return null;
+}
+
+/**
+ * 校验导入根对象是否为本扩展 version 1 配方库形状。
+ *
+ * @param parsed - JSON.parse 后的根节点
+ * @returns 通过则 null；失败则 error 文案
+ */
+function validateRecipesRoot(parsed: unknown): string | null {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return "根节点必须是 { version: 1, recipes: [...] } 对象（不接受纯数组）";
+  }
+
+  const obj = parsed as Record<string, unknown>;
+
+  if (obj.version !== undefined && obj.version !== 1) {
+    return "仅支持 version 1 配方库 JSON";
+  }
+
+  if (!Array.isArray(obj.recipes)) {
+    return "缺少 recipes 数组";
   }
 
   return null;
@@ -200,6 +258,39 @@ export function tryImportItemsLibrary(raw: string): TryImportItemsResult {
   }
 
   const value = parseItemsLibraryJson(raw);
+
+  return { ok: true, value };
+}
+
+/**
+ * 尝试导入配方库：严格校验后经 parse 规范化。
+ *
+ * @param raw - 文件原始文本
+ * @returns 成功含规范化库；失败含 error
+ *
+ * @example
+ * ```ts
+ * const result = tryImportRecipesLibrary(text);
+ * if (result.ok) commitRecipesLibrary(result.value);
+ * else window.alert(result.error);
+ * ```
+ */
+export function tryImportRecipesLibrary(raw: string): TryImportRecipesResult {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: "非法 JSON：无法解析文件内容" };
+  }
+
+  const validationError = validateRecipesRoot(parsed);
+
+  if (validationError !== null) {
+    return { ok: false, error: validationError };
+  }
+
+  const value = parseRecipesLibraryJson(raw);
 
   return { ok: true, value };
 }

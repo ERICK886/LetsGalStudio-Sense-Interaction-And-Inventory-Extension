@@ -2,14 +2,20 @@
  * hotspot-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 运行时交互点：悬浮阴影、标签、alpha-hit 点击判定。
+ * 运行时交互点：悬浮阴影、标签、PNG 剪影 alpha-hit（对齐大地图地点）。
+ *
+ * 行为要点：
+ * - 有图：pointermove 同步 data-si-hit；透明区无阴影/hover 标签/pointer 光标
+ * - 透明区 pointerdown 不 stopPropagation，事件可落到下层
+ * - 镂空内部仍命中（剪影掩码）
+ * - 无图或采样失败 → 整框可点
  */
 
 import React, { useCallback, useRef, useState } from "react";
 import type { HotspotElement } from "../domain/types";
-import { isOpaqueAt } from "../shared/alpha-hit";
+import { isOpaqueImageHit } from "../shared/alpha-hit";
 import {
   normToWorld,
   type ContentRect,
@@ -71,50 +77,7 @@ function hotspotDisplaySize(hs: HotspotElement): {
 }
 
 /**
- * 将显示框内本地坐标映射到图片自然像素（object-fit: contain）。
- *
- * @param img - 已加载图片
- * @param localX - 相对显示框左上的 X
- * @param localY - 相对显示框左上的 Y
- * @param displayW - 显示框宽
- * @param displayH - 显示框高
- * @returns 自然像素坐标；落在 contain 留白区时返回 null（视为透明）
- */
-function mapLocalToNatural(
-  img: HTMLImageElement,
-  localX: number,
-  localY: number,
-  displayW: number,
-  displayH: number,
-): { x: number; y: number } | null {
-  const nw = img.naturalWidth;
-  const nh = img.naturalHeight;
-
-  if (!(nw > 0) || !(nh > 0) || !(displayW > 0) || !(displayH > 0)) {
-    return null;
-  }
-
-  const scale = Math.min(displayW / nw, displayH / nh);
-  const drawnW = nw * scale;
-  const drawnH = nh * scale;
-  const offsetX = (displayW - drawnW) / 2;
-  const offsetY = (displayH - drawnH) / 2;
-  const x = (localX - offsetX) / scale;
-  const y = (localY - offsetY) / scale;
-
-  if (x < 0 || y < 0 || x >= nw || y >= nh) {
-    return null;
-  }
-
-  return { x, y };
-}
-
-/**
  * 运行时单个交互点视图。
- *
- * - `hoverShadow.enabled` 且 hover → CSS `filter: drop-shadow(...)`
- * - 有图时 mousedown 前做 alpha-hit；透明像素忽略点击
- * - 无图或采样失败 → 整框可点（与 `isOpaqueAt` 回退一致）
  *
  * @param props - HotspotViewProps
  * @returns 交互点 DOM
@@ -136,13 +99,16 @@ export function HotspotView({
   onActivate,
 }: HotspotViewProps): React.ReactElement {
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const [hovered, setHovered] = useState(false);
+  /** 指针是否落在剪影内（有图时）；无图恒为 true */
+  const [alphaHit, setAlphaHit] = useState(false);
+  /** 指针是否仍在外壳内（用于 leave 复位） */
+  const [pointerInside, setPointerInside] = useState(false);
 
   const size = hotspotDisplaySize(hotspot);
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
+  const hasImage = Boolean(url);
   const shadowEnabled = hotspot.hoverShadow?.enabled !== false;
-  const showShadow = shadowEnabled && hovered;
 
   const label = hotspot.label;
   const labelText =
@@ -150,62 +116,115 @@ export function HotspotView({
       ? label.text
       : hotspot.name;
   const labelMode = label?.mode ?? "hover";
-  const showLabel =
-    labelMode === "always" || (labelMode === "hover" && hovered);
 
   /**
-   * mousedown：优先 alpha-hit，透明则忽略。
-   *
-   * @param event - 鼠标事件
+   * 当前是否视为「悬停在可交互剪影上」。
+   * - 无图：只要指针在框内
+   * - 有图：需 alphaHit
    */
-  const handleMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>): void => {
-      event.stopPropagation();
+  const interactiveHover =
+    pointerInside && (!hasImage || alphaHit);
+
+  const showShadow = shadowEnabled && interactiveHover;
+  const showLabel =
+    labelMode === "always" ||
+    (labelMode === "hover" && interactiveHover);
+
+  /**
+   * 按指针位置同步剪影命中状态。
+   *
+   * @param clientX - 浏览器 clientX
+   * @param clientY - 浏览器 clientY
+   * @returns 是否命中（无图恒 true；采样失败回退 true）
+   */
+  const syncAlphaHit = useCallback(
+    (clientX: number, clientY: number): boolean => {
+      if (!hasImage) {
+        setAlphaHit(true);
+
+        return true;
+      }
 
       const img = imgRef.current;
 
-      if (img !== null && url) {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const localX = event.clientX - rect.left;
-        const localY = event.clientY - rect.top;
-        // getBoundingClientRect 含 CSS scale；用 offsetWidth/Height 更接近设计像素显示框
-        const displayW = event.currentTarget.offsetWidth;
-        const displayH = event.currentTarget.offsetHeight;
-        // client 坐标相对缩放后的盒子，需按比例映射到 offset 尺寸
-        const mappedX =
-          rect.width > 0 ? (localX / rect.width) * displayW : localX;
-        const mappedY =
-          rect.height > 0 ? (localY / rect.height) * displayH : localY;
+      if (img === null) {
+        setAlphaHit(true);
 
-        const natural = mapLocalToNatural(
-          img,
-          mappedX,
-          mappedY,
-          displayW,
-          displayH,
-        );
-
-        if (natural === null) {
-          return;
-        }
-
-        if (!isOpaqueAt(img, natural.x, natural.y)) {
-          return;
-        }
+        return true;
       }
 
+      const hit = isOpaqueImageHit(img, clientX, clientY);
+
+      setAlphaHit(hit);
+
+      return hit;
+    },
+    [hasImage],
+  );
+
+  /**
+   * pointerdown：剪影命中才激活；透明区不拦截事件（对齐大地图地点）。
+   *
+   * @param event - 指针事件
+   */
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>): void => {
+      const hit = syncAlphaHit(event.clientX, event.clientY);
+
+      if (!hit) {
+        // 透明区域：不 stopPropagation，让下层可响应
+        return;
+      }
+
+      event.stopPropagation();
       onActivate(hotspot);
     },
-    [hotspot, onActivate, url],
+    [hotspot, onActivate, syncAlphaHit],
   );
+
+  /**
+   * pointermove：更新 data-si-hit / 阴影 / hover 标签。
+   *
+   * @param event - 指针事件
+   */
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>): void => {
+      syncAlphaHit(event.clientX, event.clientY);
+    },
+    [syncAlphaHit],
+  );
+
+  /**
+   * 指针进入外壳。
+   *
+   * @param event - 指针事件
+   */
+  const handlePointerEnter = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>): void => {
+      setPointerInside(true);
+      syncAlphaHit(event.clientX, event.clientY);
+    },
+    [syncAlphaHit],
+  );
+
+  /**
+   * 指针离开外壳：复位 hit。
+   */
+  const handlePointerLeave = useCallback((): void => {
+    setPointerInside(false);
+    setAlphaHit(false);
+  }, []);
 
   return (
     <div
       data-testid={`runtime-hotspot-${hotspot.id}`}
       data-hotspot-id={hotspot.id}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onMouseDown={handleMouseDown}
+      data-si-alpha={hasImage ? "1" : undefined}
+      data-si-hit={hasImage ? (alphaHit ? "1" : "0") : undefined}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      onPointerMove={handlePointerMove}
+      onPointerDown={handlePointerDown}
       style={{
         position: "absolute",
         left: center.x - size.width / 2,
@@ -213,7 +232,12 @@ export function HotspotView({
         width: size.width,
         height: size.height,
         boxSizing: "border-box",
-        cursor: "pointer",
+        // 有图时：仅剪影命中显示 pointer；透明区 default（视觉提示不拦截由逻辑保证）
+        cursor: hasImage
+          ? alphaHit
+            ? "pointer"
+            : "default"
+          : "pointer",
         pointerEvents: "auto",
         overflow: "visible",
         filter: showShadow ? DEFAULT_HOVER_DROP_SHADOW : undefined,
@@ -226,7 +250,7 @@ export function HotspotView({
           src={url}
           alt=""
           draggable={false}
-          // 尽量允许 canvas 采样；跨域失败时 alpha-hit 会回退整框
+          // 尽量允许 canvas 采样；跨域失败时 isOpaqueImageHit 回退整框
           crossOrigin="anonymous"
           style={{
             display: "block",

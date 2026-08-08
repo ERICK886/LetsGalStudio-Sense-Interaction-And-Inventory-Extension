@@ -81,9 +81,9 @@ export interface RuntimeShellProps {
   allowEdit: boolean;
 
   /**
-   * 切回编辑模式（仅 allowEdit 时使用）。
+   * 打开独立编辑器程序（仅 allowEdit 时使用）。
    *
-   * @param enabled - true 进入编辑
+   * @param enabled - true 显示 editor；false 隐藏 editor
    */
   onSetEditMode: (enabled: boolean) => void;
 
@@ -162,7 +162,7 @@ function resolveCurrentScene(
  * <RuntimeShell
  *   save={save}
  *   allowEdit={allowEdit}
- *   onSetEditMode={(v) => save.set("isEditMode", v)}
+ *   onSetEditMode={(v) => { if (v) ctx.ui.show("editor"); }}
  * />
  * ```
  */

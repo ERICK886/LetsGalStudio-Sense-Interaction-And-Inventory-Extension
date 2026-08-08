@@ -2,27 +2,32 @@
  * import-export.test.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景库 / 物品库 JSON 导入导出单元测试（Task 15）。
+ * 场景库 / 物品库 / 配方库 JSON 导入导出单元测试。
  * tryImport*：非法 JSON / 非 v1 / 错误根 → ok:false；合法 → ok:true + value。
  */
 
 import { describe, it, expect } from "vitest";
 import type {
   ItemsLibraryFile,
+  RecipesLibraryFile,
   ScenesLibraryFile,
 } from "../../src/domain/types";
 import {
   emptyItemsLibrary,
+  emptyRecipesLibrary,
   emptyScenesLibrary,
 } from "../../src/domain/serialize";
 import {
   exportItemsLibrary,
+  exportRecipesLibrary,
   exportScenesLibrary,
   importItemsLibrary,
+  importRecipesLibrary,
   importScenesLibrary,
   tryImportItemsLibrary,
+  tryImportRecipesLibrary,
   tryImportScenesLibrary,
 } from "../../src/editor/io/import-export";
 
@@ -65,6 +70,28 @@ function makeItemsLib(id: string, name: string): ItemsLibraryFile {
         icon: "",
         detailImage: "",
         stackable: true,
+      },
+    ],
+  };
+}
+
+/**
+ * 构造最小配方库夹具。
+ *
+ * @param id - 配方 id
+ * @param name - 配方名
+ * @returns RecipesLibraryFile（version 1）
+ */
+function makeRecipesLib(id: string, name: string): RecipesLibraryFile {
+  return {
+    version: 1,
+    recipes: [
+      {
+        id,
+        name,
+        ingredients: [{ itemId: "herb", count: 2 }],
+        products: [{ itemId: "potion", count: 1 }],
+        description: "",
       },
     ],
   };
@@ -234,5 +261,81 @@ describe("tryImportItemsLibrary", () => {
 
   it("importItemsLibrary 在非法输入时回退空库", () => {
     expect(importItemsLibrary("{")).toEqual(emptyItemsLibrary());
+  });
+});
+
+describe("exportRecipesLibrary / importRecipesLibrary", () => {
+  it("export 输出带 version 与 recipes 的 JSON 字符串", () => {
+    const lib = makeRecipesLib("brew", "调制");
+    const raw = exportRecipesLibrary(lib);
+    const parsed = JSON.parse(raw) as RecipesLibraryFile;
+
+    expect(parsed.version).toBe(1);
+    expect(parsed.recipes[0]?.id).toBe("brew");
+  });
+
+  it("往返 export → import 保留配方 id", () => {
+    const lib = makeRecipesLib("round", "往返");
+    const again = importRecipesLibrary(exportRecipesLibrary(lib));
+
+    expect(again.version).toBe(1);
+    expect(again.recipes[0]?.id).toBe("round");
+  });
+});
+
+describe("tryImportRecipesLibrary", () => {
+  it("合法 v1 库返回 ok:true 与 value", () => {
+    const lib = makeRecipesLib("brew", "调制药水");
+    const result = tryImportRecipesLibrary(exportRecipesLibrary(lib));
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.recipes[0]?.id).toBe("brew");
+    }
+  });
+
+  it("非法 JSON 返回 ok:false", () => {
+    const result = tryImportRecipesLibrary("not-json");
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error).toContain("非法 JSON");
+    }
+  });
+
+  it("纯数组根返回 ok:false", () => {
+    const result = tryImportRecipesLibrary(JSON.stringify([{ id: "x" }]));
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("非 version 1 返回 ok:false", () => {
+    const result = tryImportRecipesLibrary(
+      JSON.stringify({ version: 99, recipes: [] }),
+    );
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error).toMatch(/version\s*1/i);
+    }
+  });
+
+  it("合法空库返回 ok:true", () => {
+    const result = tryImportRecipesLibrary(
+      JSON.stringify(emptyRecipesLibrary()),
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value).toEqual(emptyRecipesLibrary());
+    }
+  });
+
+  it("importRecipesLibrary 在非法输入时回退空库", () => {
+    expect(importRecipesLibrary("{")).toEqual(emptyRecipesLibrary());
   });
 });

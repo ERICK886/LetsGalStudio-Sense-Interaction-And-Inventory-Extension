@@ -284,7 +284,7 @@ interface SceneProgress {
 
 ## 8. 后续版本（备忘）
 
-- 合成配方编辑器与背包合成 UI
+- **v0.2（已立项规格）**：见 `2026-08-08-scene-interaction-v02-design.md`（配方 + 玩家界面阻塞剧情）
 - 条件可见、音效、分类/稀有度、使用物品
 - 更多 `SceneAction` 类型（`setVariable`、`gotoChapter`、`callMethod` 等）
 - （明确不做）与大地图互跳，除非未来单独立项

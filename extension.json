@@ -3,7 +3,7 @@
   "name": "场景交互系统",
   "description": "",
   "author": "池水三两升",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "entry": "dist/index.js",
   "sdkVersion": "^1.9.2-beta"
 }
