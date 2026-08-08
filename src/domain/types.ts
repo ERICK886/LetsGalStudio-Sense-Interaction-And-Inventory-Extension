@@ -133,6 +133,32 @@ export interface SceneProgress {
 
 export type InventoryHudMode = "withScene" | "always";
 
+/** 自由布局节点的矩形区域（设计像素坐标） */
+export interface UiRect {
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+}
+
+/** 自由布局节点的盒模型视觉样式 */
+export interface UiBoxStyle {
+  background?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  opacity?: number;
+  shadow?: number;
+}
+
+/** 自由布局节点的文本样式 */
+export interface UiTextStyle {
+  color?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  label?: string;
+}
+
 export interface InventoryHudConfig {
   /** 相对舞台的左边距（设计像素或百分比由实现约定：v0.1 用设计像素） */
   left: number;
