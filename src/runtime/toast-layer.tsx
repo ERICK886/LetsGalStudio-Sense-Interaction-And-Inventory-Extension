@@ -2,7 +2,7 @@
  * toast-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 运行时轻提示层：展示 toast 队列 current，按 enter+hold+exit 时长推进。
  * Task 3：使用 `computeToastAnchorStyle` + `applyUiBoxStyle`/`applyUiTextStyle`，
@@ -144,7 +144,7 @@ function toastMotionStyle(
   if (phase === "enter" || phase === "exit") {
     switch (preset) {
       case "fade":
-        return { ...base, opacity: 0 };
+        return { ...base, opacity: 0, transform: baseTransform };
       case "scale":
         return {
           ...base,
@@ -176,13 +176,12 @@ function toastMotionStyle(
           transform: `${baseTransform} translateX(-12px)`,
         };
       default:
-        return { ...base, opacity: 0 };
+        return { ...base, opacity: 0, transform: baseTransform };
     }
   }
 
   return {
     ...base,
-    opacity: 1,
     transform: baseTransform,
   };
 }
