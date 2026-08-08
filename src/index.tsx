@@ -108,6 +108,9 @@ class SceneInteractionExtension extends Extension<SceneInteractionAppProps> {
     itemsLibraryJson: s
       .string("物品库 JSON（自动维护）")
       .default('{"version":1,"items":[]}'),
+    recipesLibraryJson: s
+      .string("配方库 JSON（自动维护）")
+      .default('{"version":1,"recipes":[]}'),
     inventoryHudMode: s
       .enum("物品栏显示模式", ["withScene", "always"] as const)
       .labels({ withScene: "跟随场景交互", always: "常驻 HUD" })
