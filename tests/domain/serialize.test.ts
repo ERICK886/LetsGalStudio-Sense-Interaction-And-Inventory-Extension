@@ -2,9 +2,10 @@
  * serialize.test.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 场景/物品/库存/进度/HUD JSON 编解码聚焦单测。
+ * 补充 giveItem Toast 覆盖字段往返测试。
  */
 import { describe, it, expect, vi } from "vitest";
 import { defaultElementMotion } from "../../src/domain/motion";
@@ -176,6 +177,86 @@ describe("parseScenesLibraryJson", () => {
       expect(action.amount).toBeGreaterThanOrEqual(1);
       expect(action.toastMotion.enter.preset).toBe("slideUp");
       expect(action.toastMotion.exit.preset).toBe("slideDown");
+    }
+  });
+
+  it("giveItem Toast 覆盖字段 JSON 往返保留", () => {
+    const lib = parseScenesLibraryJson(
+      JSON.stringify({
+        version: 1,
+        scenes: [
+          {
+            id: "s1",
+            name: "",
+            baseImage: "",
+            hotspots: [
+              {
+                id: "h1",
+                actions: [
+                  {
+                    type: "giveItem",
+                    itemId: "key",
+                    amount: 1,
+                    toastText: "获得钥匙",
+                    toastPlacement: "right",
+                    toastOffsetX: 12,
+                    toastOffsetY: -4,
+                    toastGap: 20,
+                    toastStyle: {
+                      color: "#ffffff",
+                      background: "#1a1a2e",
+                      fontSize: 16,
+                      borderRadius: 8,
+                      shadow: 0.4,
+                    },
+                    toastMotion: {
+                      enter: { preset: "scale", delayMs: 100, durationMs: 400, customCss: "" },
+                      exit: { preset: "fade", delayMs: 0, durationMs: 300, customCss: "" },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const action = lib.scenes[0]?.hotspots[0]?.actions[0];
+
+    expect(action?.type).toBe("giveItem");
+    if (action?.type === "giveItem") {
+      expect(action.toastPlacement).toBe("right");
+      expect(action.toastOffsetX).toBe(12);
+      expect(action.toastOffsetY).toBe(-4);
+      expect(action.toastGap).toBe(20);
+      expect(action.toastStyle).toEqual({
+        color: "#ffffff",
+        background: "#1a1a2e",
+        fontSize: 16,
+        borderRadius: 8,
+        shadow: 0.4,
+      });
+      expect(action.toastMotion.enter.preset).toBe("scale");
+      expect(action.toastMotion.exit.preset).toBe("fade");
+    }
+
+    const again = parseScenesLibraryJson(stringifyScenesLibrary(lib));
+    const againAction = again.scenes[0]?.hotspots[0]?.actions[0];
+
+    expect(againAction?.type).toBe("giveItem");
+    if (againAction?.type === "giveItem") {
+      expect(againAction.toastPlacement).toBe("right");
+      expect(againAction.toastOffsetX).toBe(12);
+      expect(againAction.toastOffsetY).toBe(-4);
+      expect(againAction.toastGap).toBe(20);
+      expect(againAction.toastStyle).toEqual({
+        color: "#ffffff",
+        background: "#1a1a2e",
+        fontSize: 16,
+        borderRadius: 8,
+        shadow: 0.4,
+      });
     }
   });
 });
