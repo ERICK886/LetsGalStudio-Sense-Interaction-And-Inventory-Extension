@@ -2,17 +2,26 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景交互系统 App 壳（占位）：展示标题与当前 isEditMode，供后续编辑器/运行时接入。
+ * 场景交互系统 App 壳：订阅 settings / save，按 allowEdit + isEditMode
+ * 切换 EditorShell / RuntimeShell；维护 editorSection（场景 / 物品库）。
  */
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
+  useExtensionContext,
   type ExtensionProps,
   type SaveAPI,
 } from "@avg-studio/sdk";
+import {
+  EditorShell,
+  type EditorSection,
+} from "../editor/editor-shell";
+import { RuntimeShell } from "../runtime/runtime-shell";
 import type { SceneInteractionSaveMap } from "../store/save-types";
+import { ThemeProvider } from "../theme/theme-provider";
+import type { ThemeMode } from "../theme/tokens";
 
 /**
  * SceneInteractionApp 对外 props。
@@ -28,13 +37,88 @@ export interface SceneInteractionAppProps extends ExtensionProps {
 }
 
 /**
- * 场景交互系统根组件（占位 UI）。
+ * 解析「允许编辑」设置。
  *
- * 当前仅渲染标题「场景交互系统」与存档中的 `isEditMode`，
- * 后续任务再挂接编辑器 / 运行时壳。
+ * Studio 预览里 `settings.useValue` 偶发返回 `undefined`（尚未合并 default），
+ * 若用 `=== true` 会误判为禁止编辑。schema 默认值为 `true`，故仅在显式 false 时关闭。
+ *
+ * @param raw - settings.useValue / get 读到的原始值
+ * @returns 是否允许进入编辑器
+ */
+function resolveAllowEdit(raw: unknown): boolean {
+  return raw !== false && raw !== "false" && raw !== 0;
+}
+
+/**
+ * 应用主内容：订阅 settings / save，切换 Editor / Runtime。
+ *
+ * @param props.save - 扩展注入的存档 API
+ * @returns 主题包裹的双壳 UI
+ */
+function SceneInteractionAppContent({
+  save,
+}: {
+  save: SaveAPI<SceneInteractionSaveMap>;
+}): React.ReactElement {
+  const ctx = useExtensionContext();
+
+  const [allowEditRaw] = ctx.settings.useValue("allowEdit");
+  const [themeSetting] = ctx.settings.useValue("theme");
+  const [isEditMode] = save.useValue("isEditMode");
+
+  /**
+   * 编辑器顶部分区（App 本地状态；非 save / settings）。
+   * `"scenes"` = 场景编辑；`"items"` = 物品库。
+   */
+  const [editorSection, setEditorSection] =
+    useState<EditorSection>("scenes");
+
+  /**
+   * useValue 未就绪时回退 settings.get（含 schema default），再按「非 false 即允许」。
+   */
+  const allowEdit = resolveAllowEdit(
+    allowEditRaw !== undefined ? allowEditRaw : ctx.settings.get("allowEdit"),
+  );
+
+  const themeMode: ThemeMode = themeSetting === "light" ? "light" : "dark";
+
+  /**
+   * allowEdit === false 时强制运行壳；否则跟随 save.isEditMode。
+   */
+  const isEditing = allowEdit && isEditMode === true;
+
+  /**
+   * 顶栏切换编辑/运行：写入 save.isEditMode。
+   *
+   * @param enabled - true 进入编辑；false 运行预览
+   */
+  const setEditMode = useCallback(
+    (enabled: boolean) => {
+      save.set("isEditMode", enabled);
+    },
+    [save],
+  );
+
+  return (
+    <ThemeProvider initialMode={themeMode}>
+      {isEditing ? (
+        <EditorShell
+          editorSection={editorSection}
+          onEditorSectionChange={setEditorSection}
+          onSetEditMode={setEditMode}
+        />
+      ) : (
+        <RuntimeShell allowEdit={allowEdit} onSetEditMode={setEditMode} />
+      )}
+    </ThemeProvider>
+  );
+}
+
+/**
+ * 场景交互系统根组件（稳定导出，供 Extension.render 直接引用）。
  *
  * @param props - 含注入的 `save` API
- * @returns React 元素
+ * @returns 全屏主题壳 + Editor / Runtime
  *
  * @example
  * ```tsx
@@ -43,37 +127,34 @@ export interface SceneInteractionAppProps extends ExtensionProps {
  * ```
  *
  * @remarks
- * 使用 `save.useValue("isEditMode")` 订阅字段变更并自动 re-render；
- * 勿在此组件内同步阻塞加载重模块，以免 Studio 预览挂载超时。
+ * - `allowEdit === false` → 强制 RuntimeShell
+ * - `isEditMode` 来自 save，顶栏切换写入 save
+ * - `editorSection` 为 App 状态：`"scenes" | "items"`
  */
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,
 ): React.ReactElement {
   const { save } = props;
 
-  const [isEditMode] = save.useValue("isEditMode");
+  if (!save) {
+    return (
+      <ThemeProvider initialMode="dark">
+        <div
+          data-testid="scene-interaction-missing-save"
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#9A9AA6",
+          }}
+        >
+          存档 API 未注入（save 缺失）
+        </div>
+      </ThemeProvider>
+    );
+  }
 
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        fontFamily: "system-ui, sans-serif",
-        color: "#e8e8e8",
-        background: "#1a1a1a",
-      }}
-    >
-      <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600 }}>
-        场景交互系统
-      </h1>
-      <p style={{ margin: 0, fontSize: 14, opacity: 0.85 }}>
-        isEditMode: {String(isEditMode)}
-      </p>
-    </div>
-  );
+  return <SceneInteractionAppContent save={save} />;
 }
