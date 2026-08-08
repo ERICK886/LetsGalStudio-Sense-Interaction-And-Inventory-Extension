@@ -18,7 +18,9 @@ import {
   type SaveAPI,
 } from "@avg-studio/sdk";
 import type { InventoryHudMode } from "../domain/types";
+import { SCENE_INTERACTION_UI_ID } from "../methods/scene-methods";
 import { endPlayerSessionWait } from "../runtime/player-session";
+import { logError } from "../shared/logger";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useSaveValue } from "../store/use-save-value";
 import { ThemeProvider } from "../theme/theme-provider";
@@ -112,7 +114,7 @@ type RuntimeShellComponent = React.ComponentType<{
 /** 异步加载后的玩家壳 props。 */
 type PlayerShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
-  onRequestClose: () => void;
+  onRequestClose: () => void | Promise<void>;
   inventoryHudMode?: InventoryHudMode;
 }>;
 
@@ -263,14 +265,25 @@ function SceneInteractionAppContent({
   );
 
   /**
-   * 玩家壳退出 stub：解除 session wait，便于 Task 7 手工验证阻塞门闩。
-   * Task 8 将在方法层叠加 ctx.ui.hide；此处仍保留 endWait。
+   * 玩家壳退出：隐藏程序 UI 并解除 session wait，使 openSceneInteraction 解除阻塞。
    *
-   * @returns void
+   * hide 失败仅记日志，仍调用 endPlayerSessionWait，避免剧本永久挂起。
+   *
+   * @returns Promise<void>
    */
-  const handlePlayerRequestClose = useCallback((): void => {
+  const handlePlayerRequestClose = useCallback(async (): Promise<void> => {
+    try {
+      await ctx.ui.hide(SCENE_INTERACTION_UI_ID);
+    } catch (err) {
+      logError(
+        "scene-interaction-app",
+        "onRequestClose: ctx.ui.hide 失败",
+        err,
+      );
+    }
+
     endPlayerSessionWait();
-  }, []);
+  }, [ctx]);
 
   /** 异步加载的编辑壳；null 表示未就绪 */
   const [EditorShellComp, setEditorShellComp] =
@@ -461,7 +474,7 @@ function SceneInteractionAppContent({
  * - `allowEdit === false` → 强制 RuntimeShell（非 modal 时）
  * - `isEditMode` 来自 save，顶栏切换写入 save
  * - `inventoryHudMode=always` → 运行/玩家态 App 层挂载快捷栏（编辑中隐藏）
- * - 退出 PlayerShell 时 stub 调用 `endPlayerSessionWait()`（Task 8 再接 hide）
+ * - 退出 PlayerShell：`ctx.ui.hide` + `endPlayerSessionWait()`
  */
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,

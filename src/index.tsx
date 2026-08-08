@@ -25,8 +25,10 @@ import {
   hasItem,
 } from "./methods/inventory-methods";
 import {
+  closeSceneInteraction,
   getCurrentSceneId,
   openScene,
+  openSceneInteraction,
   setEditMode,
   setHotspotVisible,
 } from "./methods/scene-methods";
@@ -77,8 +79,10 @@ class SceneInteractionExtension extends Extension<SceneInteractionAppProps> {
     },
   });
 
-  /** 剧本 methods：场景打开 / 编辑模式 / 当前场景 / 交互点可见性 */
+  /** 剧本 methods：场景打开 / 阻塞会话 / 编辑模式 / 当前场景 / 交互点可见性 */
   static openScene = openScene;
+  static openSceneInteraction = openSceneInteraction;
+  static closeSceneInteraction = closeSceneInteraction;
   static setEditMode = setEditMode;
   static getCurrentSceneId = getCurrentSceneId;
   static setHotspotVisible = setHotspotVisible;

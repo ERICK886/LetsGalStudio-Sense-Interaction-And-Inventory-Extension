@@ -71,12 +71,11 @@ export interface PlayerShellProps {
 
   /**
    * 玩家点击「退出」时调用。
-   * Task 7 由 App 注入 stub（至少 endPlayerSessionWait）；
-   * Task 8 将扩展为 hide UI + endWait。
+   * App 注入实现：`ctx.ui.hide(SCENE_INTERACTION_UI_ID)` + `endPlayerSessionWait()`。
    *
-   * @returns void
+   * @returns void | Promise<void>
    */
-  onRequestClose: () => void;
+  onRequestClose: () => void | Promise<void>;
 
   /**
    * 物品栏 HUD 模式；省略时默认 withScene（玩家会话按「场景已打开」显示快捷栏）。
