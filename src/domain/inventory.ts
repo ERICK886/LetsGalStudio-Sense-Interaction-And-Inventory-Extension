@@ -2,9 +2,9 @@
  * inventory.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 库存状态：发放物品、堆叠合并、计数与快捷栏 top 8 查询。
+ * 库存状态：发放/消耗物品、堆叠合并、计数与快捷栏 top 8 查询。
  */
 import { createId } from "./id";
 import type {
@@ -203,4 +203,84 @@ export function giveItemToInventory(
   }
 
   return giveUniqueItems(state, item, qty, nowMs);
+}
+
+/** consumeItemFromInventory 的成功/失败联合结果 */
+export type ConsumeItemResult =
+  | { ok: true; state: InventoryState }
+  | { ok: false; reason: string };
+
+/**
+ * 从库存消耗指定数量的物品（不可变；返回新 state）。
+ *
+ * 规则：
+ * - count < 1 → `{ ok: false, reason: "invalid-count" }`
+ * - 持有量不足 → `{ ok: false, reason: "insufficient" }`，不改 state
+ * - 堆叠：找到 `kind==="stack" && itemId`，减 count，≤0 则移除条目
+ * - unique：同 itemId 按 lastGainedAt **升序**去掉前 count 条（最旧先扣）
+ *
+ * @param state - 当前库存状态
+ * @param itemId - 要消耗的物品 id
+ * @param count - 消耗数量（必须 >= 1）
+ * @returns 成功时带新 state；失败时带 reason，且不修改入参
+ *
+ * @example
+ * const r = consumeItemFromInventory(state, "herb", 2);
+ * if (r.ok) state = r.state;
+ *
+ * @throws 无抛出；错误以 `{ ok: false, reason }` 返回
+ */
+export function consumeItemFromInventory(
+  state: InventoryState,
+  itemId: string,
+  count: number,
+): ConsumeItemResult {
+  if (count < 1) {
+    return { ok: false, reason: "invalid-count" };
+  }
+
+  if (getItemCount(state, itemId) < count) {
+    return { ok: false, reason: "insufficient" };
+  }
+
+  const stackIndex = state.entries.findIndex(
+    (entry) => entry.kind === "stack" && entry.itemId === itemId,
+  );
+
+  // 堆叠路径：存在同 itemId 的 stack 条目时按堆叠扣减
+  if (stackIndex >= 0) {
+    const existing = state.entries[stackIndex] as Extract<
+      InventoryEntry,
+      { kind: "stack" }
+    >;
+    const nextCount = existing.count - count;
+    const entries = [...state.entries];
+
+    if (nextCount <= 0) {
+      entries.splice(stackIndex, 1);
+    } else {
+      entries[stackIndex] = {
+        ...existing,
+        count: nextCount,
+      };
+    }
+
+    return { ok: true, state: { entries } };
+  }
+
+  // unique 路径：按 lastGainedAt 升序去掉最旧的 count 条
+  const uniqueIndices = state.entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(
+      ({ entry }) => entry.kind === "unique" && entry.itemId === itemId,
+    )
+    .sort((a, b) => a.entry.lastGainedAt - b.entry.lastGainedAt);
+
+  const removeIndexSet = new Set(
+    uniqueIndices.slice(0, count).map(({ index }) => index),
+  );
+
+  const entries = state.entries.filter((_, index) => !removeIndexSet.has(index));
+
+  return { ok: true, state: { entries } };
 }
