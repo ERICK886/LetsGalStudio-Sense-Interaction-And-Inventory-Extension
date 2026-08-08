@@ -2,12 +2,14 @@
  * serialize.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.2
  *
  * 场景库 / 物品库 / 库存 / 进度 / HUD 的 JSON 安全编解码与规范化。
+ * 交互点 hoverShadow 支持完整 HotspotHoverShadow 规范化。
  */
 import { clamp01 } from "../shared/coords";
 import { logError } from "../shared/logger";
+import { normalizeHotspotHoverShadow } from "./hover-shadow";
 import { normalizeHotspotLabel } from "./hotspot-label";
 import {
   defaultBackpackScreen,
@@ -381,12 +383,6 @@ function normalizeHotspotElement(raw: unknown): HotspotElement | null {
     return null;
   }
 
-  const hoverShadowRaw =
-    obj.hoverShadow !== null &&
-    typeof obj.hoverShadow === "object"
-      ? (obj.hoverShadow as Record<string, unknown>)
-      : undefined;
-
   const actionsRaw = Array.isArray(obj.actions) ? obj.actions : [];
   const actions = actionsRaw
     .map(normalizeSceneAction)
@@ -401,12 +397,7 @@ function normalizeHotspotElement(raw: unknown): HotspotElement | null {
     x: clamp01(typeof obj.x === "number" ? obj.x : 0),
     y: clamp01(typeof obj.y === "number" ? obj.y : 0),
     visual: normalizeHotspotVisual(obj.visual),
-    hoverShadow: {
-      enabled:
-        hoverShadowRaw?.enabled === undefined
-          ? true
-          : Boolean(hoverShadowRaw.enabled),
-    },
+    hoverShadow: normalizeHotspotHoverShadow(obj.hoverShadow),
     actions,
     once: Boolean(obj.once),
     visibleByDefault:

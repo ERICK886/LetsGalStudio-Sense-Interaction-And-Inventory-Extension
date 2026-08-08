@@ -2,12 +2,13 @@
  * hotspot-list-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 编辑器左栏下半：当前场景的交互点（hotspot）列表。
  */
 
 import React, { useCallback } from "react";
+import { defaultHotspotHoverShadow } from "../../domain/hover-shadow";
 import { createId } from "../../domain/id";
 import { defaultElementMotion } from "../../domain/motion";
 import type { HotspotElement, SceneDefinition } from "../../domain/types";
@@ -75,7 +76,7 @@ export function createDefaultHotspot(x: number, y: number): HotspotElement {
       width: 64,
       height: 64,
     },
-    hoverShadow: { enabled: true },
+    hoverShadow: defaultHotspotHoverShadow(),
     actions: [],
     once: false,
     visibleByDefault: true,

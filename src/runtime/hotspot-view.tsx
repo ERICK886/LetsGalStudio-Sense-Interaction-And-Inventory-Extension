@@ -2,11 +2,12 @@
  * hotspot-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
- * 运行时交互点：悬浮阴影、标签、PNG 剪影 alpha-hit（对齐大地图地点）。
+ * 运行时交互点：可配置悬浮阴影、标签、PNG 剪影 alpha-hit（对齐大地图地点）。
  *
  * 行为要点：
+ * - 悬停阴影由 hotspot.hoverShadow 经 normalize + buildHoverShadowFilter 生成
  * - 有图：pointermove 同步 data-si-hit；透明区无阴影/hover 标签/pointer 光标
  * - 透明区 pointerdown 不 stopPropagation，事件可落到下层
  * - 镂空内部仍命中（剪影掩码）
@@ -14,6 +15,10 @@
  */
 
 import React, { useCallback, useRef, useState } from "react";
+import {
+  buildHoverShadowFilter,
+  normalizeHotspotHoverShadow,
+} from "../domain/hover-shadow";
 import type { HotspotElement } from "../domain/types";
 import { isOpaqueImageHit } from "../shared/alpha-hit";
 import {
@@ -23,10 +28,6 @@ import {
 
 /** 无图时的默认占位边长（设计像素） */
 export const RUNTIME_HOTSPOT_PLACEHOLDER_SIZE = 64;
-
-/** 默认悬浮阴影 CSS filter */
-const DEFAULT_HOVER_DROP_SHADOW =
-  "drop-shadow(0 0 10px rgba(255, 236, 160, 0.85)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45))";
 
 /**
  * HotspotView 组件属性。
@@ -108,7 +109,9 @@ export function HotspotView({
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
   const hasImage = Boolean(url);
-  const shadowEnabled = hotspot.hoverShadow?.enabled !== false;
+  const hoverFilter = buildHoverShadowFilter(
+    normalizeHotspotHoverShadow(hotspot.hoverShadow),
+  );
 
   const label = hotspot.label;
   const labelText =
@@ -125,7 +128,7 @@ export function HotspotView({
   const interactiveHover =
     pointerInside && (!hasImage || alphaHit);
 
-  const showShadow = shadowEnabled && interactiveHover;
+  const showShadow = hoverFilter !== undefined && interactiveHover;
   const showLabel =
     labelMode === "always" ||
     (labelMode === "hover" && interactiveHover);
@@ -240,7 +243,7 @@ export function HotspotView({
           : "pointer",
         pointerEvents: "auto",
         overflow: "visible",
-        filter: showShadow ? DEFAULT_HOVER_DROP_SHADOW : undefined,
+        filter: showShadow ? hoverFilter : undefined,
         transition: "filter 120ms ease-out",
       }}
     >

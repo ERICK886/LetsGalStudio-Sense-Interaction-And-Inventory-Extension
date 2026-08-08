@@ -2,7 +2,7 @@
  * property-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.4.1
  *
  * 编辑器右侧属性面板：按选中场景 / 交互点渲染 schema 表单与动作列表；
  * 无场景时仅提供 HUD 全局字段（accent / customCss），节点编辑请到「UI」分区。
@@ -11,6 +11,7 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
+import { normalizeHotspotHoverShadow } from "../../domain/hover-shadow";
 import { defaultHotspotLabel } from "../../domain/hotspot-label";
 import {
   normalizeLetterboxColor,
@@ -99,7 +100,7 @@ function withHotspotFormDefaults(hotspot: HotspotElement): HotspotElement {
     ...hotspot,
     label: hotspot.label ?? defaultHotspotLabel(),
     motion: normalizeElementMotion(hotspot.motion),
-    hoverShadow: hotspot.hoverShadow ?? { enabled: true },
+    hoverShadow: normalizeHotspotHoverShadow(hotspot.hoverShadow),
     visual: {
       kind: "image",
       src: hotspot.visual?.src ?? "",

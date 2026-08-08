@@ -2,9 +2,10 @@
  * hotspot-schema.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 交互点（HotspotElement）的属性表单 schema 生成。
+ * 视觉区含 hoverShadow 总开关及光晕层 / 底影层全部可编辑字段。
  * 动作列表由 ActionListField 单独渲染，不在本 schema 内。
  */
 
@@ -25,7 +26,7 @@ export const HOTSPOT_LABEL_MODE_OPTIONS: ReadonlyArray<{
 /**
  * 根据交互点当前状态生成属性面板字段 schema 列表。
  *
- * 分区：基本、位置、视觉、交互（once / hoverShadow）、标签、动画。
+ * 分区：基本（含 once）、位置、视觉（含 hoverShadow 光晕/底影）、标签、动画。
  * `actions` 由 `ActionListField` 在属性面板中单独编辑。
  *
  * @param _hotspot - 当前交互点（预留条件分支；当前字段固定）
@@ -134,7 +135,133 @@ export function hotspotFields(_hotspot: HotspotElement): FieldSchema[] {
           key: "hoverShadow.enabled",
           kind: "boolean",
           label: "悬停阴影",
-          description: "运行时 hover 时施加 drop-shadow",
+          description: "总开关；关闭时不显示阴影。打开后由光晕/底影层开关决定",
+        },
+        {
+          kind: "section",
+          id: "hover-shadow-glow",
+          title: "光晕层",
+          description: "悬停时的高亮光晕（drop-shadow）",
+          children: [
+            {
+              key: "hoverShadow.glow.enabled",
+              kind: "boolean",
+              label: "启用光晕",
+            },
+            {
+              key: "hoverShadow.glow.color",
+              kind: "color",
+              label: "颜色",
+              placeholder: "#FFECA0",
+            },
+            {
+              kind: "grid",
+              id: "hover-shadow-glow-nums",
+              columns: 2,
+              gap: 8,
+              children: [
+                {
+                  key: "hoverShadow.glow.opacity",
+                  kind: "number",
+                  label: "透明度",
+                  min: 0,
+                  max: 1,
+                  step: 0.05,
+                },
+                {
+                  key: "hoverShadow.glow.intensity",
+                  kind: "number",
+                  label: "强度",
+                  min: 0,
+                  max: 2,
+                  step: 0.05,
+                  description: "乘到透明度上，最终 alpha 限制在 0–1",
+                },
+                {
+                  key: "hoverShadow.glow.offsetX",
+                  kind: "number",
+                  label: "偏移 X",
+                  step: 1,
+                },
+                {
+                  key: "hoverShadow.glow.offsetY",
+                  kind: "number",
+                  label: "偏移 Y",
+                  step: 1,
+                },
+                {
+                  key: "hoverShadow.glow.blur",
+                  kind: "number",
+                  label: "模糊",
+                  min: 0,
+                  step: 1,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          kind: "section",
+          id: "hover-shadow-base",
+          title: "底影层",
+          description: "悬停时的暗色软影（drop-shadow）",
+          children: [
+            {
+              key: "hoverShadow.base.enabled",
+              kind: "boolean",
+              label: "启用底影",
+            },
+            {
+              key: "hoverShadow.base.color",
+              kind: "color",
+              label: "颜色",
+              placeholder: "#000000",
+            },
+            {
+              kind: "grid",
+              id: "hover-shadow-base-nums",
+              columns: 2,
+              gap: 8,
+              children: [
+                {
+                  key: "hoverShadow.base.opacity",
+                  kind: "number",
+                  label: "透明度",
+                  min: 0,
+                  max: 1,
+                  step: 0.05,
+                },
+                {
+                  key: "hoverShadow.base.intensity",
+                  kind: "number",
+                  label: "强度",
+                  min: 0,
+                  max: 2,
+                  step: 0.05,
+                  description: "乘到透明度上，最终 alpha 限制在 0–1",
+                },
+                {
+                  key: "hoverShadow.base.offsetX",
+                  kind: "number",
+                  label: "偏移 X",
+                  step: 1,
+                },
+                {
+                  key: "hoverShadow.base.offsetY",
+                  kind: "number",
+                  label: "偏移 Y",
+                  step: 1,
+                },
+                {
+                  key: "hoverShadow.base.blur",
+                  kind: "number",
+                  label: "模糊",
+                  min: 0,
+                  step: 1,
+                },
+              ],
+            },
+          ],
         },
       ],
     },

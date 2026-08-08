@@ -2,9 +2,10 @@
  * types.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.2
  *
  * 场景交互扩展的领域类型定义（纯类型，无运行时逻辑）。
+ * HotspotElement.hoverShadow 为完整 HotspotHoverShadow（光晕/底影可配）。
  */
 export type MotionPresetId =
   | "none"
@@ -30,6 +31,24 @@ export interface ElementMotion {
 export type LetterboxMode = "black" | "white" | "custom";
 
 export type HotspotLabelMode = "hover" | "always" | "hidden";
+
+/** 交互点悬停阴影的单层配置（光晕 glow 或底影 base） */
+export interface HoverShadowLayer {
+  enabled: boolean;
+  color: string;
+  opacity: number;
+  offsetX: number;
+  offsetY: number;
+  blur: number;
+  intensity: number;
+}
+
+/** 交互点悬停阴影：总开关 + 光晕/底影双层独立配置 */
+export interface HotspotHoverShadow {
+  enabled: boolean;
+  glow: HoverShadowLayer;
+  base: HoverShadowLayer;
+}
 
 export interface HotspotLabel {
   text: string;
@@ -71,7 +90,7 @@ export interface HotspotElement {
   x: number;
   y: number;
   visual: { kind: "image"; src: string; width?: number; height?: number };
-  hoverShadow: { enabled: boolean };
+  hoverShadow: HotspotHoverShadow;
   label?: HotspotLabel;
   actions: SceneAction[];
   once: boolean;
