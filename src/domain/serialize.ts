@@ -809,20 +809,30 @@ export function stringifyInventoryHud(config: InventoryHudConfig): string {
  * 解析全屏背包布局 JSON；空串静默回退默认。
  *
  * @param raw - JSON 字符串
+ * @param refW - 参考设计宽（省略时用 1920）
+ * @param refH - 参考设计高（省略时用 1080）
  * @returns BackpackScreenConfig
  */
-export function parseBackpackScreenJson(raw: string): BackpackScreenConfig {
+export function parseBackpackScreenJson(
+  raw: string,
+  refW?: number,
+  refH?: number,
+): BackpackScreenConfig {
   if (typeof raw !== "string" || raw.trim().length === 0) {
-    return defaultBackpackScreen();
+    return refW !== undefined && refH !== undefined
+      ? defaultBackpackScreen(refW, refH)
+      : defaultBackpackScreen();
   }
 
   const parsed = safeParseJson(raw, "backpackScreen");
 
   if (parsed === null) {
-    return defaultBackpackScreen();
+    return refW !== undefined && refH !== undefined
+      ? defaultBackpackScreen(refW, refH)
+      : defaultBackpackScreen();
   }
 
-  return normalizeBackpackScreen(parsed);
+  return normalizeBackpackScreen(parsed, refW, refH);
 }
 
 /**

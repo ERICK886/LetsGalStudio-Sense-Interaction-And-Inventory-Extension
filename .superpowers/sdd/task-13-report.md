@@ -62,3 +62,16 @@
 | 全量测试 | ✅ 已验证 |
 | 规格状态行 | ✅ 已更新 |
 | Studio 手测 | ⏳ 作者侧待完成 |
+
+---
+
+## 全分支审查修复（2026-08-08）
+
+| 项 | 修复 |
+|----|------|
+| HUD persist | `UiEditorPanel.persistHud` 经 `normalizeInventoryHud`；表单 `parseInventoryHudJson(JSON.stringify(...))` |
+| HUD resize | `hud-visual-canvas` resize 时 `x/y` 钳制 `>= 0`（与 drag 一致） |
+| craftButton.offsetY | 画布拖拽钳制 `[-400,400]`；schema 增 `min/max` |
+| 背包表单 normalize | `parseBackpackScreenJson(..., designSize.width, designSize.height)` |
+
+**验证：** `npm test` 125 passed · `npm run build` ✓

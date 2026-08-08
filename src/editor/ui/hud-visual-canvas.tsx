@@ -389,8 +389,8 @@ export function HudVisualCanvas({
 
       const nextRect = applyResize(session.origin, session.handle, dx, dy);
       const rounded: Required<UiRect> = {
-        x: Math.round(nextRect.x),
-        y: Math.round(nextRect.y),
+        x: Math.max(0, Math.round(nextRect.x)),
+        y: Math.max(0, Math.round(nextRect.y)),
         w: Math.round(nextRect.w),
         h: Math.round(nextRect.h),
       };

@@ -17,6 +17,7 @@ import {
 } from "../../domain/backpack-screen-config";
 import {
   defaultInventoryHud,
+  normalizeInventoryHud,
   resetInventoryHudNode,
 } from "../../domain/inventory-hud";
 import {
@@ -155,8 +156,14 @@ export function UiEditorPanel(): React.ReactElement {
 
   const persistHud = useCallback(
     (next: InventoryHudConfig): void => {
-      setHud(next);
-      writeHudSetting(ctx, INVENTORY_HUD_JSON_KEY, stringifyInventoryHud(next));
+      const normalized = normalizeInventoryHud(next);
+
+      setHud(normalized);
+      writeHudSetting(
+        ctx,
+        INVENTORY_HUD_JSON_KEY,
+        stringifyInventoryHud(normalized),
+      );
       notifySettingsField(INVENTORY_HUD_JSON_KEY);
     },
     [ctx],
@@ -442,7 +449,7 @@ export function UiEditorPanel(): React.ReactElement {
             schema={hudSchema}
             value={hudFormValue}
             onChange={(next) => {
-              persistHud(next as unknown as InventoryHudConfig);
+              persistHud(parseInventoryHudJson(JSON.stringify(next)));
             }}
           />
         ) : (
@@ -451,7 +458,11 @@ export function UiEditorPanel(): React.ReactElement {
             value={bagFormValue}
             onChange={(next) => {
               persistBag(
-                parseBackpackScreenJson(JSON.stringify(next)),
+                parseBackpackScreenJson(
+                  JSON.stringify(next),
+                  designSize.width,
+                  designSize.height,
+                ),
               );
             }}
           />

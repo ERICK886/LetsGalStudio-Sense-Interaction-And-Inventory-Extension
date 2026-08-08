@@ -487,7 +487,10 @@ export function BackpackVisualCanvas({
 
       if (session.kind === "craft-offset") {
         const dy = (event.clientY - session.startY) / session.scale;
-        const nextOffsetY = Math.round(session.originOffsetY + dy);
+        const nextOffsetY = Math.max(
+          -400,
+          Math.min(400, Math.round(session.originOffsetY + dy)),
+        );
         const prev = currentConfig.nodes.craftButton.offsetY ?? 0;
 
         if (nextOffsetY === prev) {

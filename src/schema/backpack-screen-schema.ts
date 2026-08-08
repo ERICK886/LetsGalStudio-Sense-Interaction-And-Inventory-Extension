@@ -260,6 +260,8 @@ export function backpackScreenNodeFields(
           kind: "number",
           label: "垂直偏移",
           step: 1,
+          min: -400,
+          max: 400,
           description: "相对详情面板底部的额外 Y 偏移（像素）",
         },
         {
