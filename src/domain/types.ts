@@ -40,6 +40,14 @@ export interface HotspotLabel {
   motion: ElementMotion;
 }
 
+/** 获得物品 Toast 相对热区锚点的方位 */
+export type ToastPlacement =
+  | "above"
+  | "below"
+  | "left"
+  | "right"
+  | "center";
+
 export type SceneAction =
   | { type: "none" }
   | { type: "openScene"; sceneIdOrName: string }
@@ -157,6 +165,16 @@ export interface UiTextStyle {
   fontSize?: number;
   fontWeight?: number;
   label?: string;
+}
+
+/** 全局获得物品 Toast 样式与锚点配置（version 1） */
+export interface ItemToastConfig {
+  version: 1;
+  placement: ToastPlacement;
+  offsetX: number;
+  offsetY: number;
+  gap: number;
+  style: UiBoxStyle & UiTextStyle;
 }
 
 /**
