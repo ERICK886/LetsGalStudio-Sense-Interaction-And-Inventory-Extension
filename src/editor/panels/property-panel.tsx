@@ -2,10 +2,10 @@
  * property-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.4.0
  *
  * 编辑器右侧属性面板：按选中场景 / 交互点渲染 schema 表单与动作列表；
- * 无场景时提供物品栏 HUD（inventoryHudJson）最小编辑区，
+ * 无场景时仅提供 HUD 全局字段（accent / customCss），节点编辑请到「UI」分区。
  * 读写目标为 `backpack-hud` 模块 settings（见 store/hud-settings）。
  */
 
@@ -31,7 +31,7 @@ import type {
 import { ActionListField } from "../../schema/action-list-field";
 import { FormRenderer } from "../../schema/form-renderer";
 import { hotspotFields } from "../../schema/hotspot-schema";
-import { inventoryHudFields } from "../../schema/inventory-hud-schema";
+import { inventoryHudGlobalFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
 import {
   INVENTORY_HUD_JSON_KEY,
@@ -309,10 +309,10 @@ export function PropertyPanel({
                 lineHeight: 1.45,
               }}
             >
-              未选场景时可编辑快捷栏外观（写入 inventoryHudJson）。也可从左侧选择场景编辑场景属性。
+              未选场景时可编辑快捷栏全局外观（强调色等）。节点位置与样式请到左侧「UI」分区在画布中选中后编辑。也可从左侧选择场景编辑场景属性。
             </p>
             <FormRenderer
-              schema={inventoryHudFields()}
+              schema={inventoryHudGlobalFields()}
               value={hudFormValue as InventoryHudConfig & Record<string, unknown>}
               onChange={(next) => {
                 handleHudChange(next as InventoryHudConfig);

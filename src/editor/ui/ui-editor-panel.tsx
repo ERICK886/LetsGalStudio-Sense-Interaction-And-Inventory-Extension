@@ -2,15 +2,23 @@
  * ui-editor-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.5.0
  *
  * 编辑器「UI」分区：快捷栏 HUD / 全屏背包可视化编辑。
  * 配置写入 backpack-hud.settings（inventoryHudJson / backpackScreenJson）。
- * HUD / 背包选中态供画布自由布局；按节点表单接线见 Task 10。
+ * 右侧属性：未选中 → 全局字段；选中节点 → 节点字段；支持重置此节点 / 全部重置。
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
+import {
+  defaultBackpackScreen,
+  resetBackpackScreenNode,
+} from "../../domain/backpack-screen-config";
+import {
+  defaultInventoryHud,
+  resetInventoryHudNode,
+} from "../../domain/inventory-hud";
 import {
   parseBackpackScreenJson,
   parseInventoryHudJson,
@@ -22,9 +30,13 @@ import type {
   BackpackScreenConfig,
   InventoryHudConfig,
 } from "../../domain/types";
-import { backpackScreenFields } from "../../schema/backpack-screen-schema";
 import {
-  inventoryHudFields,
+  backpackScreenGlobalFields,
+  backpackScreenNodeFields,
+} from "../../schema/backpack-screen-schema";
+import {
+  inventoryHudGlobalFields,
+  inventoryHudNodeFields,
   type HudNodeId,
 } from "../../schema/inventory-hud-schema";
 import { FormRenderer } from "../../schema/form-renderer";
@@ -40,6 +52,7 @@ import {
   FONT_SIZE_DEFAULT,
   useTheme,
 } from "../../theme/theme-provider";
+import type { ThemeTokens } from "../../theme/tokens";
 import { BackpackVisualCanvas } from "./backpack-visual-canvas";
 import { HudVisualCanvas } from "./hud-visual-canvas";
 
@@ -75,6 +88,33 @@ function loadBackpackScreen(
 }
 
 /**
+ * 右侧重置按钮的基础样式。
+ *
+ * @param tokens - 主题
+ * @param primary - 是否强调色描边（全部重置）
+ * @returns CSSProperties
+ */
+function resetButtonStyle(
+  tokens: ThemeTokens,
+  primary: boolean,
+): React.CSSProperties {
+  return {
+    appearance: "none",
+    border: `1px solid ${primary ? tokens.accent : tokens.borderStrong}`,
+    background: primary ? `${tokens.accent}18` : tokens.bgSunken,
+    color: tokens.textPrimary,
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontSize: FONT_SIZE_DEFAULT,
+    fontFamily: "inherit",
+    fontWeight: 500,
+    cursor: "pointer",
+    width: "100%",
+    textAlign: "left" as const,
+  };
+}
+
+/**
  * 编辑器 UI 可视化主面板（占满左中右中的中+右，或整栏）。
  *
  * @returns UI 编辑器
@@ -96,13 +136,13 @@ export function UiEditorPanel(): React.ReactElement {
   );
 
   /**
-   * HUD 画布选中节点；Task 10 将据此切换右侧 node/global 表单。
+   * HUD 画布选中节点；决定右侧展示 nodeFields 或 globalFields。
    */
   const [selectedHudNodeId, setSelectedHudNodeId] =
     useState<HudNodeId | null>(null);
 
   /**
-   * 全屏背包画布选中节点；与 selectedHudNodeId 对称，表单接线见 Task 10。
+   * 全屏背包画布选中节点；与 selectedHudNodeId 对称。
    */
   const [selectedBagNodeId, setSelectedBagNodeId] =
     useState<BackpackNodeId | null>(null);
@@ -145,6 +185,66 @@ export function UiEditorPanel(): React.ReactElement {
     [bag],
   );
 
+  /**
+   * 当前右侧 schema：有选中 → 节点字段，否则全局字段。
+   */
+  const hudSchema = useMemo(() => {
+    return selectedHudNodeId !== null
+      ? inventoryHudNodeFields(selectedHudNodeId)
+      : inventoryHudGlobalFields();
+  }, [selectedHudNodeId]);
+
+  const bagSchema = useMemo(() => {
+    return selectedBagNodeId !== null
+      ? backpackScreenNodeFields(selectedBagNodeId)
+      : backpackScreenGlobalFields();
+  }, [selectedBagNodeId]);
+
+  /**
+   * 将选中 HUD 节点重置为 defaultInventoryHud 对应节点。
+   */
+  const handleResetHudNode = useCallback((): void => {
+    if (selectedHudNodeId === null) {
+      return;
+    }
+
+    persistHud(resetInventoryHudNode(hud, selectedHudNodeId));
+  }, [hud, persistHud, selectedHudNodeId]);
+
+  /**
+   * 将整份 HUD 配置重置为默认。
+   */
+  const handleResetHudAll = useCallback((): void => {
+    persistHud(defaultInventoryHud());
+    setSelectedHudNodeId(null);
+  }, [persistHud]);
+
+  /**
+   * 将选中背包节点重置为 defaultBackpackScreen 对应节点（按设计分辨率）。
+   */
+  const handleResetBagNode = useCallback((): void => {
+    if (selectedBagNodeId === null) {
+      return;
+    }
+
+    persistBag(
+      resetBackpackScreenNode(
+        bag,
+        selectedBagNodeId,
+        designSize.width,
+        designSize.height,
+      ),
+    );
+  }, [bag, designSize.height, designSize.width, persistBag, selectedBagNodeId]);
+
+  /**
+   * 将整份背包配置重置为默认（按设计分辨率）。
+   */
+  const handleResetBagAll = useCallback((): void => {
+    persistBag(defaultBackpackScreen(designSize.width, designSize.height));
+    setSelectedBagNodeId(null);
+  }, [designSize.height, designSize.width, persistBag]);
+
   const tabBtn = (id: UiSubSection, label: string): React.ReactElement => {
     const active = sub === id;
 
@@ -175,6 +275,11 @@ export function UiEditorPanel(): React.ReactElement {
       </button>
     );
   };
+
+  const selectedLabel =
+    sub === "hud"
+      ? selectedHudNodeId ?? "全局"
+      : selectedBagNodeId ?? "全局";
 
   return (
     <div
@@ -265,11 +370,76 @@ export function UiEditorPanel(): React.ReactElement {
           overflow: "auto",
           background: tokens.bgElevated,
           padding: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
         }}
       >
+        <div
+          style={{
+            fontSize: 12,
+            color: tokens.textMuted,
+            lineHeight: 1.45,
+          }}
+        >
+          编辑目标：{selectedLabel}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {sub === "hud" ? (
+            <>
+              {selectedHudNodeId !== null ? (
+                <button
+                  type="button"
+                  data-testid="ui-editor-reset-hud-node"
+                  onClick={handleResetHudNode}
+                  style={resetButtonStyle(tokens, false)}
+                >
+                  重置此节点
+                </button>
+              ) : null}
+              <button
+                type="button"
+                data-testid="ui-editor-reset-hud-all"
+                onClick={handleResetHudAll}
+                style={resetButtonStyle(tokens, true)}
+              >
+                全部重置为默认
+              </button>
+            </>
+          ) : (
+            <>
+              {selectedBagNodeId !== null ? (
+                <button
+                  type="button"
+                  data-testid="ui-editor-reset-bag-node"
+                  onClick={handleResetBagNode}
+                  style={resetButtonStyle(tokens, false)}
+                >
+                  重置此节点
+                </button>
+              ) : null}
+              <button
+                type="button"
+                data-testid="ui-editor-reset-bag-all"
+                onClick={handleResetBagAll}
+                style={resetButtonStyle(tokens, true)}
+              >
+                全部重置为默认
+              </button>
+            </>
+          )}
+        </div>
+
         {sub === "hud" ? (
           <FormRenderer
-            schema={inventoryHudFields()}
+            schema={hudSchema}
             value={hudFormValue}
             onChange={(next) => {
               persistHud(next as unknown as InventoryHudConfig);
@@ -277,7 +447,7 @@ export function UiEditorPanel(): React.ReactElement {
           />
         ) : (
           <FormRenderer
-            schema={backpackScreenFields()}
+            schema={bagSchema}
             value={bagFormValue}
             onChange={(next) => {
               persistBag(
