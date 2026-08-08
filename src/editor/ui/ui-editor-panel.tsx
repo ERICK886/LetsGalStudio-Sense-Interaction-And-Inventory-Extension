@@ -687,7 +687,7 @@ export function UiEditorPanel(): React.ReactElement {
             ? "Shift+单击多选；顶栏 Ctrl+Z / Y 撤销重做；间隙点击可选中快捷栏。"
             : sub === "backpack"
               ? "Shift+单击多选节点后可用右侧对齐；Ctrl+Z / Y 撤销重做。"
-              : "调整位置、间距与样式；右侧预览实时同步。"}
+              : "调整位置、间距与样式；左侧预览随表单实时同步。"}
         </p>
       </aside>
 
