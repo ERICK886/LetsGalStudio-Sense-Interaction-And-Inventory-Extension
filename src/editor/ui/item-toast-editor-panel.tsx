@@ -1,0 +1,219 @@
+/**
+ * item-toast-editor-panel.tsx
+ * 作者: 池水三两升
+ * 日期: 2026-08-08
+ * 版本: 0.1.0
+ *
+ * 获得物品 Toast 的表单编辑器与静态预览。
+ * - 读取 / 写入 `ITEM_TOAST_JSON_KEY`
+ * - 使用 `FormRenderer` 绑定扁平 / 嵌套值（`style.background` 等）
+ * - 右侧展示一条使用 `applyUiBoxStyle` / `applyUiTextStyle` 渲染的示例气泡
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
+import {
+  defaultItemToastConfig,
+  parseItemToastJson,
+  stringifyItemToast,
+} from "../../domain/item-toast-config";
+import { applyUiBoxStyle, applyUiTextStyle } from "../../domain/ui-style";
+import type { ItemToastConfig } from "../../domain/types";
+import { FormRenderer } from "../../schema/form-renderer";
+import { itemToastGlobalFields } from "../../schema/item-toast-schema";
+import {
+  ITEM_TOAST_JSON_KEY,
+  readHudSetting,
+  writeHudSetting,
+} from "../../store/hud-settings";
+import { notifySettingsField } from "../../store/settings-sync";
+import { notifyUiHistoryTick } from "../../store/ui-edit-history-bridge";
+import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
+
+/**
+ * 从 settings 读取并解析 Toast 配置。
+ *
+ * @param ctx - 扩展上下文
+ * @returns 规范化后的 `ItemToastConfig`
+ */
+function loadItemToast(
+  ctx: ReturnType<typeof useExtensionContext>,
+): ItemToastConfig {
+  const raw = readHudSetting(ctx, ITEM_TOAST_JSON_KEY);
+
+  return parseItemToastJson(
+    typeof raw === "string" ? raw : String(raw ?? ""),
+  );
+}
+
+/**
+ * 将配置写入 backpack-hud 设置并通知刷新。
+ *
+ * @param ctx - 扩展上下文
+ * @param config - 新配置
+ */
+function persistItemToast(
+  ctx: ReturnType<typeof useExtensionContext>,
+  config: ItemToastConfig,
+): void {
+  writeHudSetting(ctx, ITEM_TOAST_JSON_KEY, stringifyItemToast(config));
+  notifySettingsField(ITEM_TOAST_JSON_KEY);
+  notifyUiHistoryTick();
+}
+
+/**
+ * 获得物品 Toast 编辑器面板。
+ *
+ * @returns 编辑器 React 元素
+ */
+export function ItemToastEditorPanel(): React.ReactElement {
+  const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+
+  const [config, setConfig] = useState<ItemToastConfig>(() => loadItemToast(ctx));
+
+  /**
+   * 上下文切换后重新加载配置（与 hud / backpack 面板保持一致）。
+   */
+  useEffect(() => {
+    setConfig(loadItemToast(ctx));
+  }, [ctx]);
+
+  const formValue = useMemo(
+    () => config as unknown as Record<string, unknown>,
+    [config],
+  );
+
+  /**
+   * 表单字段变更回调。
+   *
+   * @param next - FormRenderer 返回的下一个扁平对象
+   */
+  const handleChange = useCallback(
+    (next: Record<string, unknown>): void => {
+      const parsed = parseItemToastJson(JSON.stringify(next));
+
+      setConfig(parsed);
+      persistItemToast(ctx, parsed);
+    },
+    [ctx],
+  );
+
+  /**
+   * 全部重置为默认配置。
+   */
+  const handleResetAll = useCallback((): void => {
+    const next = defaultItemToastConfig();
+
+    setConfig(next);
+    persistItemToast(ctx, next);
+  }, [ctx]);
+
+  /**
+   * 示例气泡样式：合并盒样式与文本样式，并补充内边距与 flex 居中。
+   */
+  const previewStyle: React.CSSProperties = useMemo(
+    () => ({
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "10px 16px",
+      ...applyUiBoxStyle(config.style),
+      ...applyUiTextStyle(config.style),
+    }),
+    [config.style],
+  );
+
+  return (
+    <div
+      data-testid="item-toast-editor-panel"
+      style={{
+        display: "flex",
+        width: "100%",
+        height: "100%",
+        minHeight: 0,
+      }}
+    >
+      <main
+        data-testid="item-toast-preview-area"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          background: tokens.bgSunken,
+          borderRight: `1px solid ${tokens.border}`,
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 12,
+            color: tokens.textMuted,
+            marginBottom: 8,
+          }}
+        >
+          预览
+        </div>
+        <div style={previewStyle}>获得物品：旧钥匙 x1</div>
+      </main>
+
+      <aside
+        data-testid="item-toast-form-aside"
+        style={{
+          width: 300,
+          flexShrink: 0,
+          minHeight: 0,
+          overflow: "auto",
+          background: tokens.bgElevated,
+          padding: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 12,
+            color: tokens.textMuted,
+            lineHeight: 1.45,
+          }}
+        >
+          编辑目标：全局
+        </div>
+
+        <button
+          type="button"
+          data-testid="item-toast-reset-all"
+          onClick={handleResetAll}
+          style={{
+            appearance: "none",
+            border: `1px solid ${tokens.accent}`,
+            background: `${tokens.accent}18`,
+            color: tokens.textPrimary,
+            borderRadius: 6,
+            padding: "6px 10px",
+            fontSize: FONT_SIZE_DEFAULT,
+            fontFamily: "inherit",
+            fontWeight: 500,
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left" as const,
+          }}
+        >
+          全部重置为默认
+        </button>
+
+        <FormRenderer
+          schema={itemToastGlobalFields()}
+          value={formValue}
+          onChange={handleChange}
+        />
+      </aside>
+    </div>
+  );
+}
