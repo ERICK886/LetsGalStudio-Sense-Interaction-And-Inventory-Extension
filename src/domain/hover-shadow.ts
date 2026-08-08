@@ -2,10 +2,11 @@
  * hover-shadow.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 交互点悬停阴影的默认值、JSON 规范化与 CSS filter 拼装。
  * 支持光晕（glow）与底影（base）双层独立开关；总开关优先。
+ * 交互点实例可选 useGlobal 跟随 SceneUiConfig.hotspotHover。
  */
 
 import type { HotspotHoverShadow, HoverShadowLayer } from "./types";
@@ -140,6 +141,7 @@ export function defaultHoverShadowLayer(
  */
 export function defaultHotspotHoverShadow(): HotspotHoverShadow {
   return {
+    useGlobal: true,
     enabled: true,
     glow: defaultHoverShadowLayer("glow"),
     base: defaultHoverShadowLayer("base"),
@@ -264,6 +266,7 @@ function normalizeHoverShadowLayer(
  * - 入参缺失或非对象 → 完整默认
  * - 仅有 `{ enabled }` 的旧数据 → 保留总开关，glow/base 填默认层
  * - 部分层字段缺失 → 按字段回退该层默认并 clamp
+ * - 实例路径始终写出具体布尔 `useGlobal`（`obj.useGlobal !== false`）；全局预设经 strip 剥离该字段
  *
  * @param raw - 原始 hoverShadow 对象或任意值
  * @returns 规范化后的悬停阴影配置
@@ -285,11 +288,16 @@ export function normalizeHotspotHoverShadow(raw: unknown): HotspotHoverShadow {
 
   const obj = raw as Record<string, unknown>;
 
-  return {
+  const shadow: HotspotHoverShadow = {
     enabled: obj.enabled === undefined ? true : Boolean(obj.enabled),
     glow: normalizeHoverShadowLayer(obj.glow, "glow"),
     base: normalizeHoverShadowLayer(obj.base, "base"),
   };
+
+  // 实例 normalize 始终给出具体布尔，供表单 Boolean(raw) 与运行时 !== false 判定一致
+  shadow.useGlobal = obj.useGlobal !== false;
+
+  return shadow;
 }
 
 /**

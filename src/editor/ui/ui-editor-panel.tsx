@@ -2,10 +2,11 @@
  * ui-editor-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.6.0
+ * 版本: 0.7.0
  *
- * 编辑器「UI」分区：快捷栏 HUD / 全屏背包可视化编辑。
- * - 配置写入 backpack-hud.settings；支持撤销/重做（桥接顶栏）
+ * 编辑器「UI」分区：快捷栏 HUD / 全屏背包 / 场景 UI 可视化编辑。
+ * - 「场景 UI」含二级子页：获得提示 / 交互点悬停
+ * - 配置写入 backpack-hud.settings（HUD/背包）与 editor.sceneUiJson（场景 UI）；支持撤销/重做（桥接顶栏）
  * - 多选 + 显式对齐；右侧属性（单选节点 / 全局）
  */
 
@@ -78,9 +79,13 @@ import { AlignToolbar } from "./align-toolbar";
 import { BackpackVisualCanvas } from "./backpack-visual-canvas";
 import { HudVisualCanvas } from "./hud-visual-canvas";
 import { ItemToastEditorPanel } from "./item-toast-editor-panel";
+import { HotspotHoverEditorPanel } from "./hotspot-hover-editor-panel";
 
 /** UI 子分区 */
-type UiSubSection = "hud" | "backpack" | "itemToast";
+type UiSubSection = "hud" | "backpack" | "sceneUi";
+
+/** 「场景 UI」分区内的二级子页 */
+type SceneUiTab = "itemToast" | "hotspotHover";
 
 /** 可对齐的背包节点（排除 backdrop / craftButton） */
 const BAG_ALIGNABLE: readonly BackpackNodeId[] = [
@@ -305,6 +310,7 @@ export function UiEditorPanel(): React.ReactElement {
   const { size: designSize } = useDesignSize();
 
   const [sub, setSub] = useState<UiSubSection>("hud");
+  const [sceneUiTab, setSceneUiTab] = useState<SceneUiTab>("itemToast");
   const [hud, setHud] = useState<InventoryHudConfig>(() => loadHud(ctx));
   const [bag, setBag] = useState<BackpackScreenConfig>(() =>
     loadBackpackScreen(ctx),
@@ -415,7 +421,7 @@ export function UiEditorPanel(): React.ReactElement {
           return true;
         }
 
-        if (subRef.current === "itemToast") {
+        if (subRef.current === "sceneUi") {
           return false;
         }
 
@@ -446,7 +452,7 @@ export function UiEditorPanel(): React.ReactElement {
           return true;
         }
 
-        if (subRef.current === "itemToast") {
+        if (subRef.current === "sceneUi") {
           return false;
         }
 
@@ -467,7 +473,7 @@ export function UiEditorPanel(): React.ReactElement {
           return hudHistoryRef.current.canUndo;
         }
 
-        if (subRef.current === "itemToast") {
+        if (subRef.current === "sceneUi") {
           return false;
         }
 
@@ -478,7 +484,7 @@ export function UiEditorPanel(): React.ReactElement {
           return hudHistoryRef.current.canRedo;
         }
 
-        if (subRef.current === "itemToast") {
+        if (subRef.current === "sceneUi") {
           return false;
         }
 
@@ -617,6 +623,45 @@ export function UiEditorPanel(): React.ReactElement {
     );
   };
 
+  /**
+   * 「场景 UI」分区二级子页切换按钮。
+   *
+   * @param id - 子页 id
+   * @param label - 按钮文案
+   * @returns 按钮 React 元素
+   */
+  const sceneUiTabBtn = (
+    id: SceneUiTab,
+    label: string,
+  ): React.ReactElement => {
+    const active = sceneUiTab === id;
+
+    return (
+      <button
+        key={id}
+        type="button"
+        data-testid={`ui-editor-scene-ui-tab-${id}`}
+        onClick={() => {
+          setSceneUiTab(id);
+        }}
+        style={{
+          appearance: "none",
+          border: `1px solid ${active ? tokens.accent : tokens.borderStrong}`,
+          background: active ? `${tokens.accent}22` : "transparent",
+          color: tokens.textPrimary,
+          borderRadius: 6,
+          padding: "4px 10px",
+          fontSize: FONT_SIZE_DEFAULT,
+          fontFamily: "inherit",
+          fontWeight: active ? 650 : 500,
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+
   const selectedLabel =
     sub === "hud"
       ? selectedHudIds.length === 0
@@ -674,7 +719,7 @@ export function UiEditorPanel(): React.ReactElement {
         </div>
         {tabBtn("hud", "快捷栏 HUD")}
         {tabBtn("backpack", "全屏背包")}
-        {tabBtn("itemToast", "获得提示")}
+        {tabBtn("sceneUi", "场景 UI")}
         <p
           style={{
             marginTop: 12,
@@ -687,7 +732,7 @@ export function UiEditorPanel(): React.ReactElement {
             ? "Shift+单击多选；顶栏 Ctrl+Z / Y 撤销重做；间隙点击可选中快捷栏。"
             : sub === "backpack"
               ? "Shift+单击多选节点后可用右侧对齐；Ctrl+Z / Y 撤销重做。"
-              : "调整位置、间距与样式；左侧预览随表单实时同步。"}
+              : "获得提示与交互点悬停的全局预设；中栏顶部切换子页。"}
         </p>
       </aside>
 
@@ -720,7 +765,38 @@ export function UiEditorPanel(): React.ReactElement {
             onConfigChange={persistBag}
           />
         ) : (
-          <ItemToastEditorPanel />
+          <div
+            data-testid="ui-editor-scene-ui"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              width: "100%",
+              height: "100%",
+              minHeight: 0,
+            }}
+          >
+            <div
+              data-testid="ui-editor-scene-ui-tabs"
+              style={{
+                display: "flex",
+                gap: 8,
+                padding: "10px 12px",
+                borderBottom: `1px solid ${tokens.border}`,
+                background: tokens.bgElevated,
+                flexShrink: 0,
+              }}
+            >
+              {sceneUiTabBtn("itemToast", "获得提示")}
+              {sceneUiTabBtn("hotspotHover", "交互点悬停")}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+              {sceneUiTab === "itemToast" ? (
+                <ItemToastEditorPanel />
+              ) : (
+                <HotspotHoverEditorPanel />
+              )}
+            </div>
+          </div>
         )}
       </main>
 
@@ -733,7 +809,7 @@ export function UiEditorPanel(): React.ReactElement {
           overflow: "auto",
           background: tokens.bgElevated,
           padding: 12,
-          display: sub === "itemToast" ? "none" : "flex",
+          display: sub === "sceneUi" ? "none" : "flex",
           flexDirection: "column",
           gap: 12,
         }}

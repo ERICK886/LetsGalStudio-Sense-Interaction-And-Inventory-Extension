@@ -2,10 +2,11 @@
  * types.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.2
+ * 版本: 0.1.3
  *
  * 场景交互扩展的领域类型定义（纯类型，无运行时逻辑）。
- * HotspotElement.hoverShadow 为完整 HotspotHoverShadow（光晕/底影可配）。
+ * SceneUiConfig 聚合获得提示与交互点悬停全局预设；
+ * HotspotHoverShadow.useGlobal 控制是否跟随全局悬停。
  */
 export type MotionPresetId =
   | "none"
@@ -43,8 +44,15 @@ export interface HoverShadowLayer {
   intensity: number;
 }
 
-/** 交互点悬停阴影：总开关 + 光晕/底影双层独立配置 */
+/**
+ * 交互点悬停阴影：总开关 + 光晕/底影双层独立配置。
+ *
+ * `useGlobal` 仅用于交互点实例：缺省或 `true` 表示跟随 `SceneUiConfig.hotspotHover`；
+ * 全局预设段不使用该字段。
+ */
 export interface HotspotHoverShadow {
+  /** 缺省 / true = 跟随场景 UI 全局悬停预设；false = 使用本对象 glow/base */
+  useGlobal?: boolean;
   enabled: boolean;
   glow: HoverShadowLayer;
   base: HoverShadowLayer;
@@ -199,6 +207,19 @@ export interface ItemToastConfig {
   offsetY: number;
   gap: number;
   style: UiBoxStyle & UiTextStyle;
+}
+
+/**
+ * 场景 UI 预设（version 1）：获得提示 + 交互点悬停全局默认。
+ *
+ * 持久化于 `editor.sceneUiJson`；`hotspotHover` 段不含 `useGlobal`。
+ */
+export interface SceneUiConfig {
+  version: 1;
+  /** 获得物品 Toast 全局默认（结构同 ItemToastConfig） */
+  itemToast: ItemToastConfig;
+  /** 交互点悬停阴影全局默认（不含 useGlobal） */
+  hotspotHover: HotspotHoverShadow;
 }
 
 /**

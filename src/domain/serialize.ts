@@ -2,10 +2,10 @@
  * serialize.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.2
+ * 版本: 0.1.3
  *
  * 场景库 / 物品库 / 库存 / 进度 / HUD 的 JSON 安全编解码与规范化。
- * 交互点 hoverShadow 支持完整 HotspotHoverShadow 规范化。
+ * 交互点 hoverShadow 经 normalizeHotspotHoverShadow 保留 useGlobal 决策字段。
  */
 import { clamp01 } from "../shared/coords";
 import { logError } from "../shared/logger";

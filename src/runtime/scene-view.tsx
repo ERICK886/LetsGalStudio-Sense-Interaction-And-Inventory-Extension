@@ -19,6 +19,7 @@ import { useExtensionContext } from "@avg-studio/sdk";
 import { isHotspotVisible } from "../domain/progress";
 import type {
   HotspotElement,
+  HotspotHoverShadow,
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
@@ -71,6 +72,14 @@ export interface SceneViewProps {
     text: string;
     anchorHotspotId: string;
   }) => string;
+
+  /**
+   * 全局交互点悬停预设（来自 `SceneUiConfig.hotspotHover`）。
+   *
+   * 由各 shell 读取并下传；HotspotView 据此与本地 hoverShadow 解析
+   * 出运行时实际使用的悬停阴影（useGlobal !== false 时跟随全局）。
+   */
+  globalHoverShadow?: HotspotHoverShadow;
 }
 
 /**
@@ -121,6 +130,7 @@ export function SceneView({
   onToastAdvance,
   onHotspotActivate,
   resolveToastText,
+  globalHoverShadow,
 }: SceneViewProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
@@ -287,6 +297,7 @@ export function SceneView({
                 contentRect={layout.contentRect}
                 resolveUrl={resolveUrl}
                 onActivate={onHotspotActivate}
+                globalHoverShadow={globalHoverShadow}
               />
             ))}
           </div>

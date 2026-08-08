@@ -69,6 +69,9 @@ export class EditorExtension extends Extension<EditorAppProps> {
       .number("设计分辨率高度")
       .default(1080)
       .range(320, 7680),
+    sceneUiJson: s
+      .string("场景 UI 预设 JSON（获得提示 + 悬停）")
+      .default(""),
   }));
 
   /**

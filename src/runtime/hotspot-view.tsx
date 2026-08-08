@@ -15,11 +15,9 @@
  */
 
 import React, { useCallback, useRef, useState } from "react";
-import {
-  buildHoverShadowFilter,
-  normalizeHotspotHoverShadow,
-} from "../domain/hover-shadow";
-import type { HotspotElement } from "../domain/types";
+import { buildHoverShadowFilter } from "../domain/hover-shadow";
+import { resolveHotspotHoverShadow } from "../domain/scene-ui-config";
+import type { HotspotElement, HotspotHoverShadow } from "../domain/types";
 import { isOpaqueImageHit } from "../shared/alpha-hit";
 import {
   normToWorld,
@@ -53,6 +51,15 @@ export interface HotspotViewProps {
    * @param hotspot - 被点击的交互点
    */
   onActivate: (hotspot: HotspotElement) => void;
+
+  /**
+   * 全局交互点悬停预设（`SceneUiConfig.hotspotHover`）。
+   *
+   * 当交互点本地 `hoverShadow.useGlobal !== false` 时跟随该全局预设；
+   * 否则使用本地 glow/base。未提供时回退到本地 hoverShadow 规范化结果
+   * （兼容旧调用方，等价于 useGlobal=false 且本地为默认）。
+   */
+  globalHoverShadow?: HotspotHoverShadow;
 }
 
 /**
@@ -98,6 +105,7 @@ export function HotspotView({
   contentRect,
   resolveUrl,
   onActivate,
+  globalHoverShadow,
 }: HotspotViewProps): React.ReactElement {
   const imgRef = useRef<HTMLImageElement | null>(null);
   /** 指针是否落在剪影内（有图时）；无图恒为 true */
@@ -109,9 +117,12 @@ export function HotspotView({
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
   const hasImage = Boolean(url);
-  const hoverFilter = buildHoverShadowFilter(
-    normalizeHotspotHoverShadow(hotspot.hoverShadow),
+  // 解析运行时实际使用的悬停阴影：跟随全局或使用本地
+  const resolvedHoverShadow = resolveHotspotHoverShadow(
+    hotspot,
+    globalHoverShadow ?? hotspot.hoverShadow,
   );
+  const hoverFilter = buildHoverShadowFilter(resolvedHoverShadow);
 
   const label = hotspot.label;
   const labelText =

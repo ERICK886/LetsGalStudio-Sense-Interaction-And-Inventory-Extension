@@ -76,7 +76,7 @@ export function createDefaultHotspot(x: number, y: number): HotspotElement {
       width: 64,
       height: 64,
     },
-    hoverShadow: defaultHotspotHoverShadow(),
+    hoverShadow: { ...defaultHotspotHoverShadow(), useGlobal: true },
     actions: [],
     once: false,
     visibleByDefault: true,

@@ -2,36 +2,43 @@
  * item-toast-editor-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 获得物品 Toast 的表单编辑器与静态预览。
- * - 读取 / 写入 `ITEM_TOAST_JSON_KEY`
+ * - 读取 / 写入 `editor.sceneUiJson` 的 `itemToast` 段（经 readSceneUiConfig / writeSceneUiConfig）
+ * - 首次挂载时若 editor 键为空且旧 `backpack-hud.itemToastJson` 迁入成功，写回一次以落盘
  * - 使用 `FormRenderer` 绑定扁平 / 嵌套值（`style.background` 等）
  * - 右侧展示一条使用 `applyUiBoxStyle` / `applyUiTextStyle` 渲染的示例气泡
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
   defaultItemToastConfig,
   parseItemToastJson,
-  stringifyItemToast,
 } from "../../domain/item-toast-config";
 import { applyUiBoxStyle, applyUiTextStyle } from "../../domain/ui-style";
 import type { ItemToastConfig } from "../../domain/types";
 import { FormRenderer } from "../../schema/form-renderer";
 import { itemToastGlobalFields } from "../../schema/item-toast-schema";
 import {
+  readAuthorSetting,
+} from "../../store/author-settings";
+import {
   ITEM_TOAST_JSON_KEY,
   readHudSetting,
-  writeHudSetting,
 } from "../../store/hud-settings";
+import {
+  readSceneUiConfig,
+  SCENE_UI_JSON_KEY,
+  writeSceneUiConfig,
+} from "../../store/scene-ui-settings";
 import { notifySettingsField } from "../../store/settings-sync";
 import { notifyUiHistoryTick } from "../../store/ui-edit-history-bridge";
 import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
 
 /**
- * 从 settings 读取并解析 Toast 配置。
+ * 从场景 UI 预设中读取 itemToast 段。
  *
  * @param ctx - 扩展上下文
  * @returns 规范化后的 `ItemToastConfig`
@@ -39,26 +46,50 @@ import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
 function loadItemToast(
   ctx: ReturnType<typeof useExtensionContext>,
 ): ItemToastConfig {
-  const raw = readHudSetting(ctx, ITEM_TOAST_JSON_KEY);
-
-  return parseItemToastJson(
-    typeof raw === "string" ? raw : String(raw ?? ""),
-  );
+  return readSceneUiConfig(ctx).itemToast;
 }
 
 /**
- * 将配置写入 backpack-hud 设置并通知刷新。
+ * 将 itemToast 段写回场景 UI 预设并通知刷新。
+ *
+ * 读整包 → 替换 itemToast 段 → 写整包，避免覆盖 hotspotHover 段。
  *
  * @param ctx - 扩展上下文
- * @param config - 新配置
+ * @param next - 新的 Toast 配置
  */
 function persistItemToast(
   ctx: ReturnType<typeof useExtensionContext>,
-  config: ItemToastConfig,
+  next: ItemToastConfig,
 ): void {
-  writeHudSetting(ctx, ITEM_TOAST_JSON_KEY, stringifyItemToast(config));
-  notifySettingsField(ITEM_TOAST_JSON_KEY);
+  const ui = readSceneUiConfig(ctx);
+
+  writeSceneUiConfig(ctx, { ...ui, itemToast: next });
   notifyUiHistoryTick();
+}
+
+/**
+ * 判断是否需要将旧 `backpack-hud.itemToastJson` 迁移结果落盘到 editor 键。
+ *
+ * 条件：editor `sceneUiJson` 为空 且 旧 `itemToastJson` 非空。
+ * 此时 readSceneUiConfig 返回的是迁移态（未持久化），需写回一次。
+ *
+ * @param ctx - 扩展上下文
+ * @returns true 表示需要落盘迁移结果
+ */
+function shouldPersistMigration(
+  ctx: ReturnType<typeof useExtensionContext>,
+): boolean {
+  const editorRaw = readAuthorSetting(ctx, SCENE_UI_JSON_KEY);
+  const editorStr = typeof editorRaw === "string" ? editorRaw.trim() : "";
+
+  if (editorStr.length > 0) {
+    return false;
+  }
+
+  const legacy = readHudSetting(ctx, ITEM_TOAST_JSON_KEY);
+  const legacyStr = typeof legacy === "string" ? legacy.trim() : "";
+
+  return legacyStr.length > 0;
 }
 
 /**
@@ -70,13 +101,33 @@ export function ItemToastEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
 
-  const [config, setConfig] = useState<ItemToastConfig>(() => loadItemToast(ctx));
+  const [config, setConfig] = useState<ItemToastConfig>(() =>
+    loadItemToast(ctx),
+  );
+
+  /** 标记迁移落盘是否已执行（避免重复写入） */
+  const migrationPersistedRef = useRef(false);
 
   /**
-   * 上下文切换后重新加载配置（与 hud / backpack 面板保持一致）。
+   * 上下文切换后重新加载配置；首次挂载若处于迁移态则写回一次。
    */
   useEffect(() => {
     setConfig(loadItemToast(ctx));
+  }, [ctx]);
+
+  useEffect(() => {
+    if (migrationPersistedRef.current) {
+      return;
+    }
+
+    if (shouldPersistMigration(ctx)) {
+      // 迁移态：将 readSceneUiConfig 的迁移结果完整落盘到 editor 键
+      const ui = readSceneUiConfig(ctx);
+
+      writeSceneUiConfig(ctx, ui);
+      notifySettingsField(SCENE_UI_JSON_KEY);
+      migrationPersistedRef.current = true;
+    }
   }, [ctx]);
 
   const formValue = useMemo(

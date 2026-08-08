@@ -2,11 +2,12 @@
  * player-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.3.1
  *
  * 玩家会话壳（modal）：纯运行时画面（场景 + 动作链 / toast / once）+ 库存 / 进度；
  * 无上方预览条；右上角浮层「退出」关闭阻塞会话。
  * 背包 / 快捷栏 UI 由独立程序 `backpack-hud` 模块负责，本壳不再挂载 InventoryHudLayer。
+ * Toast / 悬停预设经 editor.sceneUiJson（useSceneUiConfig）注入。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,10 +17,7 @@ import {
 } from "@avg-studio/sdk";
 import type { ActionRuntime } from "../domain/actions";
 import { executeSceneActions } from "../domain/actions";
-import {
-  parseItemToastJson,
-  resolveItemToastAppearance,
-} from "../domain/item-toast-config";
+import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
 import { markConsumed } from "../domain/progress";
 import {
@@ -44,10 +42,7 @@ import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
-import {
-  ITEM_TOAST_JSON_KEY,
-  readHudSetting,
-} from "../store/hud-settings";
+import { useSceneUiConfig } from "../store/use-scene-ui-config";
 import { FONT_SIZE_DEFAULT, useTheme } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
 import { createActionRuntime } from "./create-action-runtime";
@@ -164,6 +159,9 @@ export function PlayerShell({
     emptyToastQueue(),
   );
 
+  /** 场景 UI 预设（itemToast + hotspotHover），订阅 editor.sceneUiJson 写入 */
+  const sceneUi = useSceneUiConfig();
+
   /** 最新库存 / 库引用，供 ActionRuntime 闭包读取 */
   const inventoryRef = useRef<InventoryState>(inventory);
   const scenesRef = useRef<SceneDefinition[]>(library.scenes);
@@ -197,18 +195,15 @@ export function PlayerShell({
   /**
    * toast 入队（ActionRuntime 回调）。
    *
-   * 从 `backpack-hud` 设置读取 `itemToastJson`，解析为全局配置；
-   * 再与动作级覆盖合并，得到完整外观后写入 `ToastRequest`，
+   * 全局 Toast 配置取自 `SceneUiConfig.itemToast`（editor.sceneUiJson），
+   * 与动作级覆盖合并，得到完整外观后写入 `ToastRequest`，
    * 保证队列中的请求始终包含必填的 `placement/offsetX/offsetY/gap/style`。
    *
    * @param payload - toast 载荷（含可选覆盖）
    */
   const handleEnqueueToast = useCallback(
     (payload: Parameters<ActionRuntime["enqueueToast"]>[0]): void => {
-      const raw = readHudSetting(ctx, ITEM_TOAST_JSON_KEY);
-      const global = parseItemToastJson(
-        typeof raw === "string" ? raw : "",
-      );
+      const global = sceneUi.itemToast;
       const { text, anchorHotspotId, motion, ...overrides } = payload;
       const appearance = resolveItemToastAppearance(global, overrides);
 
@@ -221,7 +216,7 @@ export function PlayerShell({
         }),
       );
     },
-    [ctx],
+    [sceneUi],
   );
 
   const actionRuntime = useMemo(
@@ -312,6 +307,7 @@ export function PlayerShell({
           toastQueue={toastQueue}
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
+          globalHoverShadow={sceneUi.hotspotHover}
         />
       </div>
 
