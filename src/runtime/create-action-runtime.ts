@@ -9,6 +9,7 @@
 
 import type { ActionRuntime } from "../domain/actions";
 import { giveItemToInventory } from "../domain/inventory";
+import type { ItemToastOverrides } from "../domain/item-toast-config";
 import { findItem } from "../domain/item-registry";
 import { findScene } from "../domain/scene-registry";
 import type {
@@ -58,13 +59,13 @@ export interface CreateActionRuntimeDeps {
   /**
    * 将 toast 请求入队到 UI 队列状态。
    *
-   * @param payload - 与 ActionRuntime.enqueueToast 同形
+   * @param payload - 与 ActionRuntime.enqueueToast 同形（含动作级可选覆盖）
    */
   enqueueToast: (payload: {
     text: string;
     anchorHotspotId: string;
     motion: ElementMotion;
-  }) => void;
+  } & ItemToastOverrides) => void;
 
   /**
    * 非致命警告；缺省写 console.warn + logError。
@@ -161,13 +162,14 @@ export function createActionRuntime(
     },
 
     /**
-     * @param payload - toast 载荷；text 为空时回退最近 giveItem 的物品名
+     * @param payload - toast 载荷；text 为空时回退最近 giveItem 的物品名；
+     *                  覆盖字段原样转发给壳层
      */
     enqueueToast(payload: {
       text: string;
       anchorHotspotId: string;
       motion: ElementMotion;
-    }): void {
+    } & ItemToastOverrides): void {
       const text =
         payload.text.trim() !== ""
           ? payload.text

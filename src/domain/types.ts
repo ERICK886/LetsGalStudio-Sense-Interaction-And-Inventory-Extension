@@ -57,6 +57,11 @@ export type SceneAction =
       amount: number;
       toastText: string;
       toastMotion: ElementMotion;
+      toastPlacement?: ToastPlacement;
+      toastOffsetX?: number;
+      toastOffsetY?: number;
+      toastGap?: number;
+      toastStyle?: Partial<UiBoxStyle & UiTextStyle>;
     };
 
 export interface HotspotElement {

@@ -14,7 +14,12 @@ import {
   useExtensionContext,
   type SaveAPI,
 } from "@avg-studio/sdk";
+import type { ActionRuntime } from "../domain/actions";
 import { executeSceneActions } from "../domain/actions";
+import {
+  defaultItemToastConfig,
+  resolveItemToastAppearance,
+} from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
 import { markConsumed } from "../domain/progress";
 import {
@@ -144,19 +149,25 @@ export function RuntimeShell({
   /**
    * toast 入队（ActionRuntime 回调）。
    *
-   * @param payload - toast 载荷
+   * 先用默认全局配置与动作覆盖解析出完整外观，再写入 `ToastRequest`，
+   * 保证队列中的请求始终包含必填的 `placement/offsetX/offsetY/gap/style`。
+   *
+   * @param payload - toast 载荷（含可选覆盖）
    */
   const handleEnqueueToast = useCallback(
-    (payload: {
-      text: string;
-      anchorHotspotId: string;
-      motion: import("../domain/types").ElementMotion;
-    }): void => {
+    (payload: Parameters<ActionRuntime["enqueueToast"]>[0]): void => {
+      const { text, anchorHotspotId, motion, ...overrides } = payload;
+      const appearance = resolveItemToastAppearance(
+        defaultItemToastConfig(),
+        overrides,
+      );
+
       setToastQueue((prev) =>
         enqueueToast(prev, {
-          text: payload.text,
-          anchorHotspotId: payload.anchorHotspotId,
-          motion: payload.motion,
+          text,
+          anchorHotspotId,
+          motion,
+          ...appearance,
         }),
       );
     },

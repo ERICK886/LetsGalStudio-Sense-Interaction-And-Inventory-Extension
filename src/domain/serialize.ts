@@ -34,14 +34,17 @@ import type {
   InventoryHudConfig,
   InventoryState,
   ItemDefinition,
+  RecipeDefinition,
+  RecipeItemAmount,
+  RecipesLibraryFile,
   SceneAction,
   SceneDefinition,
   SceneProgress,
   ScenesLibraryFile,
+  ToastPlacement,
+  UiBoxStyle,
+  UiTextStyle,
   ItemsLibraryFile,
-  RecipeDefinition,
-  RecipeItemAmount,
-  RecipesLibraryFile,
 } from "./types";
 
 const SCOPE = "serialize";
@@ -140,6 +143,120 @@ function normalizeToastMotion(raw: unknown): ElementMotion {
   };
 }
 
+/** 合法的 Toast 方位，用于 giveItem 覆盖字段校验 */
+const VALID_TOAST_PLACEMENTS: ToastPlacement[] = [
+  "above",
+  "below",
+  "left",
+  "right",
+  "center",
+];
+
+/**
+ * 规范化 toast placement 覆盖；非法时省略（不写入默认值）。
+ *
+ * @param raw - 原始 placement 字符串
+ * @returns 合法 `ToastPlacement` 或 `undefined`
+ */
+function normalizeToastPlacement(
+  raw: unknown,
+): ToastPlacement | undefined {
+  return typeof raw === "string" &&
+    VALID_TOAST_PLACEMENTS.includes(raw as ToastPlacement)
+    ? (raw as ToastPlacement)
+    : undefined;
+}
+
+/**
+ * 规范化 toast 数字覆盖；仅有限数才写入。
+ *
+ * @param raw - 原始数字
+ * @returns 有限数或 `undefined`
+ */
+function normalizeToastFiniteNumber(raw: unknown): number | undefined {
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
+}
+
+/**
+ * 规范化 toast gap 覆盖；非负有限数才写入。
+ *
+ * @param raw - 原始 gap
+ * @returns 非负有限数或 `undefined`
+ */
+function normalizeToastGap(raw: unknown): number | undefined {
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+    ? raw
+    : undefined;
+}
+
+/**
+ * 浅拷贝 toastStyle 中的字符串/数字字段；完整 normalize 在 resolve 时做。
+ *
+ * @param raw - 原始 style 对象
+ * @returns 仅保留有效字段的部分样式；无有效字段时 `undefined`
+ */
+function normalizeToastStyle(
+  raw: unknown,
+): Partial<UiBoxStyle & UiTextStyle> | undefined {
+  if (raw === null || typeof raw !== "object") {
+    return undefined;
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const result: Partial<UiBoxStyle & UiTextStyle> = {};
+
+  if (typeof obj.background === "string") {
+    result.background = obj.background;
+  }
+
+  if (typeof obj.borderColor === "string") {
+    result.borderColor = obj.borderColor;
+  }
+
+  if (
+    typeof obj.borderWidth === "number" &&
+    Number.isFinite(obj.borderWidth)
+  ) {
+    result.borderWidth = obj.borderWidth;
+  }
+
+  if (
+    typeof obj.borderRadius === "number" &&
+    Number.isFinite(obj.borderRadius)
+  ) {
+    result.borderRadius = obj.borderRadius;
+  }
+
+  if (typeof obj.opacity === "number" && Number.isFinite(obj.opacity)) {
+    result.opacity = obj.opacity;
+  }
+
+  if (typeof obj.shadow === "number" && Number.isFinite(obj.shadow)) {
+    result.shadow = obj.shadow;
+  }
+
+  if (typeof obj.color === "string") {
+    result.color = obj.color;
+  }
+
+  if (typeof obj.fontSize === "number" && Number.isFinite(obj.fontSize)) {
+    result.fontSize = obj.fontSize;
+  }
+
+  if (
+    typeof obj.fontWeight === "number" &&
+    Number.isFinite(obj.fontWeight)
+  ) {
+    result.fontWeight = obj.fontWeight;
+  }
+
+  if (typeof obj.label === "string") {
+    result.label = obj.label;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 /**
  * 规范化单条场景动作。
  *
@@ -164,14 +281,42 @@ function normalizeSceneAction(raw: unknown): SceneAction | null {
           typeof obj.sceneIdOrName === "string" ? obj.sceneIdOrName : "",
       };
 
-    case "giveItem":
-      return {
+    case "giveItem": {
+      const action: Extract<SceneAction, { type: "giveItem" }> = {
         type: "giveItem",
         itemId: typeof obj.itemId === "string" ? obj.itemId : "",
         amount: normalizeGiveItemAmount(obj.amount),
         toastText: typeof obj.toastText === "string" ? obj.toastText : "",
         toastMotion: normalizeToastMotion(obj.toastMotion),
       };
+
+      const toastPlacement = normalizeToastPlacement(obj.toastPlacement);
+      if (toastPlacement !== undefined) {
+        action.toastPlacement = toastPlacement;
+      }
+
+      const toastOffsetX = normalizeToastFiniteNumber(obj.toastOffsetX);
+      if (toastOffsetX !== undefined) {
+        action.toastOffsetX = toastOffsetX;
+      }
+
+      const toastOffsetY = normalizeToastFiniteNumber(obj.toastOffsetY);
+      if (toastOffsetY !== undefined) {
+        action.toastOffsetY = toastOffsetY;
+      }
+
+      const toastGap = normalizeToastGap(obj.toastGap);
+      if (toastGap !== undefined) {
+        action.toastGap = toastGap;
+      }
+
+      const toastStyle = normalizeToastStyle(obj.toastStyle);
+      if (toastStyle !== undefined) {
+        action.toastStyle = toastStyle;
+      }
+
+      return action;
+    }
 
     default:
       return null;

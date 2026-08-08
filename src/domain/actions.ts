@@ -6,6 +6,7 @@
  *
  * 场景动作链执行器：按序调用 ActionRuntime，单步失败 warn 后继续。
  */
+import type { ItemToastOverrides } from "./item-toast-config";
 import type { ElementMotion, SceneAction } from "./types";
 
 /**
@@ -32,15 +33,23 @@ export interface ActionRuntime {
   /**
    * 入队一条获得物品轻提示。
    *
+   * 基础字段 `text/anchorHotspotId/motion` 必填；其余为动作级可选覆盖，
+   * 由壳层在写入 `ToastRequest` 时与全局配置合并为完整外观。
+   *
    * @param payload.text - 提示文案；空串时由 UI 层回退为物品名
    * @param payload.anchorHotspotId - 锚定热点 id
    * @param payload.motion - 动效配置
+   * @param payload.placement - 可选方位覆盖
+   * @param payload.offsetX - 可选水平偏移覆盖
+   * @param payload.offsetY - 可选垂直偏移覆盖
+   * @param payload.gap - 可选间距覆盖
+   * @param payload.style - 可选样式覆盖
    */
   enqueueToast(payload: {
     text: string;
     anchorHotspotId: string;
     motion: ElementMotion;
-  }): void;
+  } & ItemToastOverrides): void;
 
   /**
    * 记录非致命警告（日志/控制台等）。
@@ -92,6 +101,11 @@ function runGiveItemAction(
     text,
     anchorHotspotId: hotspotId,
     motion: action.toastMotion,
+    placement: action.toastPlacement,
+    offsetX: action.toastOffsetX,
+    offsetY: action.toastOffsetY,
+    gap: action.toastGap,
+    style: action.toastStyle,
   });
 }
 

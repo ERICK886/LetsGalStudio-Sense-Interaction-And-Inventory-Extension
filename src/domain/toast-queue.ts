@@ -7,10 +7,18 @@
  * 轻提示队列：current 显示中，pending 等待；advance 将 pending[0] 提升为 current。
  */
 import { createId } from "./id";
-import type { ElementMotion } from "./types";
+import type {
+  ElementMotion,
+  ToastPlacement,
+  UiBoxStyle,
+  UiTextStyle,
+} from "./types";
 
 /**
  * 单条轻提示请求（含唯一 id）。
+ *
+ * 字段已在入队前由壳层通过 `resolveItemToastAppearance` 解析为完整外观，
+ * 因此 `placement/offsetX/offsetY/gap/style` 均为必填。
  */
 export interface ToastRequest {
   /** 队列内唯一标识 */
@@ -24,6 +32,21 @@ export interface ToastRequest {
 
   /** 进入/退出动效 */
   motion: ElementMotion;
+
+  /** 相对热区锚点的方位 */
+  placement: ToastPlacement;
+
+  /** 水平偏移（设计像素） */
+  offsetX: number;
+
+  /** 垂直偏移（设计像素） */
+  offsetY: number;
+
+  /** 与锚点的间距（设计像素） */
+  gap: number;
+
+  /** 盒模型 + 文本样式（已合并全局配置与动作覆盖） */
+  style: UiBoxStyle & UiTextStyle;
 }
 
 /**

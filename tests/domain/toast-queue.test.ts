@@ -14,12 +14,17 @@ import {
 } from "../../src/domain/toast-queue";
 import { defaultElementMotion } from "../../src/domain/motion";
 
-/** 构造一条不含 id 的 toast 请求 */
+/** 构造一条不含 id 的 toast 请求（补齐 `ToastRequest` 必填外观字段） */
 function makeToastRequest(text: string, anchorHotspotId = "hs_1") {
   return {
     text,
     anchorHotspotId,
     motion: defaultElementMotion(),
+    placement: "above" as const,
+    offsetX: 0,
+    offsetY: 0,
+    gap: 48,
+    style: {},
   };
 }
 
