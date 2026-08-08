@@ -2,10 +2,10 @@
  * action-list-field.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 交互点动作列表编辑控件：增删改排序 SceneAction[]。
- * giveItem 的物品下拉选项来自物品库。
+ * giveItem 支持物品、数量、提示文案，以及 Toast 位置/偏移/间距/样式/动画覆盖。
  */
 
 import React, { useCallback } from "react";
@@ -14,6 +14,9 @@ import type {
   ItemDefinition,
   SceneAction,
   SceneDefinition,
+  ToastPlacement,
+  UiBoxStyle,
+  UiTextStyle,
 } from "../domain/types";
 import {
   FONT_SIZE_DEFAULT,
@@ -21,6 +24,8 @@ import {
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { FormRenderer } from "./form-renderer";
+import { motionSection } from "./motion-section";
 
 /**
  * ActionListField 组件属性。
@@ -100,6 +105,103 @@ function createActionOfType(
       return _exhaustive;
     }
   }
+}
+
+/** giveItem 动作的精确类型别名，便于后续覆盖字段操作 */
+type GiveItemAction = Extract<SceneAction, { type: "giveItem" }>;
+
+/** Toast 方位选项；空值表示「跟随全局」 */
+const TOAST_PLACEMENT_OPTIONS: ReadonlyArray<{
+  value: ToastPlacement | "";
+  label: string;
+}> = [
+  { value: "", label: "跟随全局" },
+  { value: "above", label: "上方" },
+  { value: "below", label: "下方" },
+  { value: "left", label: "左侧" },
+  { value: "right", label: "右侧" },
+  { value: "center", label: "居中" },
+];
+
+/**
+ * 更新可选的 toastPlacement；空值时删除字段以跟随全局。
+ *
+ * @param action - 当前 giveItem 动作
+ * @param placement - 新方位；"" 表示删除覆盖
+ * @returns 更新后的动作副本（不 mutate 原对象）
+ */
+function updateToastPlacement(
+  action: GiveItemAction,
+  placement: ToastPlacement | "",
+): GiveItemAction {
+  const next = { ...action };
+
+  if (placement === "") {
+    delete next.toastPlacement;
+  } else {
+    next.toastPlacement = placement;
+  }
+
+  return next;
+}
+
+/**
+ * 更新可选的 toast 数字覆盖字段；空或非法时删除字段。
+ *
+ * @param action - 当前 giveItem 动作
+ * @param key - 要更新的字段名
+ * @param raw - 输入框原始字符串；空串视为删除
+ * @returns 更新后的动作副本
+ */
+function updateToastNumber(
+  action: GiveItemAction,
+  key: "toastOffsetX" | "toastOffsetY" | "toastGap",
+  raw: string,
+): GiveItemAction {
+  const next = { ...action };
+  const n = raw === "" ? NaN : Number(raw);
+
+  if (!Number.isFinite(n)) {
+    delete next[key];
+  } else {
+    next[key] = n;
+  }
+
+  return next;
+}
+
+/**
+ * 更新 toastStyle 中的单个字段；空或非法时删除该键。
+ * 若删除后 toastStyle 为空，则整体移除 toastStyle。
+ *
+ * @param action - 当前 giveItem 动作
+ * @param key - 样式字段名
+ * @param value - 新值；空串或 undefined 视为删除
+ * @returns 更新后的动作副本
+ */
+function updateToastStyle(
+  action: GiveItemAction,
+  key: keyof (UiBoxStyle & UiTextStyle),
+  value: string | number | undefined,
+): GiveItemAction {
+  const next = { ...action };
+  const style: Partial<UiBoxStyle & UiTextStyle> = {
+    ...(next.toastStyle ?? {}),
+  };
+
+  if (value === "" || value === undefined) {
+    delete style[key];
+  } else {
+    style[key] = value as (UiBoxStyle & UiTextStyle)[typeof key];
+  }
+
+  if (Object.keys(style).length === 0) {
+    delete next.toastStyle;
+  } else {
+    next.toastStyle = style;
+  }
+
+  return next;
 }
 
 /**
@@ -412,6 +514,270 @@ function ActionCard({
               }}
             />
           </label>
+
+          {/* Toast 位置覆盖：空值 = 跟随全局 */}
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              Toast 位置
+            </span>
+            <select
+              aria-label={`动作 ${index + 1} Toast 位置`}
+              data-testid={`action-toast-placement-${index}`}
+              value={action.toastPlacement ?? ""}
+              style={controlStyle(tokens)}
+              onChange={(e) => {
+                onReplace(
+                  updateToastPlacement(
+                    action,
+                    e.target.value as ToastPlacement | "",
+                  ),
+                );
+              }}
+            >
+              {TOAST_PLACEMENT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* 偏移与间距：留空则删除覆盖字段 */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 4 }}
+            >
+              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                X 偏移
+              </span>
+              <input
+                type="number"
+                step={1}
+                value={action.toastOffsetX ?? ""}
+                placeholder="全局"
+                style={controlStyle(tokens)}
+                onChange={(e) => {
+                  onReplace(
+                    updateToastNumber(action, "toastOffsetX", e.target.value),
+                  );
+                }}
+              />
+            </label>
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 4 }}
+            >
+              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                Y 偏移
+              </span>
+              <input
+                type="number"
+                step={1}
+                value={action.toastOffsetY ?? ""}
+                placeholder="全局"
+                style={controlStyle(tokens)}
+                onChange={(e) => {
+                  onReplace(
+                    updateToastNumber(action, "toastOffsetY", e.target.value),
+                  );
+                }}
+              />
+            </label>
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 4 }}
+            >
+              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                间距
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={action.toastGap ?? ""}
+                placeholder="全局"
+                style={controlStyle(tokens)}
+                onChange={(e) => {
+                  onReplace(
+                    updateToastNumber(action, "toastGap", e.target.value),
+                  );
+                }}
+              />
+            </label>
+          </div>
+
+          {/* Toast 样式覆盖：与全局样式子集一致 */}
+          <div
+            style={{
+              border: `1px dashed ${tokens.border}`,
+              borderRadius: 6,
+              padding: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                color: tokens.textMuted,
+                fontWeight: 600,
+              }}
+            >
+              Toast 样式覆盖（留空跟随全局）
+            </span>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                  文字色
+                </span>
+                <input
+                  type="text"
+                  value={action.toastStyle?.color ?? ""}
+                  placeholder="#ffffff"
+                  style={controlStyle(tokens)}
+                  onChange={(e) => {
+                    onReplace(
+                      updateToastStyle(action, "color", e.target.value || undefined),
+                    );
+                  }}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                  背景色
+                </span>
+                <input
+                  type="text"
+                  value={action.toastStyle?.background ?? ""}
+                  placeholder="#1a1a2e"
+                  style={controlStyle(tokens)}
+                  onChange={(e) => {
+                    onReplace(
+                      updateToastStyle(
+                        action,
+                        "background",
+                        e.target.value || undefined,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                  字号
+                </span>
+                <input
+                  type="number"
+                  min={8}
+                  max={72}
+                  step={1}
+                  value={action.toastStyle?.fontSize ?? ""}
+                  style={controlStyle(tokens)}
+                  onChange={(e) => {
+                    const n = e.target.valueAsNumber;
+                    onReplace(
+                      updateToastStyle(
+                        action,
+                        "fontSize",
+                        Number.isFinite(n) ? n : undefined,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                  圆角
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={48}
+                  step={1}
+                  value={action.toastStyle?.borderRadius ?? ""}
+                  style={controlStyle(tokens)}
+                  onChange={(e) => {
+                    const n = e.target.valueAsNumber;
+                    onReplace(
+                      updateToastStyle(
+                        action,
+                        "borderRadius",
+                        Number.isFinite(n) ? n : undefined,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <label
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                  阴影强度
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={action.toastStyle?.shadow ?? ""}
+                  style={controlStyle(tokens)}
+                  onChange={(e) => {
+                    const n = e.target.valueAsNumber;
+                    onReplace(
+                      updateToastStyle(
+                        action,
+                        "shadow",
+                        Number.isFinite(n) ? n : undefined,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Toast 动画：复用 motionSection 经 FormRenderer 编辑 */}
+          <div
+            style={{
+              border: `1px dashed ${tokens.border}`,
+              borderRadius: 6,
+              padding: 10,
+            }}
+          >
+            <FormRenderer
+              schema={[
+                motionSection({
+                  keyPrefix: "toastMotion",
+                  title: "Toast 动画",
+                  sectionId: `toast-motion-${index}`,
+                  description: "获得物品提示的入场/退场动画",
+                }),
+              ]}
+              value={action as GiveItemAction & Record<string, unknown>}
+              onChange={(next) => {
+                onReplace(next as GiveItemAction);
+              }}
+            />
+          </div>
         </>
       ) : null}
     </div>
