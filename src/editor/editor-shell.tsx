@@ -2,23 +2,28 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.0
+ * 版本: 0.2.0
  *
  * 场景交互编辑器主壳：顶栏 + 左中右三栏。
  * - 场景分区：场景/交互点列表、画布、Schema 属性
- * - 物品库分区：物品列表、预览、物品属性（Task 12）
- * - Ctrl/Cmd+Z / Ctrl+Y / Ctrl+Shift+Z 按当前分区撤销重做（Task 16）
+ * - 物品库分区：物品列表、预览、物品属性
+ * - 配方分区：配方列表、公式预览、配方属性（v0.2 Task 5）
+ * - Ctrl/Cmd+Z / Ctrl+Y / Ctrl+Shift+Z 按当前分区撤销重做
+ * - 中栏 scene-canvas-host：保证画布 letterbox 居中
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ItemDefinition,
   ItemsLibraryFile,
+  RecipeDefinition,
+  RecipesLibraryFile,
   SceneDefinition,
   ScenesLibraryFile,
 } from "../domain/types";
 import { createHistory } from "../store/history";
 import { useItemsLibrary } from "../store/items-persistence";
+import { useRecipesLibrary } from "../store/recipes-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import { useDesignSize } from "../store/use-design-size";
 import {
@@ -43,11 +48,14 @@ import { ItemListPanel } from "./panels/item-list-panel";
 import { ItemPreviewPanel } from "./panels/item-preview-panel";
 import { ItemPropertyPanel } from "./panels/item-property-panel";
 import { PropertyPanel } from "./panels/property-panel";
+import { RecipeListPanel } from "./panels/recipe-list-panel";
+import { RecipePreviewPanel } from "./panels/recipe-preview-panel";
+import { RecipePropertyPanel } from "./panels/recipe-property-panel";
 import { SceneListPanel } from "./panels/scene-list-panel";
 import { DesignResolutionMenu } from "./ui/design-resolution-menu";
 
-/** 编辑器顶部分区：场景编辑或物品库。 */
-export type EditorSection = "scenes" | "items";
+/** 编辑器顶部分区：场景 / 物品库 / 配方。 */
+export type EditorSection = "scenes" | "items" | "recipes";
 
 /**
  * EditorShell 组件属性。
@@ -59,7 +67,7 @@ export interface EditorShellProps {
   /**
    * 切换编辑分区。
    *
-   * @param section - `"scenes"` 或 `"items"`
+   * @param section - `"scenes"` | `"items"` | `"recipes"`
    */
   onEditorSectionChange: (section: EditorSection) => void;
 
@@ -161,9 +169,34 @@ function upsertItem(
 }
 
 /**
- * 编辑器主壳：场景分区与物品库分区共用顶栏，按 `editorSection` 切换三栏内容。
+ * 在配方库中按 id 替换一条配方定义。
  *
- * @param props.editorSection - 当前分区（场景 / 物品库）
+ * @param library - 当前配方库
+ * @param previousId - 编辑前的配方 id（选中态）
+ * @param recipe - 新配方定义
+ * @returns 更新后的 RecipesLibraryFile；找不到 previousId 时原样返回
+ */
+function upsertRecipe(
+  library: RecipesLibraryFile,
+  previousId: string,
+  recipe: RecipeDefinition,
+): RecipesLibraryFile {
+  const idx = library.recipes.findIndex((entry) => entry.id === previousId);
+
+  if (idx < 0) {
+    return library;
+  }
+
+  const recipes = library.recipes.slice();
+  recipes[idx] = recipe;
+
+  return { version: 1, recipes };
+}
+
+/**
+ * 编辑器主壳：场景 / 物品 / 配方分区共用顶栏，按 `editorSection` 切换三栏内容。
+ *
+ * @param props.editorSection - 当前分区（场景 / 物品库 / 配方）
  * @param props.onEditorSectionChange - 分区切换回调
  * @param props.onSetEditMode - 退出编辑模式回调
  * @returns 完整编辑器 UI
@@ -185,6 +218,7 @@ export function EditorShell({
   const { tokens } = useTheme();
   const [library, setLibrary] = useScenesLibrary();
   const [itemsLibrary, setItemsLibrary] = useItemsLibrary();
+  const [recipesLibrary, setRecipesLibrary] = useRecipesLibrary();
   const { size: designSize, setSize: setDesignSize } = useDesignSize();
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
@@ -193,6 +227,7 @@ export function EditorShell({
   );
   const [placementActive, setPlacementActive] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
 
   /** 场景库撤销栈：commit 时 push；快捷键 undo/redo 后写回 setLibrary */
   const historyRef = useRef(createHistory<ScenesLibraryFile>());
@@ -201,6 +236,10 @@ export function EditorShell({
   /** 物品库撤销栈：commit 时 push；快捷键 undo/redo 后写回 setItemsLibrary */
   const itemsHistoryRef = useRef(createHistory<ItemsLibraryFile>());
   const itemsHistorySeededRef = useRef(false);
+
+  /** 配方库撤销栈：commit 时 push；快捷键 undo/redo 后写回 setRecipesLibrary */
+  const recipesHistoryRef = useRef(createHistory<RecipesLibraryFile>());
+  const recipesHistorySeededRef = useRef(false);
 
   /**
    * 强制刷新顶栏撤销/重做按钮的 disabled（history 存在 ref 内，push 后需重渲染）。
@@ -226,6 +265,13 @@ export function EditorShell({
       itemsHistorySeededRef.current = true;
     }
   }, [itemsLibrary]);
+
+  useEffect(() => {
+    if (!recipesHistorySeededRef.current) {
+      recipesHistoryRef.current.push(recipesLibrary);
+      recipesHistorySeededRef.current = true;
+    }
+  }, [recipesLibrary]);
 
   // 库变化时校正选中场景（删除 / 导入等）
   useEffect(() => {
@@ -259,6 +305,22 @@ export function EditorShell({
     }
   }, [itemsLibrary.items, selectedItemId]);
 
+  // 配方库变化时校正选中配方
+  useEffect(() => {
+    if (recipesLibrary.recipes.length === 0) {
+      setSelectedRecipeId(null);
+
+      return;
+    }
+
+    if (
+      selectedRecipeId === null ||
+      !recipesLibrary.recipes.some((recipe) => recipe.id === selectedRecipeId)
+    ) {
+      setSelectedRecipeId(recipesLibrary.recipes[0]!.id);
+    }
+  }, [recipesLibrary.recipes, selectedRecipeId]);
+
   // 切换场景时清空 hotspot 选中与放置模式
   useEffect(() => {
     setSelectedHotspotId(null);
@@ -280,6 +342,17 @@ export function EditorShell({
 
     return itemsLibrary.items.find((item) => item.id === selectedItemId) ?? null;
   }, [itemsLibrary.items, selectedItemId]);
+
+  const selectedRecipe = useMemo((): RecipeDefinition | null => {
+    if (selectedRecipeId === null) {
+      return null;
+    }
+
+    return (
+      recipesLibrary.recipes.find((recipe) => recipe.id === selectedRecipeId) ??
+      null
+    );
+  }, [recipesLibrary.recipes, selectedRecipeId]);
 
   /**
    * 提交场景库变更：history.push(next) → 持久化。
@@ -310,6 +383,20 @@ export function EditorShell({
   );
 
   /**
+   * 提交配方库变更：history.push(next) → 持久化。
+   *
+   * @param next - 新配方库
+   */
+  const commitRecipesLibrary = useCallback(
+    (next: RecipesLibraryFile) => {
+      recipesHistoryRef.current.push(next);
+      setRecipesLibrary(next);
+      setHistoryUiTick((n) => n + 1);
+    },
+    [setRecipesLibrary],
+  );
+
+  /**
    * 按当前编辑分区撤销一步，并用 history.present 写回对应库。
    *
    * @returns 是否实际发生了撤销
@@ -329,17 +416,30 @@ export function EditorShell({
       return true;
     }
 
-    const next = itemsHistoryRef.current.undo();
+    if (editorSection === "items") {
+      const next = itemsHistoryRef.current.undo();
+
+      if (next === undefined) {
+        return false;
+      }
+
+      setItemsLibrary(itemsHistoryRef.current.present ?? next);
+      setHistoryUiTick((n) => n + 1);
+
+      return true;
+    }
+
+    const next = recipesHistoryRef.current.undo();
 
     if (next === undefined) {
       return false;
     }
 
-    setItemsLibrary(itemsHistoryRef.current.present ?? next);
+    setRecipesLibrary(recipesHistoryRef.current.present ?? next);
     setHistoryUiTick((n) => n + 1);
 
     return true;
-  }, [editorSection, setLibrary, setItemsLibrary]);
+  }, [editorSection, setLibrary, setItemsLibrary, setRecipesLibrary]);
 
   /**
    * 按当前编辑分区重做一步，并用 history.present 写回对应库。
@@ -360,17 +460,30 @@ export function EditorShell({
       return true;
     }
 
-    const next = itemsHistoryRef.current.redo();
+    if (editorSection === "items") {
+      const next = itemsHistoryRef.current.redo();
+
+      if (next === undefined) {
+        return false;
+      }
+
+      setItemsLibrary(itemsHistoryRef.current.present ?? next);
+      setHistoryUiTick((n) => n + 1);
+
+      return true;
+    }
+
+    const next = recipesHistoryRef.current.redo();
 
     if (next === undefined) {
       return false;
     }
 
-    setItemsLibrary(itemsHistoryRef.current.present ?? next);
+    setRecipesLibrary(recipesHistoryRef.current.present ?? next);
     setHistoryUiTick((n) => n + 1);
 
     return true;
-  }, [editorSection, setLibrary, setItemsLibrary]);
+  }, [editorSection, setLibrary, setItemsLibrary, setRecipesLibrary]);
 
   /**
    * 全局快捷键：Ctrl/Cmd+Z 撤销；Ctrl/Cmd+Y 或 Ctrl/Cmd+Shift+Z 重做。
@@ -426,11 +539,15 @@ export function EditorShell({
   const canUndo =
     editorSection === "scenes"
       ? historyRef.current.canUndo
-      : itemsHistoryRef.current.canUndo;
+      : editorSection === "items"
+        ? itemsHistoryRef.current.canUndo
+        : recipesHistoryRef.current.canUndo;
   const canRedo =
     editorSection === "scenes"
       ? historyRef.current.canRedo
-      : itemsHistoryRef.current.canRedo;
+      : editorSection === "items"
+        ? itemsHistoryRef.current.canRedo
+        : recipesHistoryRef.current.canRedo;
 
   /**
    * 更新当前场景定义并写回库。
@@ -467,6 +584,28 @@ export function EditorShell({
   );
 
   /**
+   * 更新当前配方定义并写回库。
+   *
+   * @param nextRecipe - 新 RecipeDefinition
+   */
+  const handleRecipeChange = useCallback(
+    (nextRecipe: RecipeDefinition) => {
+      if (selectedRecipeId === null) {
+        return;
+      }
+
+      const next = upsertRecipe(recipesLibrary, selectedRecipeId, nextRecipe);
+
+      commitRecipesLibrary(next);
+
+      if (nextRecipe.id !== selectedRecipeId) {
+        setSelectedRecipeId(nextRecipe.id);
+      }
+    },
+    [selectedRecipeId, recipesLibrary, commitRecipesLibrary],
+  );
+
+  /**
    * 拖拽移动 hotspot：写回归一化 x/y（单次抬起一次 commit）。
    *
    * @param id - hotspot id
@@ -482,6 +621,43 @@ export function EditorShell({
       const hotspots = selectedScene.hotspots.map((hs) =>
         hs.id === id ? { ...hs, x, y } : hs,
       );
+
+      handleSceneChange({ ...selectedScene, hotspots });
+    },
+    [selectedScene, handleSceneChange],
+  );
+
+  /**
+   * 边框拉伸 hotspot：写回中心坐标与 visual.width / visual.height。
+   *
+   * @param id - hotspot id
+   * @param geometry - 中心归一化 + 设计像素尺寸
+   */
+  const handleHotspotResize = useCallback(
+    (
+      id: string,
+      geometry: { x: number; y: number; width: number; height: number },
+    ) => {
+      if (selectedScene === null) {
+        return;
+      }
+
+      const hotspots = selectedScene.hotspots.map((hs) => {
+        if (hs.id !== id) {
+          return hs;
+        }
+
+        return {
+          ...hs,
+          x: geometry.x,
+          y: geometry.y,
+          visual: {
+            ...hs.visual,
+            width: geometry.width,
+            height: geometry.height,
+          },
+        };
+      });
 
       handleSceneChange({ ...selectedScene, hotspots });
     },
@@ -512,7 +688,12 @@ export function EditorShell({
     [selectedScene, handleSceneChange],
   );
 
-  const sectionLabel = editorSection === "scenes" ? "场景" : "物品库";
+  const sectionLabel =
+    editorSection === "scenes"
+      ? "场景"
+      : editorSection === "items"
+        ? "物品库"
+        : "配方";
 
   /**
    * 导出当前场景库 JSON 并触发下载。
@@ -724,6 +905,18 @@ export function EditorShell({
           >
             物品库
           </button>
+          <button
+            type="button"
+            role="tab"
+            data-testid="editor-section-recipes"
+            aria-selected={editorSection === "recipes"}
+            onClick={() => onEditorSectionChange("recipes")}
+            style={topBarButtonStyle(tokens, {
+              variant: editorSection === "recipes" ? "active" : "default",
+            })}
+          >
+            配方
+          </button>
         </div>
 
         {editorSection === "scenes" ? (
@@ -749,7 +942,9 @@ export function EditorShell({
               导入场景 JSON
             </button>
           </>
-        ) : (
+        ) : null}
+
+        {editorSection === "items" ? (
           <>
             <button
               type="button"
@@ -768,7 +963,7 @@ export function EditorShell({
               导入物品 JSON
             </button>
           </>
-        )}
+        ) : null}
 
         <button
           type="button"
@@ -861,20 +1056,38 @@ export function EditorShell({
                 flex: 1,
                 minWidth: 0,
                 minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                position: "relative",
                 background: tokens.bgSunken,
                 borderRight: `1px solid ${tokens.border}`,
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
               }}
             >
-              <SceneCanvas
-                scene={selectedScene}
-                selectedHotspotId={selectedHotspotId}
-                onSelectHotspot={setSelectedHotspotId}
-                onHotspotMove={handleHotspotMove}
-                onCanvasPlace={handleCanvasPlace}
-                placementActive={placementActive}
-                designWidth={designSize.width}
-                designHeight={designSize.height}
-              />
+              {/*
+                画布宿主：flex:1 给出确定高度，供 SceneCanvas absolute 铺满 +
+                ResizeObserver 测到真实中栏尺寸，letterbox 才能居中。
+              */}
+              <div
+                data-testid="scene-canvas-host"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  position: "relative",
+                }}
+              >
+                <SceneCanvas
+                  scene={selectedScene}
+                  selectedHotspotId={selectedHotspotId}
+                  onSelectHotspot={setSelectedHotspotId}
+                  onHotspotMove={handleHotspotMove}
+                  onHotspotResize={handleHotspotResize}
+                  onCanvasPlace={handleCanvasPlace}
+                  placementActive={placementActive}
+                  designWidth={designSize.width}
+                  designHeight={designSize.height}
+                />
+              </div>
             </main>
 
             <aside
@@ -896,7 +1109,9 @@ export function EditorShell({
               />
             </aside>
           </>
-        ) : (
+        ) : null}
+
+        {editorSection === "items" ? (
           <>
             <aside
               data-testid="editor-panel-left"
@@ -948,7 +1163,64 @@ export function EditorShell({
               />
             </aside>
           </>
-        )}
+        ) : null}
+
+        {editorSection === "recipes" ? (
+          <>
+            <aside
+              data-testid="editor-panel-left"
+              style={{
+                width: 260,
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                borderRight: `1px solid ${tokens.border}`,
+                background: tokens.bgElevated,
+              }}
+            >
+              <RecipeListPanel
+                library={recipesLibrary}
+                selectedRecipeId={selectedRecipeId}
+                onSelectRecipe={setSelectedRecipeId}
+                onLibraryChange={commitRecipesLibrary}
+              />
+            </aside>
+
+            <main
+              data-testid="editor-panel-center"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                background: tokens.bgSunken,
+                borderRight: `1px solid ${tokens.border}`,
+              }}
+            >
+              <RecipePreviewPanel
+                recipe={selectedRecipe}
+                items={itemsLibrary.items}
+              />
+            </main>
+
+            <aside
+              data-testid="editor-panel-right"
+              style={{
+                width: 300,
+                flexShrink: 0,
+                minHeight: 0,
+                borderRight: "none",
+                background: tokens.bgElevated,
+              }}
+            >
+              <RecipePropertyPanel
+                recipe={selectedRecipe}
+                items={itemsLibrary.items}
+                onRecipeChange={handleRecipeChange}
+              />
+            </aside>
+          </>
+        ) : null}
       </div>
     </div>
   );

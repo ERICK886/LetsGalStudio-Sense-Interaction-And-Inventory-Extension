@@ -2,10 +2,10 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.2.0
  *
  * 场景交互系统 App 壳：订阅 settings / save，按 allowEdit + isEditMode
- * 切换 EditorShell / RuntimeShell；维护 editorSection（场景 / 物品库）。
+ * 切换 EditorShell / RuntimeShell；维护 editorSection（场景 / 物品库 / 配方）。
  * `inventoryHudMode === "always"` 时在运行态于 App 层挂载快捷栏
  *（无需场景内容；编辑中隐藏）。
  */
@@ -83,7 +83,8 @@ function SceneInteractionAppContent({
 
   /**
    * 编辑器顶部分区（App 本地状态；非 save / settings）。
-   * `"scenes"` = 场景编辑；`"items"` = 物品库。
+   * `"scenes"` = 场景编辑；`"items"` = 物品库；`"recipes"` = 配方。
+   * 类型与 `editor-shell` 导出的 `EditorSection` 保持一致。
    */
   const [editorSection, setEditorSection] =
     useState<EditorSection>("scenes");
@@ -184,7 +185,7 @@ function SceneInteractionAppContent({
  * @remarks
  * - `allowEdit === false` → 强制 RuntimeShell
  * - `isEditMode` 来自 save，顶栏切换写入 save
- * - `editorSection` 为 App 状态：`"scenes" | "items"`
+ * - `editorSection` 为 App 状态：`"scenes" | "items" | "recipes"`
  * - `inventoryHudMode=always` → 运行态 App 层挂载快捷栏（编辑中隐藏）
  */
 export function SceneInteractionApp(
