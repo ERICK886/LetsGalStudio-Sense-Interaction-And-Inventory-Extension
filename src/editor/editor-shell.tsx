@@ -2,19 +2,30 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景交互编辑器主壳（占位）：顶栏 + 左 / 中 / 右三栏空布局。
- * 顶栏提供「场景 / 物品库」分区切换与「运行预览」写入 save.isEditMode。
+ * 场景交互编辑器主壳：顶栏 + 左（场景/交互点列表）/ 中（画布）/ 右（属性占位）。
+ * 场景分区接入场景库 CRUD、画布拖放与设计分辨率菜单。
  */
 
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SceneDefinition, ScenesLibraryFile } from "../domain/types";
+import { createHistory } from "../store/history";
+import { useScenesLibrary } from "../store/scenes-persistence";
+import { useDesignSize } from "../store/use-design-size";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { SceneCanvas } from "./canvas/scene-canvas";
+import {
+  createDefaultHotspot,
+  HotspotListPanel,
+} from "./panels/hotspot-list-panel";
+import { SceneListPanel } from "./panels/scene-list-panel";
+import { DesignResolutionMenu } from "./ui/design-resolution-menu";
 
 /** 编辑器顶部分区：场景编辑或物品库。 */
 export type EditorSection = "scenes" | "items";
@@ -42,12 +53,11 @@ export interface EditorShellProps {
 }
 
 /**
- * 顶栏按钮样式工厂（轻量 chrome，后续可抽到共用模块）。
+ * 顶栏按钮样式工厂（轻量 chrome）。
  *
  * @param tokens - 主题 token
  * @param options.disabled - 是否禁用
  * @param options.variant - `"default"` | `"primary"` | `"active"`
- * @param options.active - 是否为选中态（分区 Tab）
  * @returns 可直接赋给 style 的 CSSProperties
  */
 function topBarButtonStyle(
@@ -103,12 +113,35 @@ function panelPlaceholderStyle(tokens: ThemeTokens): React.CSSProperties {
 }
 
 /**
- * 编辑器主壳：顶栏工具 + 空左中右布局。
+ * 在场景库中按 id 替换（或追加）一条场景定义。
+ *
+ * @param library - 当前库
+ * @param scene - 新场景定义
+ * @returns 更新后的 ScenesLibraryFile
+ */
+function upsertScene(
+  library: ScenesLibraryFile,
+  scene: SceneDefinition,
+): ScenesLibraryFile {
+  const idx = library.scenes.findIndex((s) => s.id === scene.id);
+
+  if (idx < 0) {
+    return { version: 1, scenes: [...library.scenes, scene] };
+  }
+
+  const scenes = library.scenes.slice();
+  scenes[idx] = scene;
+
+  return { version: 1, scenes };
+}
+
+/**
+ * 编辑器主壳：场景分区含列表 + 画布；物品库仍为占位。
  *
  * @param props.editorSection - 当前分区（场景 / 物品库）
  * @param props.onEditorSectionChange - 分区切换回调
  * @param props.onSetEditMode - 退出编辑模式回调
- * @returns 完整编辑器占位 UI
+ * @returns 完整编辑器 UI
  *
  * @example
  * ```tsx
@@ -125,6 +158,127 @@ export function EditorShell({
   onSetEditMode,
 }: EditorShellProps): React.ReactElement {
   const { tokens } = useTheme();
+  const [library, setLibrary] = useScenesLibrary();
+  const { size: designSize, setSize: setDesignSize } = useDesignSize();
+
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(
+    null,
+  );
+  const [placementActive, setPlacementActive] = useState(false);
+
+  /** 场景库撤销栈（Task 16 再接快捷键；此处先 push） */
+  const historyRef = useRef(createHistory<ScenesLibraryFile>());
+  const historySeededRef = useRef(false);
+
+  // 首次加载后以当前库播种历史，便于后续 undo
+  useEffect(() => {
+    if (!historySeededRef.current) {
+      historyRef.current.push(library);
+      historySeededRef.current = true;
+    }
+  }, [library]);
+
+  // 库变化时校正选中场景（删除 / 导入等）
+  useEffect(() => {
+    if (library.scenes.length === 0) {
+      setSelectedSceneId(null);
+
+      return;
+    }
+
+    if (
+      selectedSceneId === null ||
+      !library.scenes.some((s) => s.id === selectedSceneId)
+    ) {
+      setSelectedSceneId(library.scenes[0]!.id);
+    }
+  }, [library.scenes, selectedSceneId]);
+
+  // 切换场景时清空 hotspot 选中与放置模式
+  useEffect(() => {
+    setSelectedHotspotId(null);
+    setPlacementActive(false);
+  }, [selectedSceneId]);
+
+  const selectedScene = useMemo((): SceneDefinition | null => {
+    if (selectedSceneId === null) {
+      return null;
+    }
+
+    return library.scenes.find((s) => s.id === selectedSceneId) ?? null;
+  }, [library.scenes, selectedSceneId]);
+
+  /**
+   * 提交场景库变更：history.push(next) → 持久化。
+   *
+   * @param next - 新场景库
+   */
+  const commitLibrary = useCallback(
+    (next: ScenesLibraryFile) => {
+      historyRef.current.push(next);
+      setLibrary(next);
+    },
+    [setLibrary],
+  );
+
+  /**
+   * 更新当前场景定义并写回库。
+   *
+   * @param nextScene - 新 SceneDefinition
+   */
+  const handleSceneChange = useCallback(
+    (nextScene: SceneDefinition) => {
+      commitLibrary(upsertScene(library, nextScene));
+    },
+    [library, commitLibrary],
+  );
+
+  /**
+   * 拖拽移动 hotspot：写回归一化 x/y（单次抬起一次 commit）。
+   *
+   * @param id - hotspot id
+   * @param x - 归一化 X
+   * @param y - 归一化 Y
+   */
+  const handleHotspotMove = useCallback(
+    (id: string, x: number, y: number) => {
+      if (selectedScene === null) {
+        return;
+      }
+
+      const hotspots = selectedScene.hotspots.map((hs) =>
+        hs.id === id ? { ...hs, x, y } : hs,
+      );
+
+      handleSceneChange({ ...selectedScene, hotspots });
+    },
+    [selectedScene, handleSceneChange],
+  );
+
+  /**
+   * 点击画布放置新 hotspot。
+   *
+   * @param x - 归一化 X
+   * @param y - 归一化 Y
+   */
+  const handleCanvasPlace = useCallback(
+    (x: number, y: number) => {
+      if (selectedScene === null) {
+        return;
+      }
+
+      const hs = createDefaultHotspot(x, y);
+
+      handleSceneChange({
+        ...selectedScene,
+        hotspots: [...selectedScene.hotspots, hs],
+      });
+      setSelectedHotspotId(hs.id);
+      setPlacementActive(false);
+    },
+    [selectedScene, handleSceneChange],
+  );
 
   const sectionLabel = editorSection === "scenes" ? "场景" : "物品库";
 
@@ -141,7 +295,7 @@ export function EditorShell({
         color: tokens.textPrimary,
       }}
     >
-      {/* 顶栏：品牌 + 分区 Tab + 运行预览 */}
+      {/* 顶栏：品牌 + 分区 Tab + 设计分辨率 + 运行预览 */}
       <header
         data-testid="editor-top-bar"
         style={{
@@ -216,6 +370,10 @@ export function EditorShell({
           </button>
         </div>
 
+        {editorSection === "scenes" ? (
+          <DesignResolutionMenu size={designSize} onChange={setDesignSize} />
+        ) : null}
+
         <button
           type="button"
           data-testid="editor-mode-toggle"
@@ -228,11 +386,11 @@ export function EditorShell({
         <div style={{ flex: 1 }} />
 
         <span style={{ fontSize: FONT_SIZE_DEFAULT, color: tokens.textMuted }}>
-          {sectionLabel}编辑（占位）
+          {sectionLabel}编辑
         </span>
       </header>
 
-      {/* 左中右三栏占位 */}
+      {/* 左中右三栏 */}
       <div
         data-testid="editor-body"
         style={{
@@ -242,40 +400,112 @@ export function EditorShell({
           minWidth: 0,
         }}
       >
-        <aside
-          data-testid="editor-panel-left"
-          style={{
-            ...panelPlaceholderStyle(tokens),
-            width: 260,
-            flexShrink: 0,
-          }}
-        >
-          左栏
-        </aside>
+        {editorSection === "scenes" ? (
+          <>
+            <aside
+              data-testid="editor-panel-left"
+              style={{
+                width: 260,
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                borderRight: `1px solid ${tokens.border}`,
+                background: tokens.bgElevated,
+              }}
+            >
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <SceneListPanel
+                  library={library}
+                  selectedSceneId={selectedSceneId}
+                  onSelectScene={setSelectedSceneId}
+                  onLibraryChange={commitLibrary}
+                />
+              </div>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <HotspotListPanel
+                  scene={selectedScene}
+                  selectedHotspotId={selectedHotspotId}
+                  onSelectHotspot={setSelectedHotspotId}
+                  onSceneChange={handleSceneChange}
+                  placementActive={placementActive}
+                  onRequestPlace={() => setPlacementActive(true)}
+                />
+              </div>
+            </aside>
 
-        <main
-          data-testid="editor-panel-center"
-          style={{
-            ...panelPlaceholderStyle(tokens),
-            flex: 1,
-            background: tokens.bgSunken,
-            borderRight: `1px solid ${tokens.border}`,
-          }}
-        >
-          画布区
-        </main>
+            <main
+              data-testid="editor-panel-center"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                background: tokens.bgSunken,
+                borderRight: `1px solid ${tokens.border}`,
+              }}
+            >
+              <SceneCanvas
+                scene={selectedScene}
+                selectedHotspotId={selectedHotspotId}
+                onSelectHotspot={setSelectedHotspotId}
+                onHotspotMove={handleHotspotMove}
+                onCanvasPlace={handleCanvasPlace}
+                placementActive={placementActive}
+                designWidth={designSize.width}
+                designHeight={designSize.height}
+              />
+            </main>
 
-        <aside
-          data-testid="editor-panel-right"
-          style={{
-            ...panelPlaceholderStyle(tokens),
-            width: 300,
-            flexShrink: 0,
-            borderRight: "none",
-          }}
-        >
-          属性面板
-        </aside>
+            <aside
+              data-testid="editor-panel-right"
+              style={{
+                ...panelPlaceholderStyle(tokens),
+                width: 300,
+                flexShrink: 0,
+                borderRight: "none",
+              }}
+            >
+              属性面板（Task 11）
+            </aside>
+          </>
+        ) : (
+          <>
+            <aside
+              data-testid="editor-panel-left"
+              style={{
+                ...panelPlaceholderStyle(tokens),
+                width: 260,
+                flexShrink: 0,
+              }}
+            >
+              物品列表（Task 12）
+            </aside>
+
+            <main
+              data-testid="editor-panel-center"
+              style={{
+                ...panelPlaceholderStyle(tokens),
+                flex: 1,
+                background: tokens.bgSunken,
+                borderRight: `1px solid ${tokens.border}`,
+              }}
+            >
+              物品预览
+            </main>
+
+            <aside
+              data-testid="editor-panel-right"
+              style={{
+                ...panelPlaceholderStyle(tokens),
+                width: 300,
+                flexShrink: 0,
+                borderRight: "none",
+              }}
+            >
+              物品属性
+            </aside>
+          </>
+        )}
       </div>
     </div>
   );
