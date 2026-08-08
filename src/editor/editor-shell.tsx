@@ -28,6 +28,13 @@ import {
 import type { ThemeTokens } from "../theme/tokens";
 import { SceneCanvas } from "./canvas/scene-canvas";
 import {
+  downloadJsonFile,
+  exportItemsLibrary,
+  exportScenesLibrary,
+  tryImportItemsLibrary,
+  tryImportScenesLibrary,
+} from "./io/import-export";
+import {
   createDefaultHotspot,
   HotspotListPanel,
 } from "./panels/hotspot-list-panel";
@@ -193,6 +200,10 @@ export function EditorShell({
   /** 物品库撤销栈（Task 16 再接快捷键；此处先 push） */
   const itemsHistoryRef = useRef(createHistory<ItemsLibraryFile>());
   const itemsHistorySeededRef = useRef(false);
+
+  /** 隐藏文件选择器：场景库 / 物品库 JSON 导入 */
+  const scenesImportInputRef = useRef<HTMLInputElement>(null);
+  const itemsImportInputRef = useRef<HTMLInputElement>(null);
 
   // 首次加载后以当前库播种历史，便于后续 undo
   useEffect(() => {
@@ -371,6 +382,112 @@ export function EditorShell({
 
   const sectionLabel = editorSection === "scenes" ? "场景" : "物品库";
 
+  /**
+   * 导出当前场景库 JSON 并触发下载。
+   */
+  const handleExportScenes = useCallback(() => {
+    downloadJsonFile(exportScenesLibrary(library), "scenes-library.json");
+  }, [library]);
+
+  /**
+   * 导出当前物品库 JSON 并触发下载。
+   */
+  const handleExportItems = useCallback(() => {
+    downloadJsonFile(exportItemsLibrary(itemsLibrary), "items-library.json");
+  }, [itemsLibrary]);
+
+  /**
+   * 打开场景库 JSON 文件选择器。
+   */
+  const handlePickScenesImport = useCallback(() => {
+    scenesImportInputRef.current?.click();
+  }, []);
+
+  /**
+   * 打开物品库 JSON 文件选择器。
+   */
+  const handlePickItemsImport = useCallback(() => {
+    itemsImportInputRef.current?.click();
+  }, []);
+
+  /**
+   * 读取选中的场景库 JSON；失败时不写 settings。
+   *
+   * @param event - file input change 事件
+   */
+  const handleScenesImportChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+
+      event.target.value = "";
+
+      if (file === undefined) {
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const raw = typeof reader.result === "string" ? reader.result : "";
+        const result = tryImportScenesLibrary(raw);
+
+        if (!result.ok) {
+          window.alert(result.error);
+
+          return;
+        }
+
+        commitLibrary(result.value);
+      };
+
+      reader.onerror = () => {
+        window.alert("读取文件失败");
+      };
+
+      reader.readAsText(file);
+    },
+    [commitLibrary],
+  );
+
+  /**
+   * 读取选中的物品库 JSON；失败时不写 settings。
+   *
+   * @param event - file input change 事件
+   */
+  const handleItemsImportChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+
+      event.target.value = "";
+
+      if (file === undefined) {
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const raw = typeof reader.result === "string" ? reader.result : "";
+        const result = tryImportItemsLibrary(raw);
+
+        if (!result.ok) {
+          window.alert(result.error);
+
+          return;
+        }
+
+        commitItemsLibrary(result.value);
+      };
+
+      reader.onerror = () => {
+        window.alert("读取文件失败");
+      };
+
+      reader.readAsText(file);
+    },
+    [commitItemsLibrary],
+  );
+
   return (
     <div
       data-testid="editor-shell"
@@ -384,7 +501,25 @@ export function EditorShell({
         color: tokens.textPrimary,
       }}
     >
-      {/* 顶栏：品牌 + 分区 Tab + 设计分辨率 + 运行预览 */}
+      {/* 隐藏 file input：场景 / 物品库导入 */}
+      <input
+        ref={scenesImportInputRef}
+        type="file"
+        accept="application/json,.json"
+        data-testid="editor-import-scenes-input"
+        style={{ display: "none" }}
+        onChange={handleScenesImportChange}
+      />
+      <input
+        ref={itemsImportInputRef}
+        type="file"
+        accept="application/json,.json"
+        data-testid="editor-import-items-input"
+        style={{ display: "none" }}
+        onChange={handleItemsImportChange}
+      />
+
+      {/* 顶栏：品牌 + 分区 Tab + 设计分辨率 + 导入导出 + 运行预览 */}
       <header
         data-testid="editor-top-bar"
         style={{
@@ -462,6 +597,46 @@ export function EditorShell({
         {editorSection === "scenes" ? (
           <DesignResolutionMenu size={designSize} onChange={setDesignSize} />
         ) : null}
+
+        {editorSection === "scenes" ? (
+          <>
+            <button
+              type="button"
+              data-testid="editor-export-scenes"
+              onClick={handleExportScenes}
+              style={topBarButtonStyle(tokens)}
+            >
+              导出场景 JSON
+            </button>
+            <button
+              type="button"
+              data-testid="editor-import-scenes"
+              onClick={handlePickScenesImport}
+              style={topBarButtonStyle(tokens)}
+            >
+              导入场景 JSON
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              data-testid="editor-export-items"
+              onClick={handleExportItems}
+              style={topBarButtonStyle(tokens)}
+            >
+              导出物品 JSON
+            </button>
+            <button
+              type="button"
+              data-testid="editor-import-items"
+              onClick={handlePickItemsImport}
+              style={topBarButtonStyle(tokens)}
+            >
+              导入物品 JSON
+            </button>
+          </>
+        )}
 
         <button
           type="button"

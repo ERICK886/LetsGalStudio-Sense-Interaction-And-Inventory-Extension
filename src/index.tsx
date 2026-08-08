@@ -19,6 +19,17 @@ import {
   SceneInteractionApp,
   type SceneInteractionAppProps,
 } from "./app/scene-interaction-app";
+import {
+  getItemCount,
+  giveItem,
+  hasItem,
+} from "./methods/inventory-methods";
+import {
+  getCurrentSceneId,
+  openScene,
+  setEditMode,
+  setHotspotVisible,
+} from "./methods/scene-methods";
 import type { SceneInteractionSaveMap } from "./store/save-types";
 
 /**
@@ -65,6 +76,17 @@ class SceneInteractionExtension extends Extension<SceneInteractionAppProps> {
       label: "当前场景 ID",
     },
   });
+
+  /** 剧本 methods：场景打开 / 编辑模式 / 当前场景 / 交互点可见性 */
+  static openScene = openScene;
+  static setEditMode = setEditMode;
+  static getCurrentSceneId = getCurrentSceneId;
+  static setHotspotVisible = setHotspotVisible;
+
+  /** 剧本 methods：库存给予 / 查询 */
+  static giveItem = giveItem;
+  static hasItem = hasItem;
+  static getItemCount = getItemCount;
 
   /**
    * 项目设置：在 Studio 项目设置面板中由创作者配置。

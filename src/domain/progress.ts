@@ -75,3 +75,35 @@ export function markConsumed(
     visibility: progress.visibility,
   };
 }
+
+/**
+ * 设置交互点可见性覆盖（不可变）。
+ *
+ * 写入 `progress.visibility[hotspotId]`；不影响 `consumed`。
+ * `isHotspotVisible` 会优先读该覆盖（once 已消耗除外）。
+ *
+ * @param progress - 原进度（不会被修改）
+ * @param hotspotId - 交互点 id
+ * @param visible - 覆盖后的可见性
+ * @returns 新的 SceneProgress 副本
+ *
+ * @example
+ * ```ts
+ * const next = setHotspotVisibility(progress, "door", false);
+ * save.set("progressJson", stringifyProgress(next));
+ * ```
+ */
+export function setHotspotVisibility(
+  progress: SceneProgress,
+  hotspotId: string,
+  visible: boolean,
+): SceneProgress {
+  return {
+    ...progress,
+    consumed: progress.consumed,
+    visibility: {
+      ...progress.visibility,
+      [hotspotId]: visible,
+    },
+  };
+}
