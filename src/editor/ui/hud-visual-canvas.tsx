@@ -35,6 +35,9 @@ const HUD_NODE_ITEMS: readonly NodeListItem[] = [
   { id: "openBagButton", label: "打开背包" },
 ];
 
+/** 屏幕像素：打开背包按钮需超过此距离才视为拖拽（点击仅选中，不切换 belowRoot→absolute） */
+const DRAG_ACTIVATION_THRESHOLD_PX = 4;
+
 /**
  * HudVisualCanvas 属性。
  */
@@ -336,6 +339,15 @@ export function HudVisualCanvas({
           return;
         }
 
+        const screenDist = Math.hypot(
+          event.clientX - session.startX,
+          event.clientY - session.startY,
+        );
+
+        if (screenDist < DRAG_ACTIVATION_THRESHOLD_PX) {
+          return;
+        }
+
         const prevRect = currentHud.nodes.openBagButton.rect;
         const prevW =
           typeof prevRect?.w === "number" && prevRect.w > 0
@@ -445,9 +457,7 @@ export function HudVisualCanvas({
   );
 
   /**
-   * 开始拖拽打开背包按钮。
-   *
-   * belowRoot 时立即改为 absolute 并写入当前解析位置，再进入拖拽会话。
+   * 开始拖拽打开背包按钮：pointerDown 仅选中；belowRoot→absolute 在 pointermove 越过阈值后由窗口处理器写入。
    *
    * @param event - 指针事件
    */
@@ -458,21 +468,6 @@ export function HudVisualCanvas({
       onSelectNode("openBagButton");
 
       const btn = layout.openBagButton;
-      const currentHud = hudRef.current;
-
-      if (currentHud.nodes.openBagButton.layout !== "absolute") {
-        onHudChange({
-          ...currentHud,
-          nodes: {
-            ...currentHud.nodes,
-            openBagButton: {
-              ...currentHud.nodes.openBagButton,
-              layout: "absolute",
-              rect: { x: btn.x, y: btn.y, w: btn.w, h: btn.h },
-            },
-          },
-        });
-      }
 
       sessionRef.current = {
         kind: "drag",
@@ -483,7 +478,7 @@ export function HudVisualCanvas({
         scale,
       };
     },
-    [layout.openBagButton, onHudChange, onSelectNode, scale],
+    [layout.openBagButton, onSelectNode, scale],
   );
 
   /**

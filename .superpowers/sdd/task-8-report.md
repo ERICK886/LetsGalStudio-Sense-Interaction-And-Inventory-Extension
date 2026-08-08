@@ -31,3 +31,17 @@ npm run build  → ✓ success
 ```
 feat: free-layout editing on HUD visual canvas
 ```
+
+## Review Fix (2026-08-08)
+
+**Issue:** `beginDragOpenBag` converted `belowRoot` → `absolute` on `pointerDown` (click alone mutated layout).
+
+**Fix:** `pointerDown` only selects; `pointermove` past `DRAG_ACTIVATION_THRESHOLD_PX` (4px) writes `layout:"absolute"` + rect.
+
+```
+npm run build  → ✓ success (431.72 kB, 408ms)
+```
+
+```
+fix: defer belowRoot→absolute until drag threshold on HUD canvas
+```
