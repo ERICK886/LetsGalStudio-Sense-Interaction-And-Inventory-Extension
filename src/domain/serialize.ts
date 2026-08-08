@@ -34,6 +34,9 @@ import type {
   SceneProgress,
   ScenesLibraryFile,
   ItemsLibraryFile,
+  RecipeDefinition,
+  RecipeItemAmount,
+  RecipesLibraryFile,
 } from "./types";
 
 const SCOPE = "serialize";
@@ -355,6 +358,74 @@ function normalizeItemDefinition(raw: unknown): ItemDefinition | null {
 }
 
 /**
+ * 规范化配方原料/产物一行。
+ *
+ * @param raw - 原始 { itemId, count } 对象
+ * @returns 合法 RecipeItemAmount；空 itemId 或非法结构时 null
+ */
+function normalizeRecipeItemAmount(raw: unknown): RecipeItemAmount | null {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const itemId = typeof obj.itemId === "string" ? obj.itemId.trim() : "";
+
+  if (!itemId) {
+    return null;
+  }
+
+  const n =
+    typeof obj.count === "number" && Number.isFinite(obj.count)
+      ? obj.count
+      : 1;
+
+  return { itemId, count: Math.max(1, Math.floor(n)) };
+}
+
+/**
+ * 规范化单条配方定义。
+ *
+ * @param raw - 原始配方对象
+ * @returns 合法 RecipeDefinition 或 null（缺少 id 时丢弃并 logError）
+ */
+function normalizeRecipeDefinition(raw: unknown): RecipeDefinition | null {
+  if (raw === null || raw === undefined || typeof raw !== "object") {
+    return null;
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  if (typeof obj.id !== "string" || obj.id.trim() === "") {
+    logError(SCOPE, "recipe entry dropped: missing id");
+    return null;
+  }
+
+  const ingredientsRaw = Array.isArray(obj.ingredients) ? obj.ingredients : [];
+  const ingredients = ingredientsRaw
+    .map(normalizeRecipeItemAmount)
+    .filter((row): row is RecipeItemAmount => row !== null);
+
+  const productsRaw = Array.isArray(obj.products) ? obj.products : [];
+  const products = productsRaw
+    .map(normalizeRecipeItemAmount)
+    .filter((row): row is RecipeItemAmount => row !== null);
+
+  const recipe: RecipeDefinition = {
+    id: obj.id,
+    name: typeof obj.name === "string" ? obj.name : "",
+    ingredients,
+    products,
+  };
+
+  if (typeof obj.description === "string" && obj.description !== "") {
+    recipe.description = obj.description;
+  }
+
+  return recipe;
+}
+
+/**
  * 规范化单条库存条目。
  *
  * @param raw - 原始 entry 对象
@@ -449,6 +520,15 @@ export function emptyScenesLibrary(): ScenesLibraryFile {
  */
 export function emptyItemsLibrary(): ItemsLibraryFile {
   return { version: 1, items: [] };
+}
+
+/**
+ * 返回空配方库（version 1）。
+ *
+ * @returns 空 RecipesLibraryFile
+ */
+export function emptyRecipesLibrary(): RecipesLibraryFile {
+  return { version: 1, recipes: [] };
 }
 
 /**
@@ -562,6 +642,52 @@ export function parseItemsLibraryJson(raw: string): ItemsLibraryFile {
  */
 export function stringifyItemsLibrary(lib: ItemsLibraryFile): string {
   return JSON.stringify(lib);
+}
+
+/**
+ * 解析配方库 JSON 并规范化；非法根或纯数组回退空库。
+ *
+ * @param raw - JSON 字符串
+ * @returns 规范化后的 RecipesLibraryFile
+ */
+export function parseRecipesLibraryJson(raw: string): RecipesLibraryFile {
+  const parsed = safeParseJson(raw, "recipesLibrary");
+
+  if (parsed === null) {
+    return emptyRecipesLibrary();
+  }
+
+  if (isBareArrayRoot(parsed, "recipesLibrary")) {
+    return emptyRecipesLibrary();
+  }
+
+  if (typeof parsed !== "object") {
+    logError(SCOPE, "recipesLibrary root must be object");
+    return emptyRecipesLibrary();
+  }
+
+  const obj = parsed as Record<string, unknown>;
+
+  if (!Array.isArray(obj.recipes)) {
+    logError(SCOPE, "recipesLibrary root must include recipes array");
+    return emptyRecipesLibrary();
+  }
+
+  const recipes = obj.recipes
+    .map(normalizeRecipeDefinition)
+    .filter((recipe): recipe is RecipeDefinition => recipe !== null);
+
+  return { version: 1, recipes };
+}
+
+/**
+ * 将配方库序列化为 JSON 字符串。
+ *
+ * @param lib - 配方库
+ * @returns JSON 文本（version 固定为 1）
+ */
+export function stringifyRecipesLibrary(lib: RecipesLibraryFile): string {
+  return JSON.stringify({ version: 1, recipes: lib.recipes });
 }
 
 /**
