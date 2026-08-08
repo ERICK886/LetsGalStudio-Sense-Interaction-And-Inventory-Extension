@@ -1,37 +1,33 @@
-# Task 8 Report: Store 持久化钩子与撤销栈
+# Task 8 Report: HUD 画布自由布局
 
 **Status:** ✅ Complete  
-**Date:** 2026-08-08
+**Date:** 2026-08-08  
+**Branch:** feat/hud-backpack-free-layout
 
 ## Deliverables
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `src/store/history.ts` | Create | `createHistory<T>(limit=50)` → push/undo/redo/canUndo/canRedo/present |
-| `tests/domain/history.test.ts` | Create | TDD：undo/redo、截断 redo、limit、深拷贝 |
-| `src/store/settings-sync.ts` | Create | settings 字段进程内通知总线 |
-| `src/store/save-sync.ts` | Create | save 字段进程内通知（供 useSaveValue） |
-| `src/store/use-save-value.ts` | Create | get/set + 本地 state 兼容 save.useValue |
-| `src/store/scenes-persistence.ts` | Create | `useScenesLibrary()` + read/write helpers |
-| `src/store/items-persistence.ts` | Create | `useItemsLibrary()` + read/write helpers |
-| `src/store/inventory-persistence.ts` | Create | `useInventory()` / `useProgress()` |
+| File | Purpose |
+|------|---------|
+| `src/editor/ui/hud-visual-canvas.tsx` | 改写：NodeList + resolveHudLayout 舞台、拖拽/resize、SelectionOverlay |
+| `src/editor/ui/ui-editor-panel.tsx` | 最小接线：`selectedHudNodeId` / `onSelectNode`（表单按节点属 Task 10） |
 
-## Interfaces
+## Behavior
 
-- `useScenesLibrary()` / `useItemsLibrary()`：settings JSON ↔ 领域对象（无纯数组根兼容）
-- `useInventory(save)` / `useProgress(save)`：save JSON ↔ 领域对象
-- `createHistory<T>(limit = 50)`：快照栈 + 深拷贝
+- Props：`designWidth/Height`、`hud`、`selectedNodeId`、`onSelectNode`、`onHudChange`
+- 渲染 8 槽 + 打开背包按钮（`applyUiBoxStyle` / `applyUiTextStyle`）
+- 点槽组选 `quickbarRoot`；点按钮选 `openBagButton`；左侧 `NodeList`
+- 拖拽：`applyDrag` 更新 `quickbarRoot.rect` 或 absolute 按钮 rect；拖按钮 → `layout:"absolute"`
+- resize：仅 `openBagButton` absolute 时（`applyResize`）；`quickbarRoot` 不 resize
+- Esc / 点舞台空白：`onSelectNode(null)`
 
 ## Verification
 
 ```
-npm test       → 43 passed
-npm run build  → success
-npx tsc --noEmit → success
+npm run build  → ✓ success
 ```
 
 ## Commit
 
 ```
-feat: settings/save persistence and undo history
+feat: free-layout editing on HUD visual canvas
 ```

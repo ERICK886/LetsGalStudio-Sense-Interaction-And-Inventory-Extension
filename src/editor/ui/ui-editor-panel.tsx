@@ -2,10 +2,11 @@
  * ui-editor-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.8
+ * 版本: 0.3.9
  *
  * 编辑器「UI」分区：快捷栏 HUD / 全屏背包可视化编辑。
  * 配置写入 backpack-hud.settings（inventoryHudJson / backpackScreenJson）。
+ * HUD 选中态（selectedHudNodeId）供画布自由布局；按节点表单接线见 Task 10。
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,7 +22,10 @@ import type {
   InventoryHudConfig,
 } from "../../domain/types";
 import { backpackScreenFields } from "../../schema/backpack-screen-schema";
-import { inventoryHudFields } from "../../schema/inventory-hud-schema";
+import {
+  inventoryHudFields,
+  type HudNodeId,
+} from "../../schema/inventory-hud-schema";
 import { FormRenderer } from "../../schema/form-renderer";
 import {
   BACKPACK_SCREEN_JSON_KEY,
@@ -90,6 +94,12 @@ export function UiEditorPanel(): React.ReactElement {
     loadBackpackScreen(ctx),
   );
 
+  /**
+   * HUD 画布选中节点；Task 10 将据此切换右侧 node/global 表单。
+   */
+  const [selectedHudNodeId, setSelectedHudNodeId] =
+    useState<HudNodeId | null>(null);
+
   /** 进入分区 / 外部写入时刷新 */
   useEffect(() => {
     setHud(loadHud(ctx));
@@ -136,7 +146,10 @@ export function UiEditorPanel(): React.ReactElement {
         key={id}
         type="button"
         data-testid={`ui-editor-tab-${id}`}
-        onClick={() => setSub(id)}
+        onClick={() => {
+          setSub(id);
+          setSelectedHudNodeId(null);
+        }}
         style={{
           appearance: "none",
           border: `1px solid ${active ? tokens.accent : tokens.borderStrong}`,
@@ -219,6 +232,8 @@ export function UiEditorPanel(): React.ReactElement {
             designWidth={designSize.width}
             designHeight={designSize.height}
             hud={hud}
+            selectedNodeId={selectedHudNodeId}
+            onSelectNode={setSelectedHudNodeId}
             onHudChange={persistHud}
           />
         ) : (
