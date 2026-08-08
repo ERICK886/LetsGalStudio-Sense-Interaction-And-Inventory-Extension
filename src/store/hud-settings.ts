@@ -18,6 +18,9 @@ export const INVENTORY_HUD_JSON_KEY = "inventoryHudJson";
 /** 全屏背包布局 JSON */
 export const BACKPACK_SCREEN_JSON_KEY = "backpackScreenJson";
 
+/** 获得物品提示 Toast JSON */
+export const ITEM_TOAST_JSON_KEY = "itemToastJson";
+
 /**
  * 判断 setting 是否空。
  *

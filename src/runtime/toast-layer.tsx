@@ -2,10 +2,11 @@
  * toast-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.2.0
  *
  * 运行时轻提示层：展示 toast 队列 current，按 enter+hold+exit 时长推进。
- * Task 16：增加 exit 相位视觉（退场动画后再 onAdvance）。
+ * Task 3：使用 `computeToastAnchorStyle` + `applyUiBoxStyle`/`applyUiTextStyle`，
+ * 消费 placement / offset / gap / style，不再硬编码颜色或固定 `y-48`。
  */
 
 import React, { useEffect, useMemo } from "react";
@@ -15,6 +16,8 @@ import {
   normToWorld,
   type ContentRect,
 } from "../shared/scene-layout";
+import { computeToastAnchorStyle } from "../domain/item-toast-config";
+import { applyUiBoxStyle, applyUiTextStyle } from "../domain/ui-style";
 
 /** 无 motion 时长时的默认总展示时间（毫秒） */
 export const TOAST_DEFAULT_TOTAL_MS = 1500;
@@ -112,13 +115,18 @@ function splitToastTiming(motion: ElementMotion): {
 /**
  * 由 motion preset 生成进场 / 退场样式（CSS transition）。
  *
+ * 所有 transform 均在 `baseTransform`（placement 决定的基准 translate）上叠加，
+ * 保证进场/退场动画不会覆盖锚点定位。
+ *
  * @param motion - 动效
  * @param phase - `"enter"` | `"shown"` | `"exit"`
+ * @param baseTransform - placement 解析后的基准 transform（如 `translate(-50%, -100%)`）
  * @returns 内联样式片段
  */
 function toastMotionStyle(
   motion: ElementMotion,
   phase: ToastPhase,
+  baseTransform: string,
 ): React.CSSProperties {
   const useExit = phase === "exit";
   const segment = useExit ? motion.exit : motion.enter;
@@ -138,15 +146,35 @@ function toastMotionStyle(
       case "fade":
         return { ...base, opacity: 0 };
       case "scale":
-        return { ...base, opacity: 0, transform: "translate(-50%, 0) scale(0.85)" };
+        return {
+          ...base,
+          opacity: 0,
+          transform: `${baseTransform} scale(0.85)`,
+        };
       case "slideUp":
-        return { ...base, opacity: 0, transform: "translate(-50%, 12px)" };
+        return {
+          ...base,
+          opacity: 0,
+          transform: `${baseTransform} translateY(12px)`,
+        };
       case "slideDown":
-        return { ...base, opacity: 0, transform: "translate(-50%, -12px)" };
+        return {
+          ...base,
+          opacity: 0,
+          transform: `${baseTransform} translateY(-12px)`,
+        };
       case "slideLeft":
-        return { ...base, opacity: 0, transform: "translate(calc(-50% + 12px), 0)" };
+        return {
+          ...base,
+          opacity: 0,
+          transform: `${baseTransform} translateX(12px)`,
+        };
       case "slideRight":
-        return { ...base, opacity: 0, transform: "translate(calc(-50% - 12px), 0)" };
+        return {
+          ...base,
+          opacity: 0,
+          transform: `${baseTransform} translateX(-12px)`,
+        };
       default:
         return { ...base, opacity: 0 };
     }
@@ -155,7 +183,7 @@ function toastMotionStyle(
   return {
     ...base,
     opacity: 1,
-    transform: "translate(-50%, 0) scale(1)",
+    transform: baseTransform,
   };
 }
 
@@ -231,6 +259,13 @@ export function ToastLayer({
         y: contentRect.originY + contentRect.height * 0.35,
       };
 
+  const layout = computeToastAnchorStyle(anchorPos, {
+    placement: current.placement,
+    offsetX: current.offsetX,
+    offsetY: current.offsetY,
+    gap: current.gap,
+  });
+
   const text =
     resolveText !== undefined
       ? resolveText(current)
@@ -254,22 +289,16 @@ export function ToastLayer({
         data-toast-phase={phase}
         style={{
           position: "absolute",
-          left: anchorPos.x,
-          top: anchorPos.y - 48,
-          transform: "translate(-50%, 0)",
+          left: layout.left,
+          top: layout.top,
           padding: "8px 14px",
-          borderRadius: 8,
-          background: "rgba(10, 14, 12, 0.88)",
-          color: "#F5F7F6",
-          fontSize: 13,
-          fontWeight: 600,
-          letterSpacing: "0.02em",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
           whiteSpace: "nowrap",
           maxWidth: 280,
           overflow: "hidden",
           textOverflow: "ellipsis",
-          ...toastMotionStyle(current.motion, phase),
+          ...applyUiBoxStyle(current.style),
+          ...applyUiTextStyle(current.style),
+          ...toastMotionStyle(current.motion, phase, layout.transform),
         }}
       >
         {text}
