@@ -94,11 +94,11 @@ describe("giveItemToInventory", () => {
     s = giveItemToInventory(s, smallStack, 3, 2000);
 
     expect(getItemCount(s, "small-potion")).toBe(5);
+    // logError 无 err 时不向 console.error 追加 undefined
     expect(spy).toHaveBeenCalledWith(
       "[scene-interaction]",
       "inventory",
       'stack overflow for "small-potion": discarded 2',
-      undefined,
     );
 
     spy.mockRestore();

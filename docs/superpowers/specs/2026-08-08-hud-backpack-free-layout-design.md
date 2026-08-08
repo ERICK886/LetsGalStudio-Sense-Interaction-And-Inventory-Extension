@@ -1,7 +1,7 @@
 # HUD / 全屏背包自由布局编辑（方案 1）设计规格
 
 - **日期**: 2026-08-08
-- **状态**: 已通过对话确认，待实现计划
+- **状态**: 已批准；实现计划见 docs/superpowers/plans/2026-08-08-hud-backpack-free-layout.md
 - **包**: `ext-27b96b`（`editor` / `backpack-hud` / `scene-interaction`）
 - **作者侧目标**: 在扩展内「UI」分区，对快捷栏 HUD 与全屏背包的**固定角色节点**做接近 VisualUI 的选中、拖拽、resize 与样式编辑；配置仍写入现有 settings 键。
 
