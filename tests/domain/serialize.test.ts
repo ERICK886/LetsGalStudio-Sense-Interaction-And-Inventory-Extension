@@ -62,7 +62,6 @@ describe("parseScenesLibraryJson", () => {
       "[scene-interaction]",
       "serialize",
       "bare array root rejected for scenesLibrary",
-      undefined,
     );
 
     spy.mockRestore();
@@ -84,7 +83,6 @@ describe("parseScenesLibraryJson", () => {
       "[scene-interaction]",
       "serialize",
       "scene entry dropped: missing id",
-      undefined,
     );
 
     spy.mockRestore();
@@ -139,7 +137,6 @@ describe("parseScenesLibraryJson", () => {
       "[scene-interaction]",
       "serialize",
       "hotspot entry dropped: missing id",
-      undefined,
     );
 
     spy.mockRestore();
@@ -211,7 +208,6 @@ describe("parseItemsLibraryJson", () => {
       "[scene-interaction]",
       "serialize",
       "bare array root rejected for itemsLibrary",
-      undefined,
     );
 
     spy.mockRestore();
@@ -233,7 +229,6 @@ describe("parseItemsLibraryJson", () => {
       "[scene-interaction]",
       "serialize",
       "item entry dropped: missing id",
-      undefined,
     );
 
     spy.mockRestore();
@@ -242,14 +237,15 @@ describe("parseItemsLibraryJson", () => {
 
 describe("parseInventoryHudJson", () => {
   it("defaultInventoryHud 默认值", () => {
-    expect(defaultInventoryHud()).toEqual({
-      left: 24,
-      top: 120,
-      slotSize: 64,
-      gap: 8,
-      openBagLabel: "打开背包",
-      customCss: "",
-    });
+    const hud = defaultInventoryHud();
+
+    expect(hud.version).toBe(2);
+    expect(hud.nodes.quickbarRoot.rect).toEqual({ x: 24, y: 120 });
+    expect(hud.nodes.quickbarRoot.slotSize).toBe(64);
+    expect(hud.nodes.quickbarRoot.gap).toBe(8);
+    expect(hud.nodes.openBagButton.style.label).toBe("打开背包");
+    expect(hud.customCss).toBe("");
+    expect(hud.accent).toBe("#64e0d0");
   });
 
   it("空字符串回退默认配置", () => {
@@ -257,7 +253,24 @@ describe("parseInventoryHudJson", () => {
   });
 
   it("JSON 往返保留 HUD 字段", () => {
-    const custom = { ...defaultInventoryHud(), left: 48, openBagLabel: "背包" };
+    const base = defaultInventoryHud();
+    const custom: typeof base = {
+      ...base,
+      nodes: {
+        ...base.nodes,
+        quickbarRoot: {
+          ...base.nodes.quickbarRoot,
+          rect: { x: 48, y: base.nodes.quickbarRoot.rect.y },
+        },
+        openBagButton: {
+          ...base.nodes.openBagButton,
+          style: {
+            ...base.nodes.openBagButton.style,
+            label: "背包",
+          },
+        },
+      },
+    };
     const again = parseInventoryHudJson(stringifyInventoryHud(custom));
 
     expect(again).toEqual(custom);

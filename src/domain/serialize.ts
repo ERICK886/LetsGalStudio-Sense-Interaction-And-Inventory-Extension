@@ -791,9 +791,11 @@ export function parseInventoryHudJson(raw: string): InventoryHudConfig {
 /**
  * 将物品栏 HUD 配置序列化为 JSON 字符串。
  *
+ * 始终写出 `version: 2`，避免旧调用方漏写版本号。
+ *
  * @param config - HUD 配置
  * @returns JSON 文本
  */
 export function stringifyInventoryHud(config: InventoryHudConfig): string {
-  return JSON.stringify(config);
+  return JSON.stringify({ ...config, version: 2 as const });
 }

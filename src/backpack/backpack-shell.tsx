@@ -2,7 +2,7 @@
  * backpack-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.8
+ * 版本: 0.3.9
  *
  * backpack-hud 主壳：常驻快捷栏 HUD + 可选全屏背包。
  * 根节点 pointer-events:none，仅交互控件接收事件，避免挡住场景。
@@ -24,6 +24,10 @@ import {
 } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
+import {
+  hudLegacyLeft,
+  hudLegacyTop,
+} from "../domain/inventory-hud";
 import { parseInventoryHudJson } from "../domain/serialize";
 import type {
   InventoryEntry,
@@ -184,8 +188,22 @@ export function BackpackShell({
     [setInventory],
   );
 
-  const slotSize = hud.slotSize > 0 ? hud.slotSize : 56;
-  const gap = hud.gap >= 0 ? hud.gap : 8;
+  const slotSize =
+    hud.nodes.quickbarRoot.slotSize > 0
+      ? hud.nodes.quickbarRoot.slotSize
+      : 56;
+  const gap =
+    hud.nodes.quickbarRoot.gap >= 0 ? hud.nodes.quickbarRoot.gap : 8;
+  const openBagLabel =
+    hud.nodes.openBagButton.style.label || "打开背包";
+
+  /**
+   * HUD 强调色：作者配置优先，非法 / 空串回退主题 accent。
+   */
+  const accent =
+    typeof hud.accent === "string" && hud.accent.trim().length > 0
+      ? hud.accent.trim()
+      : tokens.accent;
 
   return (
     <div
@@ -204,8 +222,8 @@ export function BackpackShell({
         data-testid="backpack-quickbar"
         style={{
           position: "absolute",
-          left: hud.left,
-          top: hud.top,
+          left: hudLegacyLeft(hud),
+          top: hudLegacyTop(hud),
           zIndex: 81,
           display: "flex",
           flexDirection: "column",
@@ -245,7 +263,10 @@ export function BackpackShell({
                 height: slotSize,
                 padding: 4,
                 borderRadius: 8,
-                border: `1px solid ${tokens.borderStrong}`,
+                border:
+                  entry === null
+                    ? `1px solid ${tokens.borderStrong}`
+                    : `1px solid ${accent}59`,
                 background:
                   entry === null
                     ? `${tokens.bgSunken}99`
@@ -293,7 +314,7 @@ export function BackpackShell({
                     minWidth: 16,
                     padding: "0 3px",
                     borderRadius: 4,
-                    background: tokens.accent,
+                    background: accent,
                     color: "#0B1210",
                     fontSize: 10,
                     fontWeight: 700,
@@ -312,8 +333,8 @@ export function BackpackShell({
           onClick={() => setBagOpen(true)}
           style={{
             appearance: "none",
-            border: `1px solid ${tokens.accent}`,
-            background: tokens.accent,
+            border: `1px solid ${accent}`,
+            background: accent,
             color: "#0B1210",
             borderRadius: 8,
             padding: "8px 10px",
@@ -324,7 +345,7 @@ export function BackpackShell({
             marginTop: 4,
           }}
         >
-          {hud.openBagLabel || "打开背包"}
+          {openBagLabel}
         </button>
       </div>
 

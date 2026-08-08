@@ -159,12 +159,51 @@ export interface UiTextStyle {
   label?: string;
 }
 
+/**
+ * 物品栏 HUD 自由布局配置（version 2，节点化）。
+ *
+ * v1 扁平 `left/top/slotSize/...` 仅在 `normalizeInventoryHud` 输入侧迁移，不再作为正式字段。
+ */
 export interface InventoryHudConfig {
-  /** 相对舞台的左边距（设计像素或百分比由实现约定：v0.1 用设计像素） */
-  left: number;
-  top: number;
-  slotSize: number;
-  gap: number;
-  openBagLabel: string;
+  version: 2;
+  accent: string;
   customCss: string;
+  nodes: {
+    quickbarRoot: {
+      rect: { x: number; y: number };
+      direction: "column" | "row";
+      slotSize: number;
+      gap: number;
+      slotStyle: UiBoxStyle;
+      badgeStyle: UiBoxStyle & UiTextStyle;
+    };
+    openBagButton: {
+      layout: "belowRoot" | "absolute";
+      rect?: UiRect;
+      style: UiBoxStyle & UiTextStyle;
+    };
+  };
+}
+
+/**
+ * 全屏背包布局配置（编辑器可视化编辑，运行时 BackpackScreen 读取）。
+ */
+export interface BackpackScreenConfig {
+  /** 页面水平内边距（设计像素） */
+  pagePaddingX: number;
+
+  /** 页面垂直内边距（设计像素） */
+  pagePaddingY: number;
+
+  /** 右侧详情栏宽度占比（0.25–0.5） */
+  detailRatio: number;
+
+  /** Grid 槽位最小边长（CSS px） */
+  gridCellMin: number;
+
+  /** 详情大图区域高度（CSS px） */
+  heroHeight: number;
+
+  /** 强调色（十六进制，如 #64e0d0） */
+  accent: string;
 }

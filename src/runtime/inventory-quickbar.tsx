@@ -22,6 +22,10 @@ import {
 import { craftRecipeInInventory } from "../domain/crafting";
 import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
+import {
+  hudLegacyLeft,
+  hudLegacyTop,
+} from "../domain/inventory-hud";
 import { parseInventoryHudJson } from "../domain/serialize";
 import type {
   InventoryEntry,
@@ -110,7 +114,7 @@ function padQuickbarSlots(
 /**
  * 8 格快捷栏 + 打开背包 + 大图 / 背包弹层。
  *
- * 定位使用 `hud.left` / `hud.top`；槽位尺寸 `hud.slotSize`；间距 `hud.gap`。
+ * 定位使用 `hudLegacyLeft/Top`；槽位尺寸 / 间距取自 `nodes.quickbarRoot`。
  * 默认纵向排列（左侧锚点）。
  *
  * @param props.inventory - 库存状态
@@ -146,8 +150,18 @@ export function InventoryQuickbar({
   );
 
   const itemList = items as ItemDefinition[];
-  const slotSize = Math.max(24, hud.slotSize || 64);
-  const gap = Math.max(0, hud.gap || 0);
+  const slotSize = Math.max(24, hud.nodes.quickbarRoot.slotSize || 64);
+  const gap = Math.max(0, hud.nodes.quickbarRoot.gap || 0);
+  const openBagLabel =
+    hud.nodes.openBagButton.style.label || "打开背包";
+
+  /**
+   * HUD 强调色：作者配置优先，空串回退主题 accent。
+   */
+  const accent =
+    typeof hud.accent === "string" && hud.accent.trim().length > 0
+      ? hud.accent.trim()
+      : tokens.accent;
 
   /**
    * 点击非空槽：打开物品大图。
@@ -181,8 +195,8 @@ export function InventoryQuickbar({
         data-testid="inventory-quickbar"
         style={{
           position: "absolute",
-          left: hud.left,
-          top: hud.top,
+          left: hudLegacyLeft(hud),
+          top: hudLegacyTop(hud),
           zIndex: 40,
           display: "flex",
           flexDirection: "column",
@@ -295,8 +309,8 @@ export function InventoryQuickbar({
             minHeight: 32,
             padding: "6px 4px",
             borderRadius: 8,
-            border: `1px solid ${tokens.accent}`,
-            background: `${tokens.accent}22`,
+            border: `1px solid ${accent}`,
+            background: `${accent}22`,
             color: tokens.textPrimary,
             fontSize: Math.max(11, FONT_SIZE_DEFAULT - 1),
             fontFamily: "inherit",
@@ -305,7 +319,7 @@ export function InventoryQuickbar({
             lineHeight: 1.2,
           }}
         >
-          {hud.openBagLabel || "打开背包"}
+          {openBagLabel}
         </button>
       </div>
 
