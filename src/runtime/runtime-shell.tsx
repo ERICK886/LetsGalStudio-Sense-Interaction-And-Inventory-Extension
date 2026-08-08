@@ -2,10 +2,10 @@
  * runtime-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.1
+ * 版本: 0.3.2
  *
  * 场景交互运行时壳：顶栏 + 当前场景渲染 + 动作链 / toast / once 进度；
- * `inventoryHudMode === "withScene"` 时挂载快捷栏 HUD。
+ * `inventoryHudMode === "withScene"` 时挂载快捷栏 HUD（含背包合成 Tab）。
  * 动作链执行中忽略重复 hotspot 点击（防抖）。
  */
 
@@ -15,6 +15,8 @@ import {
   type SaveAPI,
 } from "@avg-studio/sdk";
 import { executeSceneActions } from "../domain/actions";
+import { craftRecipeInInventory } from "../domain/crafting";
+import { findRecipe } from "../domain/recipe-registry";
 import { findScene } from "../domain/scene-registry";
 import { markConsumed } from "../domain/progress";
 import {
@@ -28,6 +30,7 @@ import type {
   InventoryHudMode,
   InventoryState,
   ItemDefinition,
+  RecipeDefinition,
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
@@ -36,6 +39,7 @@ import {
   useProgress,
 } from "../store/inventory-persistence";
 import { useItemsLibrary } from "../store/items-persistence";
+import { useRecipesLibrary } from "../store/recipes-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useDesignSize } from "../store/use-design-size";
@@ -46,6 +50,7 @@ import {
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { CraftBagContext } from "./craft-panel";
 import { createActionRuntime } from "./create-action-runtime";
 import { InventoryHudLayer } from "./inventory-quickbar";
 import { SceneView } from "./scene-view";
@@ -173,6 +178,7 @@ export function RuntimeShell({
 
   const [library] = useScenesLibrary();
   const [itemsLibrary] = useItemsLibrary();
+  const [recipesLibrary] = useRecipesLibrary();
   const [inventory, setInventory] = useInventory(save, ctx);
   const [progress, setProgress] = useProgress(save, ctx);
   const [currentSceneId, setCurrentSceneId] = useSaveValue(
@@ -197,10 +203,11 @@ export function RuntimeShell({
     emptyToastQueue(),
   );
 
-  /** 最新库存 / 库引用，供 ActionRuntime 闭包读取 */
+  /** 最新库存 / 库引用，供 ActionRuntime 与合成闭包读取 */
   const inventoryRef = useRef<InventoryState>(inventory);
   const scenesRef = useRef<SceneDefinition[]>(library.scenes);
   const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
+  const recipesRef = useRef<RecipeDefinition[]>(recipesLibrary.recipes);
   const progressRef = useRef<SceneProgress>(progress);
 
   /**
@@ -211,6 +218,7 @@ export function RuntimeShell({
   inventoryRef.current = inventory;
   scenesRef.current = library.scenes;
   itemsRef.current = itemsLibrary.items;
+  recipesRef.current = recipesLibrary.recipes;
   progressRef.current = progress;
 
   const scene = useMemo(
@@ -302,9 +310,64 @@ export function RuntimeShell({
     [actionRuntime, setProgress],
   );
 
+  /**
+   * 背包合成：findRecipe → craftRecipeInInventory → 成功则写回 inventory。
+   * 预览壳同样提供合成 Tab，便于 Studio 调试。
+   *
+   * @param recipeId - 配方 id
+   */
+  const handleCraftRecipe = useCallback(
+    (recipeId: string): void => {
+      const recipe = findRecipe(recipesRef.current, recipeId);
+
+      if (recipe === undefined) {
+        console.warn(
+          "[scene-interaction]",
+          "craft: recipe not found",
+          recipeId,
+        );
+
+        return;
+      }
+
+      const result = craftRecipeInInventory(
+        inventoryRef.current,
+        recipe,
+        itemsRef.current,
+        Date.now(),
+      );
+
+      if (!result.ok) {
+        console.warn(
+          "[scene-interaction]",
+          "craft: failed",
+          recipeId,
+          result.reason,
+        );
+
+        return;
+      }
+
+      setInventory(result.state);
+    },
+    [setInventory],
+  );
+
+  /**
+   * 注入背包合成 Tab（InventoryBackpack 经 Context 读取）。
+   */
+  const craftBagValue = useMemo(
+    () => ({
+      recipes: recipesLibrary.recipes,
+      onCraftRecipe: handleCraftRecipe,
+    }),
+    [recipesLibrary.recipes, handleCraftRecipe],
+  );
+
   const sceneTitle = scene?.name ?? "（无场景）";
 
   return (
+    <CraftBagContext.Provider value={craftBagValue}>
     <div
       data-testid="runtime-shell"
       style={{
@@ -399,5 +462,6 @@ export function RuntimeShell({
         {showHudInShell ? <InventoryHudLayer save={save} /> : null}
       </main>
     </div>
+    </CraftBagContext.Provider>
   );
 }

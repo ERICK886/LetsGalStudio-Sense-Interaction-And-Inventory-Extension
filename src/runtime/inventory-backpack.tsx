@@ -2,9 +2,10 @@
  * inventory-backpack.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 完整背包网格：按最近获得排序，点击条目查看大图详情。
+ * 完整背包：物品网格 + 可选「合成」Tab；
+ * 合成接线可通过 props 或 CraftBagContext（壳层注入）提供。
  */
 
 import React, { useMemo, useState } from "react";
@@ -14,6 +15,7 @@ import type {
   InventoryEntry,
   InventoryState,
   ItemDefinition,
+  RecipeDefinition,
 } from "../domain/types";
 import {
   FONT_SIZE_DEFAULT,
@@ -21,7 +23,11 @@ import {
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { CraftPanel, useCraftBagContext } from "./craft-panel";
 import { ItemDetailModal } from "./item-detail-modal";
+
+/** 背包内部分页：物品网格 | 合成列表 */
+export type BagTab = "items" | "craft";
 
 /**
  * InventoryBackpack 组件属性。
@@ -37,6 +43,19 @@ export interface InventoryBackpackProps {
    * 关闭背包（遮罩 / 关闭按钮 / Escape 由上层也可处理）。
    */
   onClose: () => void;
+
+  /**
+   * 可选配方列表；与 Context 二选一。
+   * 未提供且 Context 亦无时，隐藏「合成」Tab。
+   */
+  recipes?: readonly RecipeDefinition[];
+
+  /**
+   * 可选合成回调；与 Context 二选一。
+   *
+   * @param recipeId - 配方 id
+   */
+  onCraftRecipe?: (recipeId: string) => void;
 }
 
 /**
@@ -90,11 +109,42 @@ function bagButtonStyle(tokens: ThemeTokens): React.CSSProperties {
 }
 
 /**
- * 完整背包弹层：recent-first 网格，点击打开 {@link ItemDetailModal}。
+ * Tab 按钮样式。
+ *
+ * @param tokens - 主题
+ * @param active - 是否当前选中
+ * @returns CSSProperties
+ */
+function bagTabStyle(
+  tokens: ThemeTokens,
+  active: boolean,
+): React.CSSProperties {
+  return {
+    appearance: "none",
+    border: "none",
+    borderBottom: active
+      ? `2px solid ${tokens.accent}`
+      : "2px solid transparent",
+    background: "transparent",
+    color: active ? tokens.textPrimary : tokens.textMuted,
+    borderRadius: 0,
+    padding: "8px 14px",
+    fontSize: FONT_SIZE_DEFAULT,
+    fontFamily: "inherit",
+    fontWeight: active ? 650 : 500,
+    cursor: "pointer",
+    lineHeight: 1.2,
+  };
+}
+
+/**
+ * 完整背包弹层：物品 Tab（recent-first 网格）+ 可选合成 Tab。
  *
  * @param props.inventory - 库存
  * @param props.items - 物品库
  * @param props.onClose - 关闭背包
+ * @param props.recipes - 可选配方（无则尝试 Context）
+ * @param props.onCraftRecipe - 可选合成回调
  * @returns 背包遮罩 UI
  *
  * @example
@@ -102,6 +152,8 @@ function bagButtonStyle(tokens: ThemeTokens): React.CSSProperties {
  * <InventoryBackpack
  *   inventory={inventory}
  *   items={itemsLibrary.items}
+ *   recipes={recipesLibrary.recipes}
+ *   onCraftRecipe={handleCraft}
  *   onClose={() => setBagOpen(false)}
  * />
  * ```
@@ -110,9 +162,27 @@ export function InventoryBackpack({
   inventory,
   items,
   onClose,
+  recipes: recipesProp,
+  onCraftRecipe: onCraftRecipeProp,
 }: InventoryBackpackProps): React.ReactElement {
   const { tokens } = useTheme();
+  const craftCtx = useCraftBagContext();
   const [detailItem, setDetailItem] = useState<ItemDefinition | null>(null);
+  const [activeTab, setActiveTab] = useState<BagTab>("items");
+
+  /**
+   * props 优先，否则读壳层 CraftBagContext。
+   * recipes 未定义时不显示合成 Tab（与 brief 一致）。
+   */
+  const recipes =
+    recipesProp !== undefined ? recipesProp : craftCtx?.recipes;
+  const onCraftRecipe =
+    onCraftRecipeProp !== undefined
+      ? onCraftRecipeProp
+      : craftCtx?.onCraftRecipe;
+
+  /** brief：无 recipes 时不显示合成 Tab（空数组仍显示） */
+  const showCraftTab = recipes !== undefined;
 
   const sorted = useMemo(
     () => sortEntriesRecentFirst(inventory.entries),
@@ -141,6 +211,22 @@ export function InventoryBackpack({
 
     setDetailItem(def);
   };
+
+  /**
+   * 切换 Tab；无合成时强制停留在物品。
+   *
+   * @param tab - 目标分页
+   */
+  const handleTabChange = (tab: BagTab): void => {
+    if (tab === "craft" && !showCraftTab) {
+      return;
+    }
+
+    setActiveTab(tab);
+  };
+
+  const effectiveTab: BagTab =
+    activeTab === "craft" && showCraftTab ? "craft" : "items";
 
   return (
     <>
@@ -209,6 +295,40 @@ export function InventoryBackpack({
             </button>
           </header>
 
+          {showCraftTab ? (
+            <nav
+              data-testid="inventory-backpack-tabs"
+              aria-label="背包分页"
+              style={{
+                display: "flex",
+                alignItems: "stretch",
+                gap: 0,
+                padding: "0 8px",
+                borderBottom: `1px solid ${tokens.border}`,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                data-testid="inventory-backpack-tab-items"
+                aria-selected={effectiveTab === "items"}
+                onClick={() => handleTabChange("items")}
+                style={bagTabStyle(tokens, effectiveTab === "items")}
+              >
+                物品
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-backpack-tab-craft"
+                aria-selected={effectiveTab === "craft"}
+                onClick={() => handleTabChange("craft")}
+                style={bagTabStyle(tokens, effectiveTab === "craft")}
+              >
+                合成
+              </button>
+            </nav>
+          ) : null}
+
           <div
             style={{
               flex: 1,
@@ -217,7 +337,14 @@ export function InventoryBackpack({
               padding: 16,
             }}
           >
-            {sorted.length === 0 ? (
+            {effectiveTab === "craft" && showCraftTab && recipes !== undefined ? (
+              <CraftPanel
+                recipes={recipes}
+                items={items}
+                inventory={inventory}
+                onCraft={onCraftRecipe ?? (() => undefined)}
+              />
+            ) : sorted.length === 0 ? (
               <div
                 data-testid="inventory-backpack-empty"
                 style={{
