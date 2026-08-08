@@ -1,33 +1,32 @@
-# Task 9 Report: 主题 + App 壳（编辑/运行、场景/物品库）
+# Task 9 Report: 全屏背包画布自由布局
 
 **Status:** ✅ Complete  
-**Date:** 2026-08-08
+**Date:** 2026-08-08  
+**Branch:** feat/hud-backpack-free-layout
 
 ## Deliverables
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `src/theme/tokens.ts` | Create | light/dark token；bg `#17171B`；accent `#2EC4A4` |
-| `src/theme/theme-provider.tsx` | Create | ThemeProvider + useTheme + 根字体 |
-| `src/editor/editor-shell.tsx` | Create | 顶栏 + 空左中右；场景/物品库 Tab；运行预览 |
-| `src/runtime/runtime-shell.tsx` | Create | 运行时占位；allowEdit 时「编辑」 |
-| `src/app/scene-interaction-app.tsx` | Modify | 双壳切换 + editorSection 状态 |
+| File | Purpose |
+|------|---------|
+| `src/editor/ui/backpack-visual-canvas.tsx` | 改写：NodeList + resolveBackpackLayout 绝对定位、拖拽/resize、craft offsetY、SelectionOverlay |
+| `src/editor/ui/ui-editor-panel.tsx` | 接线：`selectedBagNodeId` / `onSelectNode` / `onConfigChange`（表单按节点属 Task 10） |
 
-## Interfaces
+## Behavior
 
-- App 状态：`editorSection: "scenes" | "items"`
-- `allowEdit === false` → 强制 RuntimeShell
-- `isEditMode` 来自 save；顶栏切换 `save.set("isEditMode", …)`
-- 标题：「场景交互」
+- Props：`designWidth/Height`、`config`、`selectedNodeId`、`onSelectNode`、`onConfigChange`
+- 节点按 `resolveBackpackLayout` 绝对定位；左侧 `NodeList`；Esc / 点舞台空白清空选中
+- `backdrop`：可选中，**忽略** drag/resize
+- `panelChrome` / `titleBlock` / `closeButton` / `itemGrid` / `detailPanel`：拖拽改 `rect`；`SelectionOverlay` 可 resize
+- `craftButton`：预览锚定 `detailPanel` 底边 + `offsetY`；竖直拖拽改 `offsetY`；不可 resize
 
 ## Verification
 
 ```
-npm run build  → success
+npm run build  → ✓ success
 ```
 
 ## Commit
 
 ```
-feat: app shell with edit/runtime and section tabs
+feat: free-layout editing on backpack visual canvas
 ```

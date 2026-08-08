@@ -2,11 +2,11 @@
  * ui-editor-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.9
+ * 版本: 0.4.0
  *
  * 编辑器「UI」分区：快捷栏 HUD / 全屏背包可视化编辑。
  * 配置写入 backpack-hud.settings（inventoryHudJson / backpackScreenJson）。
- * HUD 选中态（selectedHudNodeId）供画布自由布局；按节点表单接线见 Task 10。
+ * HUD / 背包选中态供画布自由布局；按节点表单接线见 Task 10。
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,6 +18,7 @@ import {
   stringifyInventoryHud,
 } from "../../domain/serialize";
 import type {
+  BackpackNodeId,
   BackpackScreenConfig,
   InventoryHudConfig,
 } from "../../domain/types";
@@ -100,6 +101,12 @@ export function UiEditorPanel(): React.ReactElement {
   const [selectedHudNodeId, setSelectedHudNodeId] =
     useState<HudNodeId | null>(null);
 
+  /**
+   * 全屏背包画布选中节点；与 selectedHudNodeId 对称，表单接线见 Task 10。
+   */
+  const [selectedBagNodeId, setSelectedBagNodeId] =
+    useState<BackpackNodeId | null>(null);
+
   /** 进入分区 / 外部写入时刷新 */
   useEffect(() => {
     setHud(loadHud(ctx));
@@ -149,6 +156,7 @@ export function UiEditorPanel(): React.ReactElement {
         onClick={() => {
           setSub(id);
           setSelectedHudNodeId(null);
+          setSelectedBagNodeId(null);
         }}
         style={{
           appearance: "none",
@@ -213,7 +221,7 @@ export function UiEditorPanel(): React.ReactElement {
         >
           {sub === "hud"
             ? "在画布上拖拽快捷栏调整位置；右侧可改槽位尺寸与文案。"
-            : "预览全屏背包分区比例与边距；右侧参数实时生效。"}
+            : "在画布上选中并拖拽背包节点；合成钮竖直拖改 offsetY。"}
         </p>
       </aside>
 
@@ -241,6 +249,9 @@ export function UiEditorPanel(): React.ReactElement {
             designWidth={designSize.width}
             designHeight={designSize.height}
             config={bag}
+            selectedNodeId={selectedBagNodeId}
+            onSelectNode={setSelectedBagNodeId}
+            onConfigChange={persistBag}
           />
         )}
       </main>
