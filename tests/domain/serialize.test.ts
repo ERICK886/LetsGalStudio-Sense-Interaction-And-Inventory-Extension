@@ -3,16 +3,28 @@
  * 作者: 池水三两升
  * 日期: 2026-08-08
  * 版本: 0.1.0
+ *
+ * 场景/物品/库存/进度/HUD JSON 编解码聚焦单测。
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { defaultElementMotion } from "../../src/domain/motion";
 import {
+  defaultInventoryHud,
+  emptyItemsLibrary,
   emptyScenesLibrary,
-  parseScenesLibraryJson,
-  stringifyScenesLibrary,
+  parseInventoryHudJson,
   parseItemsLibraryJson,
   parseInventoryJson,
   parseProgressJson,
+  parseScenesLibraryJson,
+  stringifyInventoryHud,
+  stringifyScenesLibrary,
 } from "../../src/domain/serialize";
+
+/** 捕获 logError → console.error 的 spy，便于断言是否记录错误 */
+function spyConsoleError(): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(console, "error").mockImplementation(() => {});
+}
 
 describe("parseScenesLibraryJson", () => {
   it("非法 JSON 回退空库", () => {
@@ -39,6 +51,136 @@ describe("parseScenesLibraryJson", () => {
     );
     expect(again.scenes[0]?.hotspots).toEqual([]);
   });
+
+  it("纯数组根回退空库并 logError", () => {
+    const spy = spyConsoleError();
+
+    const lib = parseScenesLibraryJson(JSON.stringify([{ id: "orphan" }]));
+
+    expect(lib).toEqual(emptyScenesLibrary());
+    expect(spy).toHaveBeenCalledWith(
+      "[scene-interaction]",
+      "serialize",
+      "bare array root rejected for scenesLibrary",
+      undefined,
+    );
+
+    spy.mockRestore();
+  });
+
+  it("缺 id 的场景条目被丢弃并 logError", () => {
+    const spy = spyConsoleError();
+
+    const lib = parseScenesLibraryJson(
+      JSON.stringify({
+        version: 1,
+        scenes: [{ name: "无名" }, { id: "ok", name: "有效" }],
+      }),
+    );
+
+    expect(lib.scenes).toHaveLength(1);
+    expect(lib.scenes[0]?.id).toBe("ok");
+    expect(spy).toHaveBeenCalledWith(
+      "[scene-interaction]",
+      "serialize",
+      "scene entry dropped: missing id",
+      undefined,
+    );
+
+    spy.mockRestore();
+  });
+
+  it("hotspot 缺省字段使用默认值", () => {
+    const lib = parseScenesLibraryJson(
+      JSON.stringify({
+        version: 1,
+        scenes: [
+          {
+            id: "s1",
+            name: "",
+            baseImage: "",
+            hotspots: [{ id: "h1", x: 2, y: -0.5 }],
+          },
+        ],
+      }),
+    );
+
+    const hotspot = lib.scenes[0]?.hotspots[0];
+
+    expect(hotspot?.hoverShadow.enabled).toBe(true);
+    expect(hotspot?.actions).toEqual([]);
+    expect(hotspot?.once).toBe(false);
+    expect(hotspot?.visibleByDefault).toBe(true);
+    expect(hotspot?.motion).toEqual(defaultElementMotion());
+    expect(hotspot?.x).toBe(1);
+    expect(hotspot?.y).toBe(0);
+  });
+
+  it("缺 id 的 hotspot 被丢弃并 logError", () => {
+    const spy = spyConsoleError();
+
+    const lib = parseScenesLibraryJson(
+      JSON.stringify({
+        version: 1,
+        scenes: [
+          {
+            id: "s1",
+            name: "",
+            baseImage: "",
+            hotspots: [{ name: "无 id" }, { id: "h1" }],
+          },
+        ],
+      }),
+    );
+
+    expect(lib.scenes[0]?.hotspots).toHaveLength(1);
+    expect(lib.scenes[0]?.hotspots[0]?.id).toBe("h1");
+    expect(spy).toHaveBeenCalledWith(
+      "[scene-interaction]",
+      "serialize",
+      "hotspot entry dropped: missing id",
+      undefined,
+    );
+
+    spy.mockRestore();
+  });
+
+  it("giveItem amount 最小 1；缺 toastMotion 时 slideUp / slideDown", () => {
+    const lib = parseScenesLibraryJson(
+      JSON.stringify({
+        version: 1,
+        scenes: [
+          {
+            id: "s1",
+            name: "",
+            baseImage: "",
+            hotspots: [
+              {
+                id: "h1",
+                actions: [
+                  {
+                    type: "giveItem",
+                    itemId: "key",
+                    amount: 0,
+                    toastText: "获得钥匙",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const action = lib.scenes[0]?.hotspots[0]?.actions[0];
+
+    expect(action?.type).toBe("giveItem");
+    if (action?.type === "giveItem") {
+      expect(action.amount).toBeGreaterThanOrEqual(1);
+      expect(action.toastMotion.enter.preset).toBe("slideUp");
+      expect(action.toastMotion.exit.preset).toBe("slideDown");
+    }
+  });
 });
 
 describe("parseInventoryJson", () => {
@@ -57,5 +199,67 @@ describe("parseItemsLibraryJson", () => {
   it("根必须带 items 数组", () => {
     const lib = parseItemsLibraryJson(JSON.stringify({ version: 1, items: [] }));
     expect(lib.items).toEqual([]);
+  });
+
+  it("纯数组根回退空库并 logError", () => {
+    const spy = spyConsoleError();
+
+    const lib = parseItemsLibraryJson(JSON.stringify([{ id: "orphan" }]));
+
+    expect(lib).toEqual(emptyItemsLibrary());
+    expect(spy).toHaveBeenCalledWith(
+      "[scene-interaction]",
+      "serialize",
+      "bare array root rejected for itemsLibrary",
+      undefined,
+    );
+
+    spy.mockRestore();
+  });
+
+  it("缺 id 的物品条目被丢弃并 logError", () => {
+    const spy = spyConsoleError();
+
+    const lib = parseItemsLibraryJson(
+      JSON.stringify({
+        version: 1,
+        items: [{ name: "无名" }, { id: "i1", name: "有效" }],
+      }),
+    );
+
+    expect(lib.items).toHaveLength(1);
+    expect(lib.items[0]?.id).toBe("i1");
+    expect(spy).toHaveBeenCalledWith(
+      "[scene-interaction]",
+      "serialize",
+      "item entry dropped: missing id",
+      undefined,
+    );
+
+    spy.mockRestore();
+  });
+});
+
+describe("parseInventoryHudJson", () => {
+  it("defaultInventoryHud 默认值", () => {
+    expect(defaultInventoryHud()).toEqual({
+      left: 24,
+      top: 120,
+      slotSize: 64,
+      gap: 8,
+      openBagLabel: "打开背包",
+      customCss: "",
+    });
+  });
+
+  it("空字符串回退默认配置", () => {
+    expect(parseInventoryHudJson("")).toEqual(defaultInventoryHud());
+  });
+
+  it("JSON 往返保留 HUD 字段", () => {
+    const custom = { ...defaultInventoryHud(), left: 48, openBagLabel: "背包" };
+    const again = parseInventoryHudJson(stringifyInventoryHud(custom));
+
+    expect(again).toEqual(custom);
   });
 });

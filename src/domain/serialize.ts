@@ -224,6 +224,7 @@ function normalizeHotspotElement(raw: unknown): HotspotElement | null {
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.id !== "string" || obj.id.trim() === "") {
+    logError(SCOPE, "hotspot entry dropped: missing id");
     return null;
   }
 
@@ -282,6 +283,7 @@ function normalizeSceneDefinition(raw: unknown): SceneDefinition | null {
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.id !== "string" || obj.id.trim() === "") {
+    logError(SCOPE, "scene entry dropped: missing id");
     return null;
   }
 
@@ -332,6 +334,7 @@ function normalizeItemDefinition(raw: unknown): ItemDefinition | null {
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.id !== "string" || obj.id.trim() === "") {
+    logError(SCOPE, "item entry dropped: missing id");
     return null;
   }
 
