@@ -33,3 +33,18 @@ npm run build  → ✓ success
 feat: render backpack screen from v2 node layout
 feat: add backpack screen config hook for v2 runtime
 ```
+
+## Review Fix (Important)
+
+**Date:** 2026-08-08
+
+### Findings addressed
+
+1. **panelChrome 空壳动画**：`panelAnimation` 原只挂在空的 `panelChrome` 上，title/grid/detail/craft 为无动画兄弟节点。现改为挂在 `backpack-screen-panel-content` 包装层，内含 panelChrome 与全部可见内容节点（backdrop 除外）；子节点仍用舞台绝对坐标，交互不变。
+2. **backdrop 淡入不可见**：宿主根与 backdrop 同用 `bgPage`，淡入被遮挡。现宿主 `background: transparent`，仅 backdrop 绘制页面色并执行淡入/淡出。
+
+### Verification
+
+```
+npm run build  → ✓ success
+```

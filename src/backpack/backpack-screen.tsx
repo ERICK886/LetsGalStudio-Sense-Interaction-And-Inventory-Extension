@@ -2,14 +2,16 @@
  * backpack-screen.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.0
+ * 版本: 0.5.1
  *
  * 背包全屏幕 UI（v2 节点布局）：
  * - 配置经 useBackpackScreenConfig → resolveBackpackLayout 解析；
  * - 设计分辨率 letterbox 舞台上绝对定位 backdrop / panelChrome / titleBlock /
  *   closeButton / itemGrid / detailPanel；合成钮锚定详情底边 + offsetY；
  * - 样式经 applyUiBoxStyle / applyUiTextStyle，缺省色由 accent 派生；
- * - 入场 / 退场动画挂在 backdrop + panelChrome；交互（选中 / 合成 / 关闭 / 模式切换）不变。
+ * - 入场 / 退场：backdrop 单独淡入淡出；panelAnimation 挂在内容包装层
+ *   （含 panelChrome / title / close / grid / detail / craft），宿主背景透明；
+ * - 交互（选中 / 合成 / 关闭 / 模式切换）不变。
  *
  * 属于 backpack-hud 程序，不依赖场景壳。
  */
@@ -904,7 +906,8 @@ export function BackpackScreen({
         inset: 0,
         zIndex: 200,
         boxSizing: "border-box",
-        background: tokens.bgPage,
+        /* 宿主透明：仅 backdrop 绘制页面色并淡入淡出，避免同色遮挡 */
+        background: "transparent",
         color: tokens.text,
         fontFamily: tokens.font,
         pointerEvents: exiting ? "none" : "auto",
@@ -913,7 +916,7 @@ export function BackpackScreen({
     >
       <BackpackMotionStyles />
 
-      {/* backdrop：铺满宿主，入场 / 退场动画 */}
+      {/* backdrop：铺满宿主，入场 / 退场淡入淡出（唯一绘制 bgPage 的层） */}
       <div
         data-testid="backpack-screen-backdrop"
         style={{
@@ -949,7 +952,24 @@ export function BackpackScreen({
               transformOrigin: "0 0",
             }}
           >
-            {/* panelChrome：底板 + 面板动画 */}
+            {/*
+              内容包装层：panelAnimation 作用于可见面板内容整体
+             （panelChrome / title / close / grid / detail / craft），
+              子节点仍用舞台绝对坐标，交互不变。
+            */}
+            <div
+              data-testid="backpack-screen-panel-content"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: designSize.width,
+                height: designSize.height,
+                transformOrigin: "50% 40%",
+                animation: panelAnimation,
+              }}
+            >
+            {/* panelChrome：底板样式（动画由外层包装承担） */}
             <div
               data-testid="backpack-screen-panel"
               style={{
@@ -964,9 +984,7 @@ export function BackpackScreen({
                 background: tokens.bgPanel,
                 boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
                 overflow: "hidden",
-                transformOrigin: "50% 40%",
                 ...panelCss,
-                animation: panelAnimation,
               }}
             />
 
@@ -1394,6 +1412,7 @@ export function BackpackScreen({
                 {selectedRecipe.canCraft ? craftLabel : "原料不足"}
               </button>
             ) : null}
+            </div>
           </div>
         </div>
       ) : null}
