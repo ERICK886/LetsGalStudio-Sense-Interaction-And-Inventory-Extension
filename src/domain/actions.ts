@@ -2,9 +2,10 @@
  * actions.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 场景动作链执行器：按序调用 ActionRuntime，单步失败 warn 后继续。
+ * 支持 openScene（含返回栈）/ giveItem。
  */
 import type { ItemToastOverrides } from "./item-toast-config";
 import type { ElementMotion, SceneAction } from "./types";
@@ -14,12 +15,18 @@ import type { ElementMotion, SceneAction } from "./types";
  */
 export interface ActionRuntime {
   /**
-   * 打开目标场景。
+   * 打开目标场景，并可选压入返回栈。
    *
    * @param sceneIdOrName - 场景 id 或 name
+   * @param options.returnTarget - 可选；覆盖压栈的返回目标（场景 id/name），
+   *   缺省时压入打开前的 `currentSceneId`
+   * @param options.pushReturn - 缺省 true；false 时只切场景、不改返回栈
    * @returns 是否成功打开
    */
-  openScene(sceneIdOrName: string): boolean;
+  openScene(
+    sceneIdOrName: string,
+    options?: { returnTarget?: string; pushReturn?: boolean },
+  ): boolean;
 
   /**
    * 向玩家库存发放物品。
@@ -33,17 +40,7 @@ export interface ActionRuntime {
   /**
    * 入队一条获得物品轻提示。
    *
-   * 基础字段 `text/anchorHotspotId/motion` 必填；其余为动作级可选覆盖，
-   * 由壳层在写入 `ToastRequest` 时与全局配置合并为完整外观。
-   *
-   * @param payload.text - 提示文案；空串时由 UI 层回退为物品名
-   * @param payload.anchorHotspotId - 锚定热点 id
-   * @param payload.motion - 动效配置
-   * @param payload.placement - 可选方位覆盖
-   * @param payload.offsetX - 可选水平偏移覆盖
-   * @param payload.offsetY - 可选垂直偏移覆盖
-   * @param payload.gap - 可选间距覆盖
-   * @param payload.style - 可选样式覆盖
+   * @param payload - 文案 / 锚点 / 动效 + 可选外观覆盖
    */
   enqueueToast(payload: {
     text: string;
@@ -69,7 +66,10 @@ function runOpenSceneAction(
   action: Extract<SceneAction, { type: "openScene" }>,
   runtime: ActionRuntime,
 ): void {
-  const ok = runtime.openScene(action.sceneIdOrName);
+  const ok = runtime.openScene(action.sceneIdOrName, {
+    returnTarget: action.returnTarget,
+    pushReturn: action.pushReturn,
+  });
   if (!ok) {
     runtime.warn(`openScene failed: ${action.sceneIdOrName}`);
   }
@@ -77,8 +77,6 @@ function runOpenSceneAction(
 
 /**
  * 执行单条 giveItem 动作；仅发放成功时 enqueueToast。
- *
- * toastText 经 trim 后为空仍入队，text 传空串，由 UI 层回退物品名。
  *
  * @param action - giveItem 动作
  * @param hotspotId - 当前热点 id（toast 锚点）
@@ -116,11 +114,11 @@ function runGiveItemAction(
  * @param hotspotId - 触发热点 id
  * @param runtime - 运行时依赖
  */
-function runSceneAction(
+async function runSceneAction(
   action: SceneAction,
   hotspotId: string,
   runtime: ActionRuntime,
-): void {
+): Promise<void> {
   try {
     switch (action.type) {
       case "none":
@@ -151,8 +149,8 @@ function runSceneAction(
  *
  * @param actions - 动作列表
  * @param hotspotId - 触发热点 id（giveItem toast 锚点）
- * @param runtime - 注入 openScene / giveItem / toast / warn 的实现
- * @returns Promise<void>（预留异步扩展，当前逐步同步执行）
+ * @param runtime - 注入实现
+ * @returns Promise<void>
  *
  * @example
  * await executeSceneActions(hotspot.actions, hotspot.id, actionRuntime);
@@ -163,6 +161,6 @@ export async function executeSceneActions(
   runtime: ActionRuntime,
 ): Promise<void> {
   for (const action of actions) {
-    runSceneAction(action, hotspotId, runtime);
+    await runSceneAction(action, hotspotId, runtime);
   }
 }

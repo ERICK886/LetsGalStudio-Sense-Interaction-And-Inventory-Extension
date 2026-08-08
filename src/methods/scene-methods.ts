@@ -12,7 +12,11 @@
 
 import { method, type ExtensionContext, type SaveAPI } from "@avg-studio/sdk";
 import { setHotspotVisibility } from "../domain/progress";
-import { findScene } from "../domain/scene-registry";
+import {
+  openSceneWithReturn,
+  parseSceneReturnStackJson,
+  stringifySceneReturnStack,
+} from "../domain/scene-return-stack";
 import {
   parseProgressJson,
   parseScenesLibraryJson,
@@ -127,9 +131,13 @@ function formatSceneCatalog(lib: ScenesLibraryFile): string {
 }
 
 /**
- * 按 id 或名称打开场景：写入 currentSceneId，退出编辑模式，并显示程序 UI。
+ * 按 id 或名称打开场景：经 `openSceneWithReturn` 计算下一场景与返回栈，
+ * 写入 `sceneReturnStackJson` 与 `currentSceneId`，退出编辑模式，并显示程序 UI。
  *
  * @param params.sceneIdOrName - 场景 id 或名称（必填）
+ * @param params.returnTarget - 可选；覆盖压栈的返回目标（场景 id/name），
+ *   缺省时压入打开前的 `currentSceneId`
+ * @param params.pushReturn - 缺省 true；false 时只切场景、不改返回栈
  * @param params.resultVariable - 可选；写入是否切换成功
  *
  * @remarks
@@ -143,6 +151,12 @@ export const openScene = method({
   title: "打开场景",
   schema: {
     sceneIdOrName: { type: "string", label: "场景 ID/名称", required: true },
+    returnTarget: {
+      type: "string",
+      label: "返回目标（可选）",
+      required: false,
+    },
+    pushReturn: { type: "boolean", label: "压入返回栈", required: false },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
   async run(ctx, params) {
@@ -160,9 +174,23 @@ export const openScene = method({
       return;
     }
 
-    const scene = findScene(lib.scenes, key);
+    // 读当前场景 id 与返回栈，交领域函数统一计算下一场景与下一栈
+    const currentSceneId = String(save.get("currentSceneId") ?? "");
+    const stack = parseSceneReturnStackJson(save.get("sceneReturnStackJson"));
+    const returnTarget = normalizeKey(params.returnTarget) ?? undefined;
+    // pushReturn：缺省或非 false 均视为 true
+    const pushReturn = params.pushReturn !== false;
 
-    if (scene === undefined) {
+    const result = openSceneWithReturn({
+      scenes: lib.scenes,
+      currentSceneId,
+      stack,
+      targetKey: key,
+      returnTarget,
+      pushReturn,
+    });
+
+    if (!result.ok || result.nextSceneId === null) {
       logError(
         "scene-methods",
         `openScene: 未找到场景「${key}」。当前库: ${formatSceneCatalog(lib)}`,
@@ -173,7 +201,10 @@ export const openScene = method({
     }
 
     try {
-      save.set("currentSceneId", scene.id);
+      save.set("sceneReturnStackJson", stringifySceneReturnStack(result.nextStack));
+      notifySaveField("sceneReturnStackJson");
+
+      save.set("currentSceneId", result.nextSceneId);
       notifySaveField("currentSceneId");
 
       save.set("isEditMode", false);
@@ -210,7 +241,9 @@ export const openScene = method({
  * 打开场景交互（阻塞）：显示玩家 modal UI，并 await 会话门闩直到关闭。
  *
  * @param params.sceneIdOrName - 可选；场景 id 或名称。省略时用 save.currentSceneId，
- *   再回退 settings.defaultSceneId
+ *   再回退 settings.defaultSceneId（此分支不切换场景、不入栈）
+ * @param params.returnTarget - 可选；覆盖压栈的返回目标（仅切换场景时生效）
+ * @param params.pushReturn - 缺省 true；false 时只切场景、不改返回栈
  * @param params.resultVariable - 可选；写入是否成功打开并完成等待
  *
  * @returns Promise<void>（SDK method run 无业务返回值）
@@ -236,6 +269,12 @@ export const openSceneInteraction = method({
       label: "场景 ID/名称",
       required: false,
     },
+    returnTarget: {
+      type: "string",
+      label: "返回目标（可选）",
+      required: false,
+    },
+    pushReturn: { type: "boolean", label: "压入返回栈", required: false },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
   async run(ctx, params) {
@@ -244,9 +283,24 @@ export const openSceneInteraction = method({
     const key = normalizeKey(params.sceneIdOrName);
 
     if (key !== null) {
-      const scene = findScene(lib.scenes, key);
+      // 切换场景分支：经 openSceneWithReturn 统一计算下一场景与返回栈
+      const currentSceneId = String(save.get("currentSceneId") ?? "");
+      const stack = parseSceneReturnStackJson(
+        save.get("sceneReturnStackJson"),
+      );
+      const returnTarget = normalizeKey(params.returnTarget) ?? undefined;
+      const pushReturn = params.pushReturn !== false;
 
-      if (scene === undefined) {
+      const result = openSceneWithReturn({
+        scenes: lib.scenes,
+        currentSceneId,
+        stack,
+        targetKey: key,
+        returnTarget,
+        pushReturn,
+      });
+
+      if (!result.ok || result.nextSceneId === null) {
         logError(
           "scene-methods",
           `openSceneInteraction: 未找到场景: ${key}`,
@@ -257,12 +311,18 @@ export const openSceneInteraction = method({
       }
 
       try {
-        save.set("currentSceneId", scene.id);
+        save.set(
+          "sceneReturnStackJson",
+          stringifySceneReturnStack(result.nextStack),
+        );
+        notifySaveField("sceneReturnStackJson");
+
+        save.set("currentSceneId", result.nextSceneId);
         notifySaveField("currentSceneId");
       } catch (err) {
         logError(
           "scene-methods",
-          "openSceneInteraction: 写入 currentSceneId 失败",
+          "openSceneInteraction: 写入 currentSceneId / 返回栈失败",
           err,
         );
         writeResult(ctx, params.resultVariable, false);
@@ -270,6 +330,7 @@ export const openSceneInteraction = method({
         return;
       }
     } else {
+      // 不切换场景分支：沿用 currentSceneId，回退 defaultSceneId；不入栈
       let sceneId = String(save.get("currentSceneId") ?? "").trim();
 
       if (sceneId.length === 0) {

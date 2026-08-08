@@ -9,7 +9,6 @@
  * `save` 为扩展 settings 沙箱，与玩家 slot 隔离。
  * 背包以内嵌 BackpackShell 叠层显示（勿 ui.show，以免顶掉编辑器预览容器）。
  * 另带预览顶栏：品牌、场景名、「编辑」返回 EditorShell。
- * Toast / 悬停预设经 editor.sceneUiJson（useSceneUiConfig）注入。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +21,10 @@ import { executeSceneActions } from "../domain/actions";
 import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
 import { markConsumed } from "../domain/progress";
+import {
+  parseSceneReturnStackJson,
+  stringifySceneReturnStack,
+} from "../domain/scene-return-stack";
 import {
   advanceToastQueue,
   emptyToastQueue,
@@ -36,6 +39,7 @@ import type {
   SceneProgress,
 } from "../domain/types";
 import { createActionRuntime } from "../runtime/create-action-runtime";
+import { SceneReturnButton } from "../runtime/scene-return-button";
 import { SceneView } from "../runtime/scene-view";
 import {
   useInventory,
@@ -164,6 +168,11 @@ export function PreviewShell({
     "currentSceneId",
     ctx,
   );
+  const [returnStackJson, setReturnStackJson] = useSaveValue(
+    save,
+    "sceneReturnStackJson",
+    ctx,
+  );
 
   const [toastQueue, setToastQueue] = useState<ToastQueueState>(() =>
     emptyToastQueue(),
@@ -179,12 +188,17 @@ export function PreviewShell({
   const scenesRef = useRef<SceneDefinition[]>(library.scenes);
   const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
   const progressRef = useRef<SceneProgress>(progress);
+  /** 当前场景 id / 返回栈 JSON 引用，供 ActionRuntime 闭包读取最新值 */
+  const currentSceneIdRef = useRef<string>(currentSceneId);
+  const returnStackJsonRef = useRef<string>(returnStackJson);
   const hotspotBusyRef = useRef(false);
 
   inventoryRef.current = inventory;
   scenesRef.current = library.scenes;
   itemsRef.current = itemsLibrary.items;
   progressRef.current = progress;
+  currentSceneIdRef.current = currentSceneId;
+  returnStackJsonRef.current = returnStackJson;
 
   const scene = useMemo(
     () => resolveCurrentScene(library.scenes, currentSceneId),
@@ -257,10 +271,26 @@ export function PreviewShell({
         getItems: () => itemsRef.current,
         getInventory: () => inventoryRef.current,
         setInventory,
-        setCurrentSceneId,
+        setCurrentSceneId: (id) => {
+          currentSceneIdRef.current = id;
+          setCurrentSceneId(id);
+        },
+        getCurrentSceneId: () => currentSceneIdRef.current,
+        getReturnStack: () =>
+          parseSceneReturnStackJson(returnStackJsonRef.current),
+        setReturnStack: (stack) => {
+          const json = stringifySceneReturnStack(stack);
+          returnStackJsonRef.current = json;
+          setReturnStackJson(json);
+        },
         enqueueToast: handleEnqueueToast,
       }),
-    [setInventory, setCurrentSceneId, handleEnqueueToast],
+    [
+      setInventory,
+      setCurrentSceneId,
+      setReturnStackJson,
+      handleEnqueueToast,
+    ],
   );
 
   const handleToastAdvance = useCallback((): void => {
@@ -385,6 +415,23 @@ export function PreviewShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
           globalHoverShadow={sceneUi.hotspotHover}
+        />
+
+        {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}
+        <SceneReturnButton
+          config={sceneUi.sceneReturn}
+          stackJson={returnStackJson}
+          currentSceneId={currentSceneId}
+          scenes={library.scenes}
+          designWidth={designSize.width}
+          designHeight={designSize.height}
+          onReturn={(id, stack) => {
+            const json = stringifySceneReturnStack(stack);
+            returnStackJsonRef.current = json;
+            setReturnStackJson(json);
+            currentSceneIdRef.current = id;
+            setCurrentSceneId(id);
+          }}
         />
 
         {BackpackShellComp ? (

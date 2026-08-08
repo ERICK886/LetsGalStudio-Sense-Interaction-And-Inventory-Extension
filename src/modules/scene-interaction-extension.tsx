@@ -64,6 +64,9 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
     previewCurrentSceneId: s
       .string("预览当前场景 ID（测试用）")
       .default(""),
+    previewSceneReturnStackJson: s
+      .string("预览场景返回栈 JSON（测试用）")
+      .default("[]"),
   }));
 
   /**
@@ -95,6 +98,12 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
       persistence: "slot",
       default: "",
       label: "当前场景 ID",
+    },
+    sceneReturnStackJson: {
+      type: "string",
+      persistence: "slot",
+      default: "[]",
+      label: "场景返回栈 JSON",
     },
   });
 

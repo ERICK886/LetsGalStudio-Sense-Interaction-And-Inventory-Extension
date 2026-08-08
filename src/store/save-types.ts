@@ -36,4 +36,7 @@ export type SceneInteractionSaveMap = {
 
   /** 当前打开的场景 ID（slot）；默认 `""` */
   currentSceneId: string;
+
+  /** 场景返回栈 JSON 字符串（slot）；默认 `"[]"` */
+  sceneReturnStackJson: string;
 } & Record<string, unknown>;

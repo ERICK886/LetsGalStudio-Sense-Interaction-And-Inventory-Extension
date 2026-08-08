@@ -421,37 +421,115 @@ function ActionCard({
       </div>
 
       {action.type === "openScene" ? (
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</span>
-          <select
-            aria-label={`动作 ${index + 1} 目标场景`}
-            value={action.sceneIdOrName}
-            style={controlStyle(tokens)}
-            onChange={(e) => {
-              onReplace({ type: "openScene", sceneIdOrName: e.target.value });
+        <>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</span>
+            <select
+              aria-label={`动作 ${index + 1} 目标场景`}
+              value={action.sceneIdOrName}
+              style={controlStyle(tokens)}
+              onChange={(e) => {
+                // 仅替换 sceneIdOrName，保留 pushReturn / returnTarget
+                onReplace({ ...action, sceneIdOrName: e.target.value });
+              }}
+            >
+              {scenes.length === 0 ? (
+                <option value="">（无场景）</option>
+              ) : null}
+              {/* 若当前值不在列表中，保留一项以免丢引用 */}
+              {action.sceneIdOrName &&
+              !scenes.some(
+                (s) =>
+                  s.id === action.sceneIdOrName ||
+                  s.name === action.sceneIdOrName,
+              ) ? (
+                <option value={action.sceneIdOrName}>
+                  {action.sceneIdOrName}（缺失）
+                </option>
+              ) : null}
+              {scenes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name || s.id}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/*
+           * 压入返回栈：缺省 true（pushReturn 省略）；仅显式 false 时不压栈。
+           * checked={pushReturn !== false} 与运行时 openSceneWithReturn 语义一致。
+           */}
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
             }}
           >
-            {scenes.length === 0 ? (
-              <option value="">（无场景）</option>
-            ) : null}
-            {/* 若当前值不在列表中，保留一项以免丢引用 */}
-            {action.sceneIdOrName &&
-            !scenes.some(
-              (s) =>
-                s.id === action.sceneIdOrName ||
-                s.name === action.sceneIdOrName,
-            ) ? (
-              <option value={action.sceneIdOrName}>
-                {action.sceneIdOrName}（缺失）
-              </option>
-            ) : null}
-            {scenes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name || s.id}
-              </option>
-            ))}
-          </select>
-        </label>
+            <input
+              type="checkbox"
+              aria-label={`动作 ${index + 1} 压入返回栈`}
+              checked={action.pushReturn !== false}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  const next = { ...action };
+                  delete next.pushReturn;
+                  onReplace(next);
+                } else {
+                  onReplace({ ...action, pushReturn: false });
+                }
+              }}
+            />
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              压入返回栈
+            </span>
+          </label>
+
+          {/*
+           * 返回目标：空 = 来源场景（打开前的 currentSceneId）；
+           * 非空时覆盖压栈 id（须为有效场景 id/name）。
+           */}
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              返回目标
+            </span>
+            <select
+              aria-label={`动作 ${index + 1} 返回目标`}
+              value={action.returnTarget ?? ""}
+              style={controlStyle(tokens)}
+              onChange={(e) => {
+                const v = e.target.value;
+
+                if (v === "") {
+                  const next = { ...action };
+                  delete next.returnTarget;
+                  onReplace(next);
+                } else {
+                  onReplace({ ...action, returnTarget: v });
+                }
+              }}
+            >
+              <option value="">（来源场景）</option>
+              {/* 若当前 returnTarget 不在列表中，保留一项以免丢引用 */}
+              {action.returnTarget &&
+              !scenes.some(
+                (s) =>
+                  s.id === action.returnTarget ||
+                  s.name === action.returnTarget,
+              ) ? (
+                <option value={action.returnTarget}>
+                  {action.returnTarget}（缺失）
+                </option>
+              ) : null}
+              {scenes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name || s.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
       ) : null}
 
       {action.type === "giveItem" ? (

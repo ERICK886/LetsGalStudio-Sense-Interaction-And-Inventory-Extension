@@ -2,9 +2,9 @@
  * scene-ui-config.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
- * 场景 UI 预设（获得提示 + 交互点悬停）的默认值、JSON 规范化与解析。
+ * 场景 UI 预设（获得提示 + 交互点悬停 + 返回按钮）的默认值、JSON 规范化与解析。
  * 持久化键为 editor.sceneUiJson；交互点实例通过 useGlobal 决定是否跟随全局 hotspotHover。
  */
 
@@ -16,6 +16,10 @@ import {
   defaultItemToastConfig,
   normalizeItemToastConfig,
 } from "./item-toast-config";
+import {
+  defaultSceneReturnButtonConfig,
+  normalizeSceneReturnButtonConfig,
+} from "./scene-return-button-config";
 import type {
   HotspotElement,
   HotspotHoverShadow,
@@ -59,13 +63,14 @@ function normalizeGlobalHotspotHover(raw: unknown): HotspotHoverShadow {
 /**
  * 返回场景 UI 预设的完整默认配置。
  *
- * @returns version 1，itemToast 与 hotspotHover 均为领域默认值
+ * @returns version 1，itemToast / hotspotHover / sceneReturn 均为领域默认值
  *
  * @example
  * ```ts
  * const ui = defaultSceneUiConfig();
  * // ui.itemToast.placement === "above"
  * // ui.hotspotHover 不含 useGlobal
+ * // ui.sceneReturn.enabled === true
  * ```
  */
 export function defaultSceneUiConfig(): SceneUiConfig {
@@ -73,6 +78,7 @@ export function defaultSceneUiConfig(): SceneUiConfig {
     version: 1,
     itemToast: defaultItemToastConfig(),
     hotspotHover: normalizeGlobalHotspotHover(defaultHotspotHoverShadow()),
+    sceneReturn: defaultSceneReturnButtonConfig(),
   };
 }
 
@@ -82,6 +88,7 @@ export function defaultSceneUiConfig(): SceneUiConfig {
  * - 非对象 / null / undefined → 完整默认
  * - `itemToast` 经 `normalizeItemToastConfig`
  * - `hotspotHover` 经全局段 normalize（忽略 useGlobal）
+ * - `sceneReturn` 经 `normalizeSceneReturnButtonConfig`；缺省段补默认
  * - `version` 恒为 1
  *
  * @param raw - 原始 JSON 解析结果或部分字段
@@ -110,6 +117,9 @@ export function normalizeSceneUiConfig(raw: unknown): SceneUiConfig {
     ),
     hotspotHover: normalizeGlobalHotspotHover(
       obj.hotspotHover !== undefined ? obj.hotspotHover : defaults.hotspotHover,
+    ),
+    sceneReturn: normalizeSceneReturnButtonConfig(
+      obj.sceneReturn !== undefined ? obj.sceneReturn : defaults.sceneReturn,
     ),
   };
 }

@@ -9,7 +9,7 @@
 
 # 场景返回按钮（多级栈）— 设计规格
 
-- **状态**: 已批准；实现计划见 `docs/superpowers/plans/2026-08-08-scene-return-button.md`
+- **状态**: 已实现（代码完成；Studio 手测待作者确认）；实现计划见 `docs/superpowers/plans/2026-08-08-scene-return-button.md`
 - **包**: `ext-27b96b`
 - **相关**: 场景 UI 预设 `2026-08-08-scene-ui-presets-design.md`；打开场景 method / `openScene` 动作
 

@@ -7,7 +7,6 @@
  * 场景交互运行时壳（纯玩家画面）：场景 + 动作链 / toast / once；
  * 无预览顶栏、无背包 HUD（背包由独立程序 backpack-hud 负责）。
  * 动作链执行中忽略重复 hotspot 点击（防抖）。
- * Toast / 悬停预设经 editor.sceneUiJson（useSceneUiConfig）注入。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,6 +19,10 @@ import { executeSceneActions } from "../domain/actions";
 import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
 import { markConsumed } from "../domain/progress";
+import {
+  parseSceneReturnStackJson,
+  stringifySceneReturnStack,
+} from "../domain/scene-return-stack";
 import {
   advanceToastQueue,
   emptyToastQueue,
@@ -45,6 +48,7 @@ import { useSaveValue } from "../store/use-save-value";
 import { useSceneUiConfig } from "../store/use-scene-ui-config";
 import { useTheme } from "../theme/theme-provider";
 import { createActionRuntime } from "./create-action-runtime";
+import { SceneReturnButton } from "./scene-return-button";
 import { SceneView } from "./scene-view";
 
 /**
@@ -110,6 +114,11 @@ export function RuntimeShell({
     "currentSceneId",
     ctx,
   );
+  const [returnStackJson, setReturnStackJson] = useSaveValue(
+    save,
+    "sceneReturnStackJson",
+    ctx,
+  );
 
   const [toastQueue, setToastQueue] = useState<ToastQueueState>(() =>
     emptyToastQueue(),
@@ -123,6 +132,9 @@ export function RuntimeShell({
   const scenesRef = useRef<SceneDefinition[]>(library.scenes);
   const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
   const progressRef = useRef<SceneProgress>(progress);
+  /** 当前场景 id / 返回栈 JSON 引用，供 ActionRuntime 闭包读取最新值 */
+  const currentSceneIdRef = useRef<string>(currentSceneId);
+  const returnStackJsonRef = useRef<string>(returnStackJson);
 
   /**
    * 动作链执行中为 true；期间忽略重复 hotspot 点击，避免并发动作链。
@@ -133,6 +145,8 @@ export function RuntimeShell({
   scenesRef.current = library.scenes;
   itemsRef.current = itemsLibrary.items;
   progressRef.current = progress;
+  currentSceneIdRef.current = currentSceneId;
+  returnStackJsonRef.current = returnStackJson;
 
   const scene = useMemo(
     () => resolveCurrentScene(library.scenes, currentSceneId),
@@ -182,10 +196,26 @@ export function RuntimeShell({
         getItems: () => itemsRef.current,
         getInventory: () => inventoryRef.current,
         setInventory,
-        setCurrentSceneId,
+        setCurrentSceneId: (id) => {
+          currentSceneIdRef.current = id;
+          setCurrentSceneId(id);
+        },
+        getCurrentSceneId: () => currentSceneIdRef.current,
+        getReturnStack: () =>
+          parseSceneReturnStackJson(returnStackJsonRef.current),
+        setReturnStack: (stack) => {
+          const json = stringifySceneReturnStack(stack);
+          returnStackJsonRef.current = json;
+          setReturnStackJson(json);
+        },
         enqueueToast: handleEnqueueToast,
       }),
-    [setInventory, setCurrentSceneId, handleEnqueueToast],
+    [
+      setInventory,
+      setCurrentSceneId,
+      setReturnStackJson,
+      handleEnqueueToast,
+    ],
   );
 
   /**
@@ -257,6 +287,23 @@ export function RuntimeShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
           globalHoverShadow={sceneUi.hotspotHover}
+        />
+
+        {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}
+        <SceneReturnButton
+          config={sceneUi.sceneReturn}
+          stackJson={returnStackJson}
+          currentSceneId={currentSceneId}
+          scenes={library.scenes}
+          designWidth={designSize.width}
+          designHeight={designSize.height}
+          onReturn={(id, stack) => {
+            const json = stringifySceneReturnStack(stack);
+            returnStackJsonRef.current = json;
+            setReturnStackJson(json);
+            currentSceneIdRef.current = id;
+            setCurrentSceneId(id);
+          }}
         />
       </div>
     </div>

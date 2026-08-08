@@ -166,10 +166,14 @@ function EditorAppContent(): React.ReactElement {
          * 若预览尚未选场景，则用编辑器 defaultSceneId 填入。
          */
         setPreviewSave(
-          createSettingsPreviewSave(ctx, {
-            currentSceneId: defaultSceneId,
-            isEditMode: false,
-          }),
+          createSettingsPreviewSave(
+            ctx,
+            {
+              currentSceneId: defaultSceneId,
+              isEditMode: false,
+            },
+            { resetReturnStack: true },
+          ),
         );
         setPreviewSessionKey((n) => n + 1);
         setMode("preview");

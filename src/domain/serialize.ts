@@ -5,6 +5,7 @@
  * 版本: 0.1.3
  *
  * 场景库 / 物品库 / 库存 / 进度 / HUD 的 JSON 安全编解码与规范化。
+ * openScene 动作含 returnTarget / pushReturn 规范化；
  * 交互点 hoverShadow 经 normalizeHotspotHoverShadow 保留 useGlobal 决策字段。
  */
 import { clamp01 } from "../shared/coords";
@@ -276,12 +277,25 @@ function normalizeSceneAction(raw: unknown): SceneAction | null {
     case "none":
       return { type: "none" };
 
-    case "openScene":
-      return {
+    case "openScene": {
+      const action: Extract<SceneAction, { type: "openScene" }> = {
         type: "openScene",
         sceneIdOrName:
           typeof obj.sceneIdOrName === "string" ? obj.sceneIdOrName : "",
       };
+
+      // 可选返回目标：trim 后非空才写入，避免空串污染
+      if (typeof obj.returnTarget === "string" && obj.returnTarget.trim()) {
+        action.returnTarget = obj.returnTarget.trim();
+      }
+
+      // pushReturn 仅在显式 false 时写 false；其余（true / 缺省）按默认 true 处理
+      if (obj.pushReturn === false) {
+        action.pushReturn = false;
+      }
+
+      return action;
+    }
 
     case "giveItem": {
       const action: Extract<SceneAction, { type: "giveItem" }> = {

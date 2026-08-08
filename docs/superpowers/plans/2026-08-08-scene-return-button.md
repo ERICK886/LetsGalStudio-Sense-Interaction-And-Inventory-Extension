@@ -687,11 +687,11 @@ git commit -m "feat: 运行时场景返回浮层按钮"
 
 **Files:** 无新文件；对照 spec §6
 
-- [ ] **Step 1: `npm run build`**
+- [x] **Step 1: `npm run build`**
 
 Expected: exit 0
 
-- [ ] **Step 2: 手工清单（打勾）
+- [x] **Step 2: 手工清单（打勾）** — 静态代码验证 7/7 通过；Studio 手测待作者确认（见 `.superpowers/sdd/task-7-report.md`）
 
 | # | 场景 | 期望 |
 | --- | --- | --- |
@@ -703,7 +703,7 @@ Expected: exit 0
 | 6 | 重新「运行预览」 | 沙箱栈为空 |
 | 7 | 旧工程无 sceneReturn | 不报错，默认按钮可用 |
 
-- [ ] **Step 3: 更新 spec 状态**
+- [x] **Step 3: 更新 spec 状态**
 
 `2026-08-08-scene-return-button-design.md` 状态改为「已实现」或「实现中→已验收」（按实际）。
 

@@ -2,11 +2,11 @@
  * types.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.3
+ * 版本: 0.1.4
  *
  * 场景交互扩展的领域类型定义（纯类型，无运行时逻辑）。
- * SceneUiConfig 聚合获得提示与交互点悬停全局预设；
- * HotspotHoverShadow.useGlobal 控制是否跟随全局悬停。
+ * SceneAction 含 openScene 返回栈选项（returnTarget / pushReturn）。
+ * SceneUiConfig 聚合获得提示、交互点悬停全局预设与场景返回按钮外观。
  */
 export type MotionPresetId =
   | "none"
@@ -77,7 +77,14 @@ export type ToastPlacement =
 
 export type SceneAction =
   | { type: "none" }
-  | { type: "openScene"; sceneIdOrName: string }
+  | {
+      type: "openScene";
+      sceneIdOrName: string;
+      /** 缺省：自动压入打开前的 currentSceneId；可指定为另一场景 id/name */
+      returnTarget?: string;
+      /** 缺省 true；false = 只切场景、不改返回栈 */
+      pushReturn?: boolean;
+    }
   | {
       type: "giveItem";
       itemId: string;
@@ -199,6 +206,28 @@ export interface UiTextStyle {
   label?: string;
 }
 
+/**
+ * 场景返回按钮外观与布局（挂于 SceneUiConfig.sceneReturn）。
+ *
+ * `enabled === false` 时运行时永不渲染返回按钮；栈逻辑仍可由动作/剧本驱动。
+ */
+export interface SceneReturnButtonConfig {
+  /** 总开关；false 时永不显示 */
+  enabled: boolean;
+  /** 设计分辨率下的矩形（与背包等节点一致使用 UiRect） */
+  rect: UiRect;
+  /** 按钮文案（normalize 后保证非空） */
+  label: string;
+  /** 常态：盒模型 + 文本样式 */
+  style: UiBoxStyle & UiTextStyle;
+  /** 可选背景/图标 URL 或资源路径 */
+  imageSrc?: string;
+  /** 悬停态样式覆盖（可选） */
+  hoverStyle?: Partial<UiBoxStyle & UiTextStyle>;
+  /** 悬停态可选背景/图标 */
+  hoverImageSrc?: string;
+}
+
 /** 全局获得物品 Toast 样式与锚点配置（version 1） */
 export interface ItemToastConfig {
   version: 1;
@@ -210,7 +239,7 @@ export interface ItemToastConfig {
 }
 
 /**
- * 场景 UI 预设（version 1）：获得提示 + 交互点悬停全局默认。
+ * 场景 UI 预设（version 1）：获得提示 + 交互点悬停 + 返回按钮全局默认。
  *
  * 持久化于 `editor.sceneUiJson`；`hotspotHover` 段不含 `useGlobal`。
  */
@@ -220,6 +249,8 @@ export interface SceneUiConfig {
   itemToast: ItemToastConfig;
   /** 交互点悬停阴影全局默认（不含 useGlobal） */
   hotspotHover: HotspotHoverShadow;
+  /** 场景返回按钮外观与布局 */
+  sceneReturn: SceneReturnButtonConfig;
 }
 
 /**

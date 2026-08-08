@@ -2,16 +2,16 @@
  * create-action-runtime.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 将领域 ActionRuntime 接到存档 / 库存 / toast 队列等状态层。
+ * 将领域 ActionRuntime 接到存档 / 库存 / toast / 剧本 flow 等状态层。
  */
 
 import type { ActionRuntime } from "../domain/actions";
 import { giveItemToInventory } from "../domain/inventory";
 import type { ItemToastOverrides } from "../domain/item-toast-config";
 import { findItem } from "../domain/item-registry";
-import { findScene } from "../domain/scene-registry";
+import { openSceneWithReturn } from "../domain/scene-return-stack";
 import type {
   ElementMotion,
   InventoryState,
@@ -57,6 +57,27 @@ export interface CreateActionRuntimeDeps {
   setCurrentSceneId: (sceneId: string) => void;
 
   /**
+   * 读取当前场景 id（save.currentSceneId）。
+   *
+   * 建议用 ref / getter，确保每次调用读到最新值，避免闭包过期。
+   */
+  getCurrentSceneId: () => string;
+
+  /**
+   * 读取当前场景返回栈（解析自 save.sceneReturnStackJson）。
+   *
+   * 建议用 ref / getter，确保每次调用读到最新值，避免闭包过期。
+   */
+  getReturnStack: () => string[];
+
+  /**
+   * 写回返回栈（应序列化为 sceneReturnStackJson 并触发 save 持久化）。
+   *
+   * @param stack - 新返回栈
+   */
+  setReturnStack: (stack: string[]) => void;
+
+  /**
    * 将 toast 请求入队到 UI 队列状态。
    *
    * @param payload - 与 ActionRuntime.enqueueToast 同形（含动作级可选覆盖）
@@ -78,7 +99,8 @@ export interface CreateActionRuntimeDeps {
 /**
  * 组装可注入 `executeSceneActions` 的 ActionRuntime。
  *
- * - `openScene`：`findScene` 成功则写 `currentSceneId`，否则返回 false
+ * - `openScene`：经 `openSceneWithReturn` 计算下一场景与返回栈，成功则
+ *   写回 `sceneReturnStackJson` 与 `currentSceneId`，否则返回 false 且不改存档
  * - `giveItem`：`findItem` + `giveItemToInventory`；找不到物品返回 false
  * - `enqueueToast`：转发给依赖的队列入队
  * - `warn`：默认 `console.warn` + `logError`
@@ -94,6 +116,10 @@ export interface CreateActionRuntimeDeps {
  *   getInventory: () => inventoryRef.current,
  *   setInventory,
  *   setCurrentSceneId,
+ *   getCurrentSceneId: () => currentSceneIdRef.current,
+ *   getReturnStack: () => parseSceneReturnStackJson(returnStackJsonRef.current),
+ *   setReturnStack: (stack) =>
+ *     setReturnStackJson(stringifySceneReturnStack(stack)),
  *   enqueueToast: (p) => setToastQueue((q) => enqueueToast(q, p)),
  * });
  * await executeSceneActions(hs.actions, hs.id, runtime);
@@ -119,17 +145,35 @@ export function createActionRuntime(
 
   return {
     /**
+     * 打开目标场景，并按 options 压入返回栈。
+     *
+     * - 经 {@link openSceneWithReturn} 统一计算下一场景与下一栈；
+     * - 成功后写回返回栈与 currentSceneId；失败返回 false 且不改存档
+     *
      * @param sceneIdOrName - 场景 id 或 name
+     * @param options.returnTarget - 可选；覆盖压栈的返回目标
+     * @param options.pushReturn - 缺省 true；false 时只切场景
      * @returns 是否成功打开
      */
-    openScene(sceneIdOrName: string): boolean {
-      const scene = findScene(deps.getScenes(), sceneIdOrName);
+    openScene(
+      sceneIdOrName: string,
+      options?: { returnTarget?: string; pushReturn?: boolean },
+    ): boolean {
+      const result = openSceneWithReturn({
+        scenes: deps.getScenes(),
+        currentSceneId: deps.getCurrentSceneId(),
+        stack: deps.getReturnStack(),
+        targetKey: sceneIdOrName,
+        returnTarget: options?.returnTarget,
+        pushReturn: options?.pushReturn,
+      });
 
-      if (scene === undefined) {
+      if (!result.ok || result.nextSceneId === null) {
         return false;
       }
 
-      deps.setCurrentSceneId(scene.id);
+      deps.setReturnStack(result.nextStack);
+      deps.setCurrentSceneId(result.nextSceneId);
 
       return true;
     },

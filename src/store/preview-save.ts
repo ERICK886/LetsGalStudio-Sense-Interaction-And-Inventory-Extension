@@ -16,6 +16,7 @@ import {
   PREVIEW_CURRENT_SCENE_ID_KEY,
   PREVIEW_INVENTORY_JSON_KEY,
   PREVIEW_PROGRESS_JSON_KEY,
+  PREVIEW_SCENE_RETURN_STACK_JSON_KEY,
   readPreviewSaveSetting,
   writePreviewSaveSetting,
 } from "./preview-save-settings";
@@ -24,6 +25,19 @@ import type { SceneInteractionSaveMap } from "./save-types";
 
 const DEFAULT_INVENTORY = '{"entries":[]}';
 const DEFAULT_PROGRESS = '{"consumed":{}}';
+const DEFAULT_SCENE_RETURN_STACK = "[]";
+
+/**
+ * `createSettingsPreviewSave` 可选行为。
+ */
+export type SettingsPreviewSaveOptions = {
+  /**
+   * 进入编辑器「运行预览」时为 `true`：强制清空返回栈并写回 settings。
+   *
+   * @default false
+   */
+  resetReturnStack?: boolean;
+};
 
 /**
  * @param raw - settings 原始值
@@ -61,6 +75,7 @@ export function createPreviewSave(
     progressJson: DEFAULT_PROGRESS,
     isEditMode: false,
     currentSceneId: "",
+    sceneReturnStackJson: DEFAULT_SCENE_RETURN_STACK,
     ...initial,
   };
 
@@ -120,6 +135,14 @@ function persistPreviewField(
 
   if (key === "currentSceneId") {
     writePreviewSaveSetting(ctx, PREVIEW_CURRENT_SCENE_ID_KEY, value);
+
+    return;
+  }
+
+  if (key === "sceneReturnStackJson") {
+    writePreviewSaveSetting(ctx, PREVIEW_SCENE_RETURN_STACK_JSON_KEY, value);
+
+    return;
   }
 
   // isEditMode 预览不落 settings
@@ -130,13 +153,14 @@ function persistPreviewField(
  *
  * @param ctx - 扩展上下文（读写 scene-interaction settings）
  * @param overrides - 可选覆盖；仅当沙箱对应字段为空时填入 currentSceneId 等
+ * @param options - 行为选项；编辑器运行预览应传 `{ resetReturnStack: true }`
  * @returns SaveAPI；set 时写回 settings 并 notifySaveField
  *
  * @example
  * ```ts
  * const save = createSettingsPreviewSave(ctx, {
  *   currentSceneId: "room-1",
- * });
+ * }, { resetReturnStack: true });
  * useEffect(() => bindInventoryPersistence(save), [save]);
  * ```
  *
@@ -146,6 +170,7 @@ function persistPreviewField(
 export function createSettingsPreviewSave(
   ctx: ExtensionContext,
   overrides: Partial<SceneInteractionSaveMap> = {},
+  options: SettingsPreviewSaveOptions = {},
 ): SaveAPI<SceneInteractionSaveMap> {
   const loadedInventory = asString(
     readPreviewSaveSetting(ctx, PREVIEW_INVENTORY_JSON_KEY),
@@ -159,11 +184,30 @@ export function createSettingsPreviewSave(
     readPreviewSaveSetting(ctx, PREVIEW_CURRENT_SCENE_ID_KEY),
     "",
   );
+  const loadedReturnStack = asString(
+    readPreviewSaveSetting(ctx, PREVIEW_SCENE_RETURN_STACK_JSON_KEY),
+    DEFAULT_SCENE_RETURN_STACK,
+  );
 
   const overrideSceneId =
     typeof overrides.currentSceneId === "string"
       ? overrides.currentSceneId.trim()
       : "";
+
+  let sceneReturnStackJson: string;
+
+  if (options.resetReturnStack === true) {
+    sceneReturnStackJson = DEFAULT_SCENE_RETURN_STACK;
+    writePreviewSaveSetting(
+      ctx,
+      PREVIEW_SCENE_RETURN_STACK_JSON_KEY,
+      DEFAULT_SCENE_RETURN_STACK,
+    );
+  } else if (typeof overrides.sceneReturnStackJson === "string") {
+    sceneReturnStackJson = overrides.sceneReturnStackJson;
+  } else {
+    sceneReturnStackJson = loadedReturnStack;
+  }
 
   const store: SceneInteractionSaveMap = {
     inventoryJson:
@@ -184,6 +228,7 @@ export function createSettingsPreviewSave(
         : overrideSceneId.length > 0
           ? overrideSceneId
           : "",
+    sceneReturnStackJson,
   };
 
   const api: SaveAPI<SceneInteractionSaveMap> = {

@@ -21,6 +21,10 @@ export const PREVIEW_PROGRESS_JSON_KEY = "previewProgressJson";
 /** 预览当前场景 ID（settings） */
 export const PREVIEW_CURRENT_SCENE_ID_KEY = "previewCurrentSceneId";
 
+/** 预览场景返回栈 JSON（settings） */
+export const PREVIEW_SCENE_RETURN_STACK_JSON_KEY =
+  "previewSceneReturnStackJson";
+
 /**
  * @param value - settings 原始值
  * @returns 是否视为空
