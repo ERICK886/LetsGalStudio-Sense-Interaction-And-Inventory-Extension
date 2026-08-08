@@ -9,6 +9,7 @@
 | File | Action | Purpose |
 |------|--------|---------|
 | `src/backpack/backpack-screen.tsx` | Modify | `resolveBackpackLayout` 绝对节点渲染 + letterbox scale + 入退场动画 |
+| `src/store/use-backpack-ui-config.ts` | Add | 订阅 `backpackScreenJson`（`useBackpackScreenConfig`） |
 
 ## Behavior
 
@@ -30,4 +31,5 @@ npm run build  → ✓ success
 
 ```
 feat: render backpack screen from v2 node layout
+feat: add backpack screen config hook for v2 runtime
 ```
