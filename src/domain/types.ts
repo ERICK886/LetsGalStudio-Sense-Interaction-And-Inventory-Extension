@@ -98,6 +98,26 @@ export interface ItemsLibraryFile {
   items: ItemDefinition[];
 }
 
+/** 配方原料/产物一行 */
+export interface RecipeItemAmount {
+  itemId: string;
+  /** 数量；规范化后 >= 1 */
+  count: number;
+}
+
+export interface RecipeDefinition {
+  id: string;
+  name: string;
+  ingredients: RecipeItemAmount[];
+  products: RecipeItemAmount[];
+  description?: string;
+}
+
+export interface RecipesLibraryFile {
+  version: 1;
+  recipes: RecipeDefinition[];
+}
+
 export type InventoryEntry =
   | { kind: "stack"; itemId: string; count: number; lastGainedAt: number }
   | { kind: "unique"; instanceId: string; itemId: string; lastGainedAt: number };

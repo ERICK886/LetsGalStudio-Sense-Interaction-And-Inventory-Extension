@@ -31,7 +31,7 @@ export function itemFields(item: ItemDefinition): FieldSchema[] {
       key: "stackable",
       kind: "boolean",
       label: "可堆叠",
-      description: "开启后同 id 物品合并为一条 stack；关闭则为 unique 实例",
+      description: "开启后相同物品合并数量；关闭则每次独立获得",
     },
   ];
 
