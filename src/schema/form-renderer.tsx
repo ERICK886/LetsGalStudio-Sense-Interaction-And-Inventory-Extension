@@ -2,13 +2,13 @@
  * form-renderer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * Schema 驱动受控属性表单渲染器（精简版）。
  * 支持 string / number / boolean / enum / asset / color 叶子，以及 section / grid 布局。
  */
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import {
@@ -17,6 +17,7 @@ import {
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { normalizeHexColor, toColorInputValue } from "./color-utils";
 import {
   getNestedValue,
   isLayoutField,
@@ -415,7 +416,125 @@ function renderAssetField<T extends Record<string, unknown>>(
 }
 
 /**
- * 渲染 color 字段（color + 文本旁路）。
+ * 颜色字段控件属性（对齐大地图系统 ColorField）。
+ *
+ * @template T - 被编辑对象类型
+ */
+interface ColorFieldControlProps<T extends Record<string, unknown>> {
+  field: ColorFieldSchema;
+  value: T;
+  onChange: FormOnChange<T>;
+  tokens: ThemeTokens;
+}
+
+/**
+ * 颜色叶子控件：原生色板 + HEX 文本旁路。
+ * 色板即时写入；文本失焦时经 `normalizeHexColor` 校验，非法不写入。
+ *
+ * @param props - 字段、领域对象、变更回调与主题
+ * @returns 颜色选择器节点
+ *
+ * @example
+ * ```tsx
+ * <ColorFieldControl
+ *   field={{ kind: "color", key: "accent", label: "强调色" }}
+ *   value={cfg}
+ *   onChange={setCfg}
+ *   tokens={tokens}
+ * />
+ * ```
+ */
+function ColorFieldControl<T extends Record<string, unknown>>({
+  field,
+  value,
+  onChange,
+  tokens,
+}: ColorFieldControlProps<T>): React.ReactElement {
+  const raw = getNestedValue(value, field.key);
+  const stored = typeof raw === "string" ? raw : "";
+  const [hexDraft, setHexDraft] = useState(stored);
+  const id = `field-${field.key}`;
+  const fallback =
+    typeof field.placeholder === "string" && field.placeholder.trim() !== ""
+      ? field.placeholder
+      : "#64e0d0";
+
+  /**
+   * 外部 value 变化时同步草稿（切换选中 / 撤销等）。
+   */
+  useEffect(() => {
+    setHexDraft(stored);
+  }, [stored]);
+
+  /**
+   * 色板即时写入（始终为合法 #RRGGBB）。
+   *
+   * @param next - input[type=color] 的 value
+   */
+  const handleColorPick = (next: string): void => {
+    setHexDraft(next);
+    onChange(setNestedValue(value, field.key, next));
+  };
+
+  /**
+   * HEX 失焦：规范化后写入；非法则回退显示为当前存储值。
+   */
+  const handleHexBlur = (): void => {
+    const normalized = normalizeHexColor(hexDraft);
+
+    if (normalized === null) {
+      setHexDraft(stored);
+      return;
+    }
+
+    setHexDraft(normalized);
+    onChange(setNestedValue(value, field.key, normalized));
+  };
+
+  return (
+    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          id={`${id}-swatch`}
+          type="color"
+          aria-label={`${field.label} 色板`}
+          value={toColorInputValue(hexDraft || stored, fallback)}
+          onChange={(e) => handleColorPick(e.target.value)}
+          style={{
+            width: 40,
+            height: 34,
+            padding: 2,
+            borderRadius: 6,
+            border: `1px solid ${tokens.border}`,
+            background: tokens.bgSunken,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        />
+        <input
+          id={id}
+          type="text"
+          value={hexDraft}
+          placeholder={field.placeholder ?? "#RRGGBB"}
+          spellCheck={false}
+          style={{ ...inputStyle(tokens), flex: 1 }}
+          onChange={(e) => setHexDraft(e.target.value)}
+          onBlur={handleHexBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+        />
+      </div>
+      <FieldHint text={field.description} tokens={tokens} />
+    </div>
+  );
+}
+
+/**
+ * 渲染 color 字段（委托 ColorFieldControl，对齐大地图系统）。
  *
  * @param field - ColorFieldSchema
  * @param value - 当前对象
@@ -429,37 +548,13 @@ function renderColorField<T extends Record<string, unknown>>(
   onChange: FormOnChange<T>,
   tokens: ThemeTokens,
 ): React.ReactElement {
-  const raw = getNestedValue(value, field.key);
-  const str = typeof raw === "string" && raw.trim() !== "" ? raw : "#000000";
-  const id = `field-${field.key}`;
-  const hex6 = /^#[0-9a-fA-F]{6}/.test(str) ? str.slice(0, 7) : "#000000";
-
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
-      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
-          type="color"
-          value={hex6}
-          aria-label={field.label}
-          onChange={(e) => {
-            onChange(setNestedValue(value, field.key, e.target.value));
-          }}
-          style={{ width: 36, height: 32, padding: 0, border: "none" }}
-        />
-        <input
-          id={id}
-          type="text"
-          value={typeof raw === "string" ? raw : ""}
-          placeholder={field.placeholder ?? "#000000"}
-          style={{ ...inputStyle(tokens), flex: 1 }}
-          onChange={(e) => {
-            onChange(setNestedValue(value, field.key, e.target.value));
-          }}
-        />
-      </div>
-      <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    <ColorFieldControl
+      field={field}
+      value={value}
+      onChange={onChange}
+      tokens={tokens}
+    />
   );
 }
 

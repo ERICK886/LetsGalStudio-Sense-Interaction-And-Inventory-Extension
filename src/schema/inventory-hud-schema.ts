@@ -2,7 +2,7 @@
  * inventory-hud-schema.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 物品栏 HUD（InventoryHudConfig）属性表单 schema。
  * 供编辑器「UI」区编辑 settings.inventoryHudJson。
@@ -11,14 +11,14 @@
 import type { FieldSchema } from "./types";
 
 /**
- * 生成物品栏外观（快捷栏定位 / 槽位 / 文案 / CSS）字段 schema。
+ * 生成物品栏外观（快捷栏定位 / 槽位 / 文案 / 强调色 / CSS）字段 schema。
  *
  * @returns FieldSchema 数组，供 FormRenderer 渲染
  *
  * @example
  * ```ts
  * const fields = inventoryHudFields();
- * // 含 left / top / slotSize / gap / openBagLabel / customCss
+ * // 含 left / top / slotSize / gap / accent / openBagLabel / customCss
  * ```
  */
 export function inventoryHudFields(): FieldSchema[] {
@@ -68,6 +68,14 @@ export function inventoryHudFields(): FieldSchema[] {
               description: "槽位之间的间距（像素）",
             },
           ],
+        },
+        {
+          key: "accent",
+          kind: "color",
+          label: "强调色",
+          placeholder: "#64e0d0",
+          description:
+            "「打开背包」按钮、数量角标与槽位边框高亮（色板 + HEX，同大地图颜色选择器）",
         },
         {
           key: "openBagLabel",

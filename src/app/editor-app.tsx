@@ -30,7 +30,7 @@ import type { ThemeMode } from "../theme/tokens";
 /**
  * 编辑器顶部分区（与 editor-shell 保持一致）。
  */
-type EditorSection = "scenes" | "items" | "recipes";
+type EditorSection = "scenes" | "items" | "recipes" | "ui";
 
 /**
  * 编辑器 App 本地模式：作者编辑 vs 运行预览。

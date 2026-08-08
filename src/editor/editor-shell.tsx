@@ -55,9 +55,10 @@ import { RecipePreviewPanel } from "./panels/recipe-preview-panel";
 import { RecipePropertyPanel } from "./panels/recipe-property-panel";
 import { SceneListPanel } from "./panels/scene-list-panel";
 import { DesignResolutionMenu } from "./ui/design-resolution-menu";
+import { UiEditorPanel } from "./ui/ui-editor-panel";
 
-/** 编辑器顶部分区：场景 / 物品库 / 配方。 */
-export type EditorSection = "scenes" | "items" | "recipes";
+/** 编辑器顶部分区：场景 / 物品库 / 配方 / UI。 */
+export type EditorSection = "scenes" | "items" | "recipes" | "ui";
 
 /**
  * EditorShell 组件属性。
@@ -69,7 +70,7 @@ export interface EditorShellProps {
   /**
    * 切换编辑分区。
    *
-   * @param section - `"scenes"` | `"items"` | `"recipes"`
+   * @param section - `"scenes"` | `"items"` | `"recipes"` | `"ui"`
    */
   onEditorSectionChange: (section: EditorSection) => void;
 
@@ -544,13 +545,17 @@ export function EditorShell({
       ? historyRef.current.canUndo
       : editorSection === "items"
         ? itemsHistoryRef.current.canUndo
-        : recipesHistoryRef.current.canUndo;
+        : editorSection === "recipes"
+          ? recipesHistoryRef.current.canUndo
+          : false;
   const canRedo =
     editorSection === "scenes"
       ? historyRef.current.canRedo
       : editorSection === "items"
         ? itemsHistoryRef.current.canRedo
-        : recipesHistoryRef.current.canRedo;
+        : editorSection === "recipes"
+          ? recipesHistoryRef.current.canRedo
+          : false;
 
   /**
    * 更新当前场景定义并写回库。
@@ -696,7 +701,9 @@ export function EditorShell({
       ? "场景"
       : editorSection === "items"
         ? "物品库"
-        : "配方";
+        : editorSection === "recipes"
+          ? "配方"
+          : "UI";
 
   /**
    * 导出当前场景库 JSON 并触发下载。
@@ -984,9 +991,21 @@ export function EditorShell({
           >
             配方
           </button>
+          <button
+            type="button"
+            role="tab"
+            data-testid="editor-section-ui"
+            aria-selected={editorSection === "ui"}
+            onClick={() => onEditorSectionChange("ui")}
+            style={topBarButtonStyle(tokens, {
+              variant: editorSection === "ui" ? "active" : "default",
+            })}
+          >
+            UI
+          </button>
         </div>
 
-        {editorSection === "scenes" ? (
+        {editorSection === "scenes" || editorSection === "ui" ? (
           <DesignResolutionMenu size={designSize} onChange={setDesignSize} />
         ) : null}
 
@@ -1309,6 +1328,8 @@ export function EditorShell({
             </aside>
           </>
         ) : null}
+
+        {editorSection === "ui" ? <UiEditorPanel /> : null}
       </div>
     </div>
   );

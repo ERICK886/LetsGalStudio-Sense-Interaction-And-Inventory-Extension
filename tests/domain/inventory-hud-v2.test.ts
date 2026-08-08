@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   defaultInventoryHud,
   normalizeInventoryHud,
+  resetInventoryHudNode,
 } from "../../src/domain/inventory-hud";
 import {
   parseInventoryHudJson,
@@ -44,5 +45,34 @@ describe("normalizeInventoryHud v2", () => {
     const json = stringifyInventoryHud(defaultInventoryHud());
     expect(JSON.parse(json).version).toBe(2);
     expect(parseInventoryHudJson(json).nodes.quickbarRoot).toBeTruthy();
+  });
+
+  it("resetInventoryHudNode 仅重置指定节点", () => {
+    const defaults = defaultInventoryHud();
+    const customized = normalizeInventoryHud({
+      version: 2,
+      nodes: {
+        quickbarRoot: {
+          ...defaults.nodes.quickbarRoot,
+          rect: { x: 100, y: 200 },
+          slotSize: 48,
+        },
+        openBagButton: {
+          ...defaults.nodes.openBagButton,
+          style: { ...defaults.nodes.openBagButton.style, label: "自定义" },
+        },
+      },
+      accent: "#ff0000",
+      customCss: "body{}",
+    });
+
+    const resetQuickbar = resetInventoryHudNode(customized, "quickbarRoot");
+    expect(resetQuickbar.nodes.quickbarRoot).toEqual(defaults.nodes.quickbarRoot);
+    expect(resetQuickbar.nodes.openBagButton.style.label).toBe("自定义");
+    expect(resetQuickbar.accent).toBe("#ff0000");
+
+    const resetButton = resetInventoryHudNode(customized, "openBagButton");
+    expect(resetButton.nodes.openBagButton).toEqual(defaults.nodes.openBagButton);
+    expect(resetButton.nodes.quickbarRoot.rect).toEqual({ x: 100, y: 200 });
   });
 });

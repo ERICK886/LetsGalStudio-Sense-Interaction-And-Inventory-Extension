@@ -10,6 +10,10 @@ import { clamp01 } from "../shared/coords";
 import { logError } from "../shared/logger";
 import { normalizeHotspotLabel } from "./hotspot-label";
 import {
+  defaultBackpackScreen,
+  normalizeBackpackScreen,
+} from "./backpack-screen-config";
+import {
   defaultInventoryHud,
   normalizeInventoryHud,
 } from "./inventory-hud";
@@ -23,6 +27,7 @@ import {
   normalizeElementMotion,
 } from "./motion";
 import type {
+  BackpackScreenConfig,
   ElementMotion,
   HotspotElement,
   InventoryEntry,
@@ -798,4 +803,34 @@ export function parseInventoryHudJson(raw: string): InventoryHudConfig {
  */
 export function stringifyInventoryHud(config: InventoryHudConfig): string {
   return JSON.stringify({ ...config, version: 2 as const });
+}
+
+/**
+ * 解析全屏背包布局 JSON；空串静默回退默认。
+ *
+ * @param raw - JSON 字符串
+ * @returns BackpackScreenConfig
+ */
+export function parseBackpackScreenJson(raw: string): BackpackScreenConfig {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return defaultBackpackScreen();
+  }
+
+  const parsed = safeParseJson(raw, "backpackScreen");
+
+  if (parsed === null) {
+    return defaultBackpackScreen();
+  }
+
+  return normalizeBackpackScreen(parsed);
+}
+
+/**
+ * 序列化全屏背包布局。
+ *
+ * @param config - 配置
+ * @returns JSON 文本
+ */
+export function stringifyBackpackScreen(config: BackpackScreenConfig): string {
+  return JSON.stringify(config);
 }
