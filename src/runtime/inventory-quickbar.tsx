@@ -2,14 +2,14 @@
  * inventory-quickbar.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 运行时 8 格快捷栏：按最近获得截断，定位取自 InventoryHudConfig；
- * 点击槽打开大图，打开背包进入完整网格。
- * 另导出 InventoryHudLayer：自订阅 inventory / items / hud JSON。
+ * 点击槽打开大图，打开背包进入完整网格（含合成 Tab 接线）。
+ * 另导出 InventoryHudLayer：自订阅 inventory / items / recipes / hud JSON。
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   useExtensionContext,
   type SaveAPI,
@@ -18,16 +18,20 @@ import {
   getQuickbarEntries,
   QUICKBAR_SLOTS,
 } from "../domain/inventory";
+import { craftRecipeInInventory } from "../domain/crafting";
 import { findItem } from "../domain/item-registry";
+import { findRecipe } from "../domain/recipe-registry";
 import { parseInventoryHudJson } from "../domain/serialize";
 import type {
   InventoryEntry,
   InventoryHudConfig,
   InventoryState,
   ItemDefinition,
+  RecipeDefinition,
 } from "../domain/types";
 import { useInventory } from "../store/inventory-persistence";
 import { useItemsLibrary } from "../store/items-persistence";
+import { useRecipesLibrary } from "../store/recipes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import {
   FONT_SIZE_DEFAULT,
@@ -48,6 +52,19 @@ export interface InventoryQuickbarProps {
 
   /** HUD 外观与定位 */
   hud: InventoryHudConfig;
+
+  /**
+   * 可选配方列表；传入后背包显示「合成」Tab。
+   * 未提供时由 InventoryBackpack 尝试 CraftBagContext。
+   */
+  recipes?: readonly RecipeDefinition[];
+
+  /**
+   * 可选合成回调；与 recipes 配套使用。
+   *
+   * @param recipeId - 配方 id
+   */
+  onCraftRecipe?: (recipeId: string) => void;
 }
 
 /**
@@ -111,6 +128,8 @@ export function InventoryQuickbar({
   inventory,
   items,
   hud,
+  recipes,
+  onCraftRecipe,
 }: InventoryQuickbarProps): React.ReactElement {
   const { tokens } = useTheme();
   const [bagOpen, setBagOpen] = useState(false);
@@ -286,6 +305,8 @@ export function InventoryQuickbar({
         <InventoryBackpack
           inventory={inventory}
           items={items}
+          recipes={recipes}
+          onCraftRecipe={onCraftRecipe}
           onClose={() => setBagOpen(false)}
         />
       ) : null}
@@ -309,10 +330,10 @@ export interface InventoryHudLayerProps {
 }
 
 /**
- * 自包含 HUD 层：订阅 inventory / itemsLibrary / inventoryHudJson 并渲染快捷栏。
+ * 自包含 HUD 层：订阅 inventory / items / recipes / inventoryHudJson 并渲染快捷栏。
  *
- * 用于 `inventoryHudMode === "always"` 时挂在 App 运行态，或
- * `withScene` 时挂在 RuntimeShell 内。
+ * 用于 `inventoryHudMode === "always"` 时挂在 App 运行态（壳外无 CraftBagContext，
+ * 本层直接接线合成）；或 `withScene` 时挂在 RuntimeShell 内（props 优先于 Context）。
  *
  * @param props.save - 存档 API
  * @returns InventoryQuickbar
@@ -328,9 +349,61 @@ export function InventoryHudLayer({
   save,
 }: InventoryHudLayerProps): React.ReactElement {
   const ctx = useExtensionContext();
-  const [inventory] = useInventory(save, ctx);
+  const [inventory, setInventory] = useInventory(save, ctx);
   const [itemsLibrary] = useItemsLibrary();
+  const [recipesLibrary] = useRecipesLibrary();
   const [hudJsonRaw] = ctx.settings.useValue("inventoryHudJson");
+
+  /** 最新库存 / 库引用，供合成闭包读取 */
+  const inventoryRef = useRef<InventoryState>(inventory);
+  const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
+  const recipesRef = useRef<RecipeDefinition[]>(recipesLibrary.recipes);
+
+  inventoryRef.current = inventory;
+  itemsRef.current = itemsLibrary.items;
+  recipesRef.current = recipesLibrary.recipes;
+
+  /**
+   * 背包合成：findRecipe → craftRecipeInInventory → 成功则写回 inventory。
+   *
+   * @param recipeId - 配方 id
+   */
+  const handleCraftRecipe = useCallback(
+    (recipeId: string): void => {
+      const recipe = findRecipe(recipesRef.current, recipeId);
+
+      if (recipe === undefined) {
+        console.warn(
+          "[scene-interaction]",
+          "craft: recipe not found",
+          recipeId,
+        );
+
+        return;
+      }
+
+      const result = craftRecipeInInventory(
+        inventoryRef.current,
+        recipe,
+        itemsRef.current,
+        Date.now(),
+      );
+
+      if (!result.ok) {
+        console.warn(
+          "[scene-interaction]",
+          "craft: failed",
+          recipeId,
+          result.reason,
+        );
+
+        return;
+      }
+
+      setInventory(result.state);
+    },
+    [setInventory],
+  );
 
   const hud = useMemo(() => {
     const raw =
@@ -348,6 +421,8 @@ export function InventoryHudLayer({
       inventory={inventory}
       items={itemsLibrary.items}
       hud={hud}
+      recipes={recipesLibrary.recipes}
+      onCraftRecipe={handleCraftRecipe}
     />
   );
 }
