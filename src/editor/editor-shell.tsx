@@ -2,15 +2,16 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
- * 场景交互编辑器主壳：顶栏 + 左（场景/交互点列表）/ 中（画布）/ 右（属性占位）。
- * 场景分区接入场景库 CRUD、画布拖放与设计分辨率菜单。
+ * 场景交互编辑器主壳：顶栏 + 左（场景/交互点列表）/ 中（画布）/ 右（属性面板）。
+ * 场景分区接入场景库 CRUD、画布拖放、设计分辨率与 Schema 属性编辑。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SceneDefinition, ScenesLibraryFile } from "../domain/types";
 import { createHistory } from "../store/history";
+import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import { useDesignSize } from "../store/use-design-size";
 import {
@@ -24,6 +25,7 @@ import {
   createDefaultHotspot,
   HotspotListPanel,
 } from "./panels/hotspot-list-panel";
+import { PropertyPanel } from "./panels/property-panel";
 import { SceneListPanel } from "./panels/scene-list-panel";
 import { DesignResolutionMenu } from "./ui/design-resolution-menu";
 
@@ -159,6 +161,7 @@ export function EditorShell({
 }: EditorShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const [library, setLibrary] = useScenesLibrary();
+  const [itemsLibrary] = useItemsLibrary();
   const { size: designSize, setSize: setDesignSize } = useDesignSize();
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
@@ -459,13 +462,20 @@ export function EditorShell({
             <aside
               data-testid="editor-panel-right"
               style={{
-                ...panelPlaceholderStyle(tokens),
                 width: 300,
                 flexShrink: 0,
+                minHeight: 0,
                 borderRight: "none",
+                background: tokens.bgElevated,
               }}
             >
-              属性面板（Task 11）
+              <PropertyPanel
+                scene={selectedScene}
+                selectedHotspotId={selectedHotspotId}
+                onSceneChange={handleSceneChange}
+                scenes={library.scenes}
+                items={itemsLibrary.items}
+              />
             </aside>
           </>
         ) : (
