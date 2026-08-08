@@ -2,14 +2,20 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.4.0
  *
- * 场景交互编辑器主壳：顶栏 + 左（场景/交互点列表）/ 中（画布）/ 右（属性面板）。
- * 场景分区接入场景库 CRUD、画布拖放、设计分辨率与 Schema 属性编辑。
+ * 场景交互编辑器主壳：顶栏 + 左中右三栏。
+ * - 场景分区：场景/交互点列表、画布、Schema 属性
+ * - 物品库分区：物品列表、预览、物品属性（Task 12）
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SceneDefinition, ScenesLibraryFile } from "../domain/types";
+import type {
+  ItemDefinition,
+  ItemsLibraryFile,
+  SceneDefinition,
+  ScenesLibraryFile,
+} from "../domain/types";
 import { createHistory } from "../store/history";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
@@ -25,6 +31,9 @@ import {
   createDefaultHotspot,
   HotspotListPanel,
 } from "./panels/hotspot-list-panel";
+import { ItemListPanel } from "./panels/item-list-panel";
+import { ItemPreviewPanel } from "./panels/item-preview-panel";
+import { ItemPropertyPanel } from "./panels/item-property-panel";
 import { PropertyPanel } from "./panels/property-panel";
 import { SceneListPanel } from "./panels/scene-list-panel";
 import { DesignResolutionMenu } from "./ui/design-resolution-menu";
@@ -96,25 +105,6 @@ function topBarButtonStyle(
 }
 
 /**
- * 面板占位块样式。
- *
- * @param tokens - 主题 token
- * @returns CSSProperties
- */
-function panelPlaceholderStyle(tokens: ThemeTokens): React.CSSProperties {
-  return {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 0,
-    background: tokens.bgElevated,
-    color: tokens.textMuted,
-    fontSize: FONT_SIZE_DEFAULT,
-    borderRight: `1px solid ${tokens.border}`,
-  };
-}
-
-/**
  * 在场景库中按 id 替换（或追加）一条场景定义。
  *
  * @param library - 当前库
@@ -138,7 +128,32 @@ function upsertScene(
 }
 
 /**
- * 编辑器主壳：场景分区含列表 + 画布；物品库仍为占位。
+ * 在物品库中按「原 id」替换一条物品定义（支持表单改 id）。
+ *
+ * @param library - 当前物品库
+ * @param previousId - 编辑前的物品 id（选中态）
+ * @param item - 新物品定义
+ * @returns 更新后的 ItemsLibraryFile；找不到 previousId 时原样返回
+ */
+function upsertItem(
+  library: ItemsLibraryFile,
+  previousId: string,
+  item: ItemDefinition,
+): ItemsLibraryFile {
+  const idx = library.items.findIndex((entry) => entry.id === previousId);
+
+  if (idx < 0) {
+    return library;
+  }
+
+  const items = library.items.slice();
+  items[idx] = item;
+
+  return { version: 1, items };
+}
+
+/**
+ * 编辑器主壳：场景分区与物品库分区共用顶栏，按 `editorSection` 切换三栏内容。
  *
  * @param props.editorSection - 当前分区（场景 / 物品库）
  * @param props.onEditorSectionChange - 分区切换回调
@@ -161,7 +176,7 @@ export function EditorShell({
 }: EditorShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const [library, setLibrary] = useScenesLibrary();
-  const [itemsLibrary] = useItemsLibrary();
+  const [itemsLibrary, setItemsLibrary] = useItemsLibrary();
   const { size: designSize, setSize: setDesignSize } = useDesignSize();
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
@@ -169,10 +184,15 @@ export function EditorShell({
     null,
   );
   const [placementActive, setPlacementActive] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   /** 场景库撤销栈（Task 16 再接快捷键；此处先 push） */
   const historyRef = useRef(createHistory<ScenesLibraryFile>());
   const historySeededRef = useRef(false);
+
+  /** 物品库撤销栈（Task 16 再接快捷键；此处先 push） */
+  const itemsHistoryRef = useRef(createHistory<ItemsLibraryFile>());
+  const itemsHistorySeededRef = useRef(false);
 
   // 首次加载后以当前库播种历史，便于后续 undo
   useEffect(() => {
@@ -181,6 +201,13 @@ export function EditorShell({
       historySeededRef.current = true;
     }
   }, [library]);
+
+  useEffect(() => {
+    if (!itemsHistorySeededRef.current) {
+      itemsHistoryRef.current.push(itemsLibrary);
+      itemsHistorySeededRef.current = true;
+    }
+  }, [itemsLibrary]);
 
   // 库变化时校正选中场景（删除 / 导入等）
   useEffect(() => {
@@ -198,6 +225,22 @@ export function EditorShell({
     }
   }, [library.scenes, selectedSceneId]);
 
+  // 物品库变化时校正选中物品
+  useEffect(() => {
+    if (itemsLibrary.items.length === 0) {
+      setSelectedItemId(null);
+
+      return;
+    }
+
+    if (
+      selectedItemId === null ||
+      !itemsLibrary.items.some((item) => item.id === selectedItemId)
+    ) {
+      setSelectedItemId(itemsLibrary.items[0]!.id);
+    }
+  }, [itemsLibrary.items, selectedItemId]);
+
   // 切换场景时清空 hotspot 选中与放置模式
   useEffect(() => {
     setSelectedHotspotId(null);
@@ -211,6 +254,14 @@ export function EditorShell({
 
     return library.scenes.find((s) => s.id === selectedSceneId) ?? null;
   }, [library.scenes, selectedSceneId]);
+
+  const selectedItem = useMemo((): ItemDefinition | null => {
+    if (selectedItemId === null) {
+      return null;
+    }
+
+    return itemsLibrary.items.find((item) => item.id === selectedItemId) ?? null;
+  }, [itemsLibrary.items, selectedItemId]);
 
   /**
    * 提交场景库变更：history.push(next) → 持久化。
@@ -226,6 +277,19 @@ export function EditorShell({
   );
 
   /**
+   * 提交物品库变更：history.push(next) → 持久化。
+   *
+   * @param next - 新物品库
+   */
+  const commitItemsLibrary = useCallback(
+    (next: ItemsLibraryFile) => {
+      itemsHistoryRef.current.push(next);
+      setItemsLibrary(next);
+    },
+    [setItemsLibrary],
+  );
+
+  /**
    * 更新当前场景定义并写回库。
    *
    * @param nextScene - 新 SceneDefinition
@@ -235,6 +299,28 @@ export function EditorShell({
       commitLibrary(upsertScene(library, nextScene));
     },
     [library, commitLibrary],
+  );
+
+  /**
+   * 更新当前物品定义并写回库；若改了 id 则同步选中态。
+   *
+   * @param nextItem - 新 ItemDefinition
+   */
+  const handleItemChange = useCallback(
+    (nextItem: ItemDefinition) => {
+      if (selectedItemId === null) {
+        return;
+      }
+
+      const next = upsertItem(itemsLibrary, selectedItemId, nextItem);
+
+      commitItemsLibrary(next);
+
+      if (nextItem.id !== selectedItemId) {
+        setSelectedItemId(nextItem.id);
+      }
+    },
+    [selectedItemId, itemsLibrary, commitItemsLibrary],
   );
 
   /**
@@ -483,36 +569,51 @@ export function EditorShell({
             <aside
               data-testid="editor-panel-left"
               style={{
-                ...panelPlaceholderStyle(tokens),
                 width: 260,
                 flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 0,
+                borderRight: `1px solid ${tokens.border}`,
+                background: tokens.bgElevated,
               }}
             >
-              物品列表（Task 12）
+              <ItemListPanel
+                library={itemsLibrary}
+                selectedItemId={selectedItemId}
+                onSelectItem={setSelectedItemId}
+                onLibraryChange={commitItemsLibrary}
+                scenes={library.scenes}
+              />
             </aside>
 
             <main
               data-testid="editor-panel-center"
               style={{
-                ...panelPlaceholderStyle(tokens),
                 flex: 1,
+                minWidth: 0,
+                minHeight: 0,
                 background: tokens.bgSunken,
                 borderRight: `1px solid ${tokens.border}`,
               }}
             >
-              物品预览
+              <ItemPreviewPanel item={selectedItem} />
             </main>
 
             <aside
               data-testid="editor-panel-right"
               style={{
-                ...panelPlaceholderStyle(tokens),
                 width: 300,
                 flexShrink: 0,
+                minHeight: 0,
                 borderRight: "none",
+                background: tokens.bgElevated,
               }}
             >
-              物品属性
+              <ItemPropertyPanel
+                item={selectedItem}
+                onItemChange={handleItemChange}
+              />
             </aside>
           </>
         )}

@@ -2,10 +2,11 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 场景交互系统 App 壳：订阅 settings / save，按 allowEdit + isEditMode
  * 切换 EditorShell / RuntimeShell；维护 editorSection（场景 / 物品库）。
+ * 物品库编辑 UI 在 EditorShell 的 `editorSection === "items"` 分支中实现。
  */
 
 import React, { useCallback, useState } from "react";
