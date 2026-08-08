@@ -2,12 +2,13 @@
  * hud-visual-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.0
+ * 版本: 0.6.0
  *
  * 快捷栏 HUD 自由布局画布：
- * - 左侧 NodeList 选节点
+ * - 左侧 NodeList 选节点（支持 Shift 多选）
  * - 设计分辨率 letterbox 舞台上渲染 resolveHudLayout 的 8 槽 + 打开背包按钮
- * - 拖拽 / resize（applyDrag / applyResize）+ SelectionOverlay
+ * - 槽组包围盒透明 hit 层：点击槽间隙也可选中 / 拖拽 quickbarRoot
+ * - 拖拽 / resize（applyDrag / applyResize）+ 多选 SelectionOverlay
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,15 +52,18 @@ export interface HudVisualCanvasProps {
   /** 当前 HUD 配置 */
   hud: InventoryHudConfig;
 
-  /** 当前选中节点；无选中时为 null */
-  selectedNodeId: HudNodeId | null;
+  /**
+   * 当前选中节点 id 列表（多选）；无选中时为空数组。
+   */
+  selectedNodeIds: readonly HudNodeId[];
 
   /**
    * 选中节点变化。
    *
    * @param id - 节点 id，或 null 表示清空选中
+   * @param shiftKey - 是否按住 Shift（切换多选）；清空时忽略
    */
-  onSelectNode: (id: HudNodeId | null) => void;
+  onSelectNode: (id: HudNodeId | null, shiftKey?: boolean) => void;
 
   /**
    * 拖拽 / resize / 布局切换时回写完整 HUD 配置。
@@ -126,6 +130,30 @@ function slotsBoundingRect(
 }
 
 /**
+ * 解析某 HUD 节点的选中叠层矩形。
+ *
+ * @param nodeId - 节点 id
+ * @param layout - 当前解析布局
+ * @returns 设计像素矩形；未知 id 时返回 null
+ */
+function selectionRectFor(
+  nodeId: HudNodeId,
+  layout: ResolvedHudLayout,
+): Required<UiRect> | null {
+  if (nodeId === "quickbarRoot") {
+    return slotsBoundingRect(layout.slots);
+  }
+
+  if (nodeId === "openBagButton") {
+    const b = layout.openBagButton;
+
+    return { x: b.x, y: b.y, w: b.w, h: b.h };
+  }
+
+  return null;
+}
+
+/**
  * 为拖拽构造边缘吸附目标（设计边界 + 另一节点边）。
  *
  * @param nodeId - 正在拖拽的节点
@@ -170,8 +198,8 @@ function snapTargetsFor(
  *   designWidth={1920}
  *   designHeight={1080}
  *   hud={hud}
- *   selectedNodeId={selected}
- *   onSelectNode={setSelected}
+ *   selectedNodeIds={["quickbarRoot"]}
+ *   onSelectNode={(id, shiftKey) => ...}
  *   onHudChange={persistHud}
  * />
  * ```
@@ -182,7 +210,7 @@ export function HudVisualCanvas({
   designWidth,
   designHeight,
   hud,
-  selectedNodeId,
+  selectedNodeIds,
   onSelectNode,
   onHudChange,
 }: HudVisualCanvasProps): React.ReactElement {
@@ -271,21 +299,20 @@ export function HudVisualCanvas({
       : tokens.accent;
 
   /**
-   * 选中叠层矩形：快捷栏用槽包围盒；按钮用解析后的 openBagButton。
+   * 槽组包围盒：hit 层与 quickbarRoot 选中框共用。
    */
-  const selectionRect = useMemo((): Required<UiRect> | null => {
-    if (selectedNodeId === "quickbarRoot") {
-      return slotsBoundingRect(layout.slots);
-    }
+  const slotsHitRect = useMemo(
+    () => slotsBoundingRect(layout.slots),
+    [layout.slots],
+  );
 
-    if (selectedNodeId === "openBagButton") {
-      const b = layout.openBagButton;
-
-      return { x: b.x, y: b.y, w: b.w, h: b.h };
-    }
-
-    return null;
-  }, [selectedNodeId, layout.slots, layout.openBagButton]);
+  /**
+   * 仅当恰好单选 absolute 打开背包按钮时允许 resize。
+   */
+  const canResizeOpenBag =
+    selectedNodeIds.length === 1 &&
+    selectedNodeIds[0] === "openBagButton" &&
+    buttonIsAbsolute;
 
   /**
    * 窗口级 pointermove / pointerup：在会话期间应用 applyDrag / applyResize。
@@ -435,7 +462,7 @@ export function HudVisualCanvas({
   }, [designWidth, designHeight, onHudChange]);
 
   /**
-   * 开始拖拽快捷栏根：选中并记录原点。
+   * 开始拖拽快捷栏根：选中并记录原点（hit 层与各槽共用）。
    *
    * @param event - 指针事件
    */
@@ -443,7 +470,7 @@ export function HudVisualCanvas({
     (event: React.PointerEvent): void => {
       event.stopPropagation();
       event.preventDefault();
-      onSelectNode("quickbarRoot");
+      onSelectNode("quickbarRoot", event.shiftKey);
       sessionRef.current = {
         kind: "drag",
         nodeId: "quickbarRoot",
@@ -465,7 +492,7 @@ export function HudVisualCanvas({
     (event: React.PointerEvent): void => {
       event.stopPropagation();
       event.preventDefault();
-      onSelectNode("openBagButton");
+      onSelectNode("openBagButton", event.shiftKey);
 
       const btn = layout.openBagButton;
 
@@ -482,14 +509,14 @@ export function HudVisualCanvas({
   );
 
   /**
-   * SelectionOverlay 手柄按下：开启 resize 会话（仅 absolute 按钮）。
+   * SelectionOverlay 手柄按下：开启 resize 会话（仅单选 absolute 按钮）。
    *
    * @param handle - 八向手柄
    * @param event - 指针事件
    */
   const onResizeStart = useCallback(
     (handle: ResizeHandle, event: React.PointerEvent<HTMLDivElement>): void => {
-      if (!buttonIsAbsolute) {
+      if (!canResizeOpenBag) {
         return;
       }
 
@@ -506,21 +533,7 @@ export function HudVisualCanvas({
         scale,
       };
     },
-    [buttonIsAbsolute, layout.openBagButton, scale],
-  );
-
-  /**
-   * 侧栏选中（NodeList 回调 id 为 string）。
-   *
-   * @param id - 节点 id
-   */
-  const onNodeListSelect = useCallback(
-    (id: string): void => {
-      if (id === "quickbarRoot" || id === "openBagButton") {
-        onSelectNode(id);
-      }
-    },
-    [onSelectNode],
+    [canResizeOpenBag, layout.openBagButton, scale],
   );
 
   /**
@@ -555,8 +568,10 @@ export function HudVisualCanvas({
       >
         <NodeList
           items={HUD_NODE_ITEMS}
-          selectedId={selectedNodeId}
-          onSelect={onNodeListSelect}
+          selectedIds={selectedNodeIds}
+          onSelect={(id, { shiftKey }) =>
+            onSelectNode(id as HudNodeId, shiftKey)
+          }
         />
       </div>
 
@@ -612,8 +627,29 @@ export function HudVisualCanvas({
                   pointerEvents: "none",
                 }}
               >
-                HUD · 自由布局 · Esc 取消选中
+                HUD · 自由布局 · Shift+多选 · Esc 取消选中
               </div>
+
+              {/*
+                槽组透明 hit 层：位于各槽之下，覆盖 slotsBoundingRect，
+                点击槽间隙亦可选中 / 拖拽 quickbarRoot。
+              */}
+              <div
+                data-testid="hud-visual-slots-hit"
+                onPointerDown={beginDragQuickbar}
+                style={{
+                  position: "absolute",
+                  left: slotsHitRect.x,
+                  top: slotsHitRect.y,
+                  width: slotsHitRect.w,
+                  height: slotsHitRect.h,
+                  cursor: "grab",
+                  touchAction: "none",
+                  userSelect: "none",
+                  background: "transparent",
+                  pointerEvents: "auto",
+                }}
+              />
 
               {layout.slots.map((slot, index) => (
                 <div
@@ -665,17 +701,26 @@ export function HudVisualCanvas({
                 {openBagLabel}
               </div>
 
-              {selectionRect ? (
-                <SelectionOverlay
-                  rect={selectionRect}
-                  scale={scale}
-                  resizable={
-                    selectedNodeId === "openBagButton" && buttonIsAbsolute
-                  }
-                  accentColor={accent}
-                  onResizeStart={onResizeStart}
-                />
-              ) : null}
+              {selectedNodeIds.map((nodeId) => {
+                const rect = selectionRectFor(nodeId, layout);
+
+                if (!rect) {
+                  return null;
+                }
+
+                return (
+                  <SelectionOverlay
+                    key={`sel-${nodeId}`}
+                    rect={rect}
+                    scale={scale}
+                    resizable={
+                      canResizeOpenBag && nodeId === "openBagButton"
+                    }
+                    accentColor={accent}
+                    onResizeStart={onResizeStart}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : null}

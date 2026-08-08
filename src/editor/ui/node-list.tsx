@@ -2,10 +2,10 @@
  * node-list.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 自由布局编辑器节点侧栏：展示固定角色节点列表，点击等同画布选中。
- * 供 HUD / 全屏背包可视化画布左侧复用。
+ * 自由布局编辑器节点侧栏：展示固定角色节点列表。
+ * 单击替换选中；Shift+单击切换多选。
  */
 
 import React from "react";
@@ -28,21 +28,33 @@ export interface NodeListItem {
 }
 
 /**
+ * 选中事件修饰键。
+ */
+export interface NodeSelectModifiers {
+  /** 是否按住 Shift（切换多选） */
+  shiftKey: boolean;
+}
+
+/**
  * NodeList 组件属性。
  */
 export interface NodeListProps {
   /** 可编辑节点条目 */
   items: readonly NodeListItem[];
 
-  /** 当前选中节点 id；无选中时为 null */
-  selectedId: string | null;
+  /**
+   * 当前选中节点 id 列表（多选）。
+   * 为兼容旧调用，也可只传一项。
+   */
+  selectedIds: readonly string[];
 
   /**
    * 选中节点。
    *
    * @param id - 节点 id
+   * @param modifiers - 修饰键（Shift = 切换）
    */
-  onSelect: (id: string) => void;
+  onSelect: (id: string, modifiers: NodeSelectModifiers) => void;
 }
 
 /**
@@ -82,21 +94,19 @@ function rowStyle(
  * @example
  * ```tsx
  * <NodeList
- *   items={[
- *     { id: "quickbarRoot", label: "快捷栏" },
- *     { id: "openBagButton", label: "打开背包" },
- *   ]}
- *   selectedId={selectedNodeId}
- *   onSelect={onSelectNode}
+ *   items={[{ id: "quickbarRoot", label: "快捷栏" }]}
+ *   selectedIds={["quickbarRoot"]}
+ *   onSelect={(id, { shiftKey }) => ...}
  * />
  * ```
  */
 export function NodeList({
   items,
-  selectedId,
+  selectedIds,
   onSelect,
 }: NodeListProps): React.ReactElement {
   const { tokens } = useTheme();
+  const selectedSet = new Set(selectedIds);
 
   return (
     <div
@@ -125,10 +135,21 @@ export function NodeList({
 
       <div
         style={{
+          padding: "4px 12px 8px",
+          fontSize: 11,
+          color: tokens.textMuted,
+          flexShrink: 0,
+        }}
+      >
+        Shift+单击多选
+      </div>
+
+      <div
+        style={{
           flex: 1,
           minHeight: 0,
           overflow: "auto",
-          padding: "8px 8px 12px",
+          padding: "0 8px 12px",
           display: "flex",
           flexDirection: "column",
           gap: 4,
@@ -148,7 +169,7 @@ export function NodeList({
           </div>
         ) : (
           items.map((item) => {
-            const selected = item.id === selectedId;
+            const selected = selectedSet.has(item.id);
 
             return (
               <button
@@ -156,7 +177,9 @@ export function NodeList({
                 type="button"
                 data-testid={`node-list-item-${item.id}`}
                 aria-selected={selected}
-                onClick={() => onSelect(item.id)}
+                onClick={(e) => {
+                  onSelect(item.id, { shiftKey: e.shiftKey });
+                }}
                 style={rowStyle(tokens, selected)}
               >
                 <span

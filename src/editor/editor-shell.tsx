@@ -22,6 +22,13 @@ import type {
   ScenesLibraryFile,
 } from "../domain/types";
 import { createHistory } from "../store/history";
+import {
+  subscribeUiHistoryTick,
+  uiHistoryCanRedo,
+  uiHistoryCanUndo,
+  uiHistoryRedo,
+  uiHistoryUndo,
+} from "../store/ui-edit-history-bridge";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
@@ -433,6 +440,20 @@ export function EditorShell({
       return true;
     }
 
+    if (editorSection === "ui") {
+      const ok = uiHistoryUndo();
+
+      if (ok) {
+        setHistoryUiTick((n) => n + 1);
+      }
+
+      return ok;
+    }
+
+    if (editorSection !== "recipes") {
+      return false;
+    }
+
     const next = recipesHistoryRef.current.undo();
 
     if (next === undefined) {
@@ -475,6 +496,20 @@ export function EditorShell({
       setHistoryUiTick((n) => n + 1);
 
       return true;
+    }
+
+    if (editorSection === "ui") {
+      const ok = uiHistoryRedo();
+
+      if (ok) {
+        setHistoryUiTick((n) => n + 1);
+      }
+
+      return ok;
+    }
+
+    if (editorSection !== "recipes") {
+      return false;
     }
 
     const next = recipesHistoryRef.current.redo();
@@ -540,6 +575,15 @@ export function EditorShell({
     };
   }, [handleUndo, handleRedo]);
 
+  /**
+   * UI 分区历史桥接变化时刷新顶栏撤销/重做 disabled。
+   */
+  useEffect(() => {
+    return subscribeUiHistoryTick(() => {
+      setHistoryUiTick((n) => n + 1);
+    });
+  }, []);
+
   const canUndo =
     editorSection === "scenes"
       ? historyRef.current.canUndo
@@ -547,7 +591,9 @@ export function EditorShell({
         ? itemsHistoryRef.current.canUndo
         : editorSection === "recipes"
           ? recipesHistoryRef.current.canUndo
-          : false;
+          : editorSection === "ui"
+            ? uiHistoryCanUndo()
+            : false;
   const canRedo =
     editorSection === "scenes"
       ? historyRef.current.canRedo
@@ -555,7 +601,9 @@ export function EditorShell({
         ? itemsHistoryRef.current.canRedo
         : editorSection === "recipes"
           ? recipesHistoryRef.current.canRedo
-          : false;
+          : editorSection === "ui"
+            ? uiHistoryCanRedo()
+            : false;
 
   /**
    * 更新当前场景定义并写回库。

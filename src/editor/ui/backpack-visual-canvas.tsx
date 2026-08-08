@@ -2,13 +2,13 @@
  * backpack-visual-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.0
+ * 版本: 0.6.0
  *
  * 全屏背包自由布局画布：
- * - 左侧 NodeList 选节点
+ * - 左侧 NodeList 选节点（支持 Shift 多选）
  * - 设计分辨率 letterbox 舞台上按 resolveBackpackLayout 绝对定位各节点
  * - backdrop 可选中但禁止拖拽 / resize
- * - 其余带 rect 的节点：拖拽改 x/y，有 w/h 可 resize
+ * - 其余带 rect 的节点：拖拽改 x/y，有 w/h 可 resize（仅单选时可 resize）
  * - craftButton：预览块锚定 detailPanel 底边 + offsetY，竖直拖拽改 offsetY
  */
 
@@ -72,15 +72,18 @@ export interface BackpackVisualCanvasProps {
   /** 当前全屏背包配置 */
   config: BackpackScreenConfig;
 
-  /** 当前选中节点；无选中时为 null */
-  selectedNodeId: BackpackNodeId | null;
+  /**
+   * 当前选中节点 id 列表（多选）；无选中时为空数组。
+   */
+  selectedNodeIds: readonly BackpackNodeId[];
 
   /**
    * 选中节点变化。
    *
    * @param id - 节点 id，或 null 表示清空选中
+   * @param shiftKey - 是否按住 Shift（切换多选）；清空时忽略
    */
-  onSelectNode: (id: BackpackNodeId | null) => void;
+  onSelectNode: (id: BackpackNodeId | null, shiftKey?: boolean) => void;
 
   /**
    * 拖拽 / resize / offsetY 变化时回写完整背包配置。
@@ -350,8 +353,8 @@ function configRectFor(
  *   designWidth={1920}
  *   designHeight={1080}
  *   config={bag}
- *   selectedNodeId={selected}
- *   onSelectNode={setSelected}
+ *   selectedNodeIds={["panelChrome"]}
+ *   onSelectNode={(id, shiftKey) => ...}
  *   onConfigChange={persistBag}
  * />
  * ```
@@ -362,7 +365,7 @@ export function BackpackVisualCanvas({
   designWidth,
   designHeight,
   config,
-  selectedNodeId,
+  selectedNodeIds,
   onSelectNode,
   onConfigChange,
 }: BackpackVisualCanvasProps): React.ReactElement {
@@ -450,26 +453,33 @@ export function BackpackVisualCanvas({
   const craftRect = useMemo(() => craftPreviewRect(layout), [layout]);
 
   /**
-   * 选中叠层矩形。
+   * 解析某背包节点的选中叠层矩形。
+   *
+   * @param nodeId - 节点 id
+   * @returns 设计像素矩形；未知 id 时返回 null
    */
-  const selectionRect = useMemo((): Required<UiRect> | null => {
-    if (!selectedNodeId) {
-      return null;
-    }
+  const selectionRectFor = useCallback(
+    (nodeId: BackpackNodeId): Required<UiRect> | null => {
+      if (nodeId === "backdrop") {
+        return { x: 0, y: 0, w: designWidth, h: designHeight };
+      }
 
-    if (selectedNodeId === "backdrop") {
-      return { x: 0, y: 0, w: designWidth, h: designHeight };
-    }
+      if (nodeId === "craftButton") {
+        return craftRect;
+      }
 
-    if (selectedNodeId === "craftButton") {
-      return craftRect;
-    }
+      return layoutRectFor(layout, nodeId);
+    },
+    [layout, craftRect, designWidth, designHeight],
+  );
 
-    return layoutRectFor(layout, selectedNodeId);
-  }, [selectedNodeId, layout, craftRect, designWidth, designHeight]);
-
-  const selectionResizable =
-    selectedNodeId !== null && isDraggableRectNode(selectedNodeId);
+  /**
+   * 仅当恰好单选且该节点可拖拽/resize（非 backdrop / craftButton）时允许 resize。
+   */
+  const soleResizableId =
+    selectedNodeIds.length === 1 && isDraggableRectNode(selectedNodeIds[0]!)
+      ? selectedNodeIds[0]!
+      : null;
 
   /**
    * 窗口级 pointermove / pointerup：会话期间应用 applyDrag / applyResize / offsetY。
@@ -605,7 +615,7 @@ export function BackpackVisualCanvas({
   const onBackdropPointerDown = useCallback(
     (event: React.PointerEvent): void => {
       event.stopPropagation();
-      onSelectNode("backdrop");
+      onSelectNode("backdrop", event.shiftKey);
     },
     [onSelectNode],
   );
@@ -627,7 +637,7 @@ export function BackpackVisualCanvas({
         return;
       }
 
-      onSelectNode(nodeId);
+      onSelectNode(nodeId, event.shiftKey);
       sessionRef.current = {
         kind: "drag",
         nodeId,
@@ -649,7 +659,7 @@ export function BackpackVisualCanvas({
     (event: React.PointerEvent): void => {
       event.stopPropagation();
       event.preventDefault();
-      onSelectNode("craftButton");
+      onSelectNode("craftButton", event.shiftKey);
       sessionRef.current = {
         kind: "craft-offset",
         startY: event.clientY,
@@ -661,18 +671,18 @@ export function BackpackVisualCanvas({
   );
 
   /**
-   * SelectionOverlay 手柄按下：开启 resize 会话。
+   * SelectionOverlay 手柄按下：开启 resize 会话（仅单选可 resize 节点）。
    *
    * @param handle - 八向手柄
    * @param event - 指针事件
    */
   const onResizeStart = useCallback(
     (handle: ResizeHandle, event: React.PointerEvent<HTMLDivElement>): void => {
-      if (!selectedNodeId || !isDraggableRectNode(selectedNodeId)) {
+      if (!soleResizableId) {
         return;
       }
 
-      const rect = layoutRectFor(layout, selectedNodeId);
+      const rect = layoutRectFor(layout, soleResizableId);
 
       if (!rect) {
         return;
@@ -682,7 +692,7 @@ export function BackpackVisualCanvas({
 
       sessionRef.current = {
         kind: "resize",
-        nodeId: selectedNodeId,
+        nodeId: soleResizableId,
         handle,
         startX: event.clientX,
         startY: event.clientY,
@@ -690,23 +700,7 @@ export function BackpackVisualCanvas({
         scale,
       };
     },
-    [layout, scale, selectedNodeId],
-  );
-
-  /**
-   * 侧栏选中（NodeList 回调 id 为 string）。
-   *
-   * @param id - 节点 id
-   */
-  const onNodeListSelect = useCallback(
-    (id: string): void => {
-      const known = BAG_NODE_ITEMS.some((item) => item.id === id);
-
-      if (known) {
-        onSelectNode(id as BackpackNodeId);
-      }
-    },
-    [onSelectNode],
+    [layout, scale, soleResizableId],
   );
 
   /**
@@ -766,8 +760,10 @@ export function BackpackVisualCanvas({
       >
         <NodeList
           items={BAG_NODE_ITEMS}
-          selectedId={selectedNodeId}
-          onSelect={onNodeListSelect}
+          selectedIds={selectedNodeIds}
+          onSelect={(id, { shiftKey }) =>
+            onSelectNode(id as BackpackNodeId, shiftKey)
+          }
         />
       </div>
 
@@ -1064,15 +1060,24 @@ export function BackpackVisualCanvas({
                 {craftLabel}
               </div>
 
-              {selectionRect ? (
-                <SelectionOverlay
-                  rect={selectionRect}
-                  scale={scale}
-                  resizable={selectionResizable}
-                  accentColor={accent}
-                  onResizeStart={onResizeStart}
-                />
-              ) : null}
+              {selectedNodeIds.map((nodeId) => {
+                const rect = selectionRectFor(nodeId);
+
+                if (!rect) {
+                  return null;
+                }
+
+                return (
+                  <SelectionOverlay
+                    key={`sel-${nodeId}`}
+                    rect={rect}
+                    scale={scale}
+                    resizable={soleResizableId === nodeId}
+                    accentColor={accent}
+                    onResizeStart={onResizeStart}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : null}
