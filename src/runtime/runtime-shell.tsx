@@ -2,9 +2,10 @@
  * runtime-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
- * 场景交互运行时壳：顶栏 + 当前场景渲染 + 动作链 / toast / once 进度。
+ * 场景交互运行时壳：顶栏 + 当前场景渲染 + 动作链 / toast / once 进度；
+ * `inventoryHudMode === "withScene"` 时挂载快捷栏 HUD。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
 } from "../domain/toast-queue";
 import type {
   HotspotElement,
+  InventoryHudMode,
   InventoryState,
   ItemDefinition,
   SceneDefinition,
@@ -44,7 +46,18 @@ import {
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
 import { createActionRuntime } from "./create-action-runtime";
+import { InventoryHudLayer } from "./inventory-quickbar";
 import { SceneView } from "./scene-view";
+
+/**
+ * 解析 settings.inventoryHudMode；非法值回退 withScene。
+ *
+ * @param raw - settings 原始值
+ * @returns InventoryHudMode
+ */
+function resolveInventoryHudMode(raw: unknown): InventoryHudMode {
+  return raw === "always" ? "always" : "withScene";
+}
 
 /**
  * RuntimeShell 组件属性。
@@ -67,6 +80,13 @@ export interface RuntimeShellProps {
    * @param enabled - true 进入编辑
    */
   onSetEditMode: (enabled: boolean) => void;
+
+  /**
+   * 物品栏 HUD 模式；省略时从 settings.inventoryHudMode 读取。
+   * - `withScene`：本壳内挂载快捷栏
+   * - `always`：由 App 层挂载，本壳不重复渲染
+   */
+  inventoryHudMode?: InventoryHudMode;
 }
 
 /**
@@ -144,6 +164,7 @@ export function RuntimeShell({
   save,
   allowEdit,
   onSetEditMode,
+  inventoryHudMode: inventoryHudModeProp,
 }: RuntimeShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
@@ -158,6 +179,18 @@ export function RuntimeShell({
     "currentSceneId",
     ctx,
   );
+  const [hudModeSetting] = ctx.settings.useValue("inventoryHudMode");
+
+  /**
+   * withScene：在本壳挂载快捷栏；always 由 App 层负责，避免双份 HUD。
+   */
+  const hudMode = resolveInventoryHudMode(
+    inventoryHudModeProp ??
+      (hudModeSetting !== undefined
+        ? hudModeSetting
+        : ctx.settings.get("inventoryHudMode")),
+  );
+  const showHudInShell = hudMode === "withScene";
 
   const [toastQueue, setToastQueue] = useState<ToastQueueState>(() =>
     emptyToastQueue(),
@@ -347,6 +380,8 @@ export function RuntimeShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
         />
+
+        {showHudInShell ? <InventoryHudLayer save={save} /> : null}
       </main>
     </div>
   );

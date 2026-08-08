@@ -2,12 +2,12 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.2
+ * 版本: 0.3.0
  *
  * 场景交互系统 App 壳：订阅 settings / save，按 allowEdit + isEditMode
  * 切换 EditorShell / RuntimeShell；维护 editorSection（场景 / 物品库）。
- * 物品库编辑 UI 在 EditorShell 的 `editorSection === "items"` 分支中实现。
- * RuntimeShell 注入 save，用于 currentSceneId / inventory / progress。
+ * `inventoryHudMode === "always"` 时在运行态于 App 层挂载快捷栏
+ *（无需场景内容；编辑中隐藏）。
  */
 
 import React, { useCallback, useState } from "react";
@@ -20,6 +20,8 @@ import {
   EditorShell,
   type EditorSection,
 } from "../editor/editor-shell";
+import type { InventoryHudMode } from "../domain/types";
+import { InventoryHudLayer } from "../runtime/inventory-quickbar";
 import { RuntimeShell } from "../runtime/runtime-shell";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
@@ -52,7 +54,17 @@ function resolveAllowEdit(raw: unknown): boolean {
 }
 
 /**
- * 应用主内容：订阅 settings / save，切换 Editor / Runtime。
+ * 解析物品栏 HUD 模式。
+ *
+ * @param raw - settings 原始值
+ * @returns `"withScene"` | `"always"`
+ */
+function resolveInventoryHudMode(raw: unknown): InventoryHudMode {
+  return raw === "always" ? "always" : "withScene";
+}
+
+/**
+ * 应用主内容：订阅 settings / save，切换 Editor / Runtime，并按模式挂载 HUD。
  *
  * @param props.save - 扩展注入的存档 API
  * @returns 主题包裹的双壳 UI
@@ -66,6 +78,7 @@ function SceneInteractionAppContent({
 
   const [allowEditRaw] = ctx.settings.useValue("allowEdit");
   const [themeSetting] = ctx.settings.useValue("theme");
+  const [hudModeRaw] = ctx.settings.useValue("inventoryHudMode");
   const [isEditMode] = save.useValue("isEditMode");
 
   /**
@@ -84,10 +97,21 @@ function SceneInteractionAppContent({
 
   const themeMode: ThemeMode = themeSetting === "light" ? "light" : "dark";
 
+  const inventoryHudMode = resolveInventoryHudMode(
+    hudModeRaw !== undefined
+      ? hudModeRaw
+      : ctx.settings.get("inventoryHudMode"),
+  );
+
   /**
    * allowEdit === false 时强制运行壳；否则跟随 save.isEditMode。
    */
   const isEditing = allowEdit && isEditMode === true;
+
+  /**
+   * always：运行态在 App 层挂载 HUD（编辑中隐藏；与 RuntimeShell 内 withScene 互斥）。
+   */
+  const showAlwaysHud = !isEditing && inventoryHudMode === "always";
 
   /**
    * 顶栏切换编辑/运行：写入 save.isEditMode。
@@ -103,19 +127,44 @@ function SceneInteractionAppContent({
 
   return (
     <ThemeProvider initialMode={themeMode}>
-      {isEditing ? (
-        <EditorShell
-          editorSection={editorSection}
-          onEditorSectionChange={setEditorSection}
-          onSetEditMode={setEditMode}
-        />
-      ) : (
-        <RuntimeShell
-          save={save}
-          allowEdit={allowEdit}
-          onSetEditMode={setEditMode}
-        />
-      )}
+      <div
+        data-testid="scene-interaction-app-root"
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "relative",
+          minHeight: 0,
+        }}
+      >
+        {isEditing ? (
+          <EditorShell
+            editorSection={editorSection}
+            onEditorSectionChange={setEditorSection}
+            onSetEditMode={setEditMode}
+          />
+        ) : (
+          <RuntimeShell
+            save={save}
+            allowEdit={allowEdit}
+            onSetEditMode={setEditMode}
+            inventoryHudMode={inventoryHudMode}
+          />
+        )}
+
+        {showAlwaysHud ? (
+          <div
+            data-testid="inventory-hud-always-layer"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 50,
+              pointerEvents: "none",
+            }}
+          >
+            <InventoryHudLayer save={save} />
+          </div>
+        ) : null}
+      </div>
     </ThemeProvider>
   );
 }
@@ -136,6 +185,7 @@ function SceneInteractionAppContent({
  * - `allowEdit === false` → 强制 RuntimeShell
  * - `isEditMode` 来自 save，顶栏切换写入 save
  * - `editorSection` 为 App 状态：`"scenes" | "items"`
+ * - `inventoryHudMode=always` → 运行态 App 层挂载快捷栏（编辑中隐藏）
  */
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,

@@ -2,33 +2,46 @@
  * property-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 编辑器右侧属性面板：按选中场景 / 交互点渲染 schema 表单与动作列表。
+ * 编辑器右侧属性面板：按选中场景 / 交互点渲染 schema 表单与动作列表；
+ * 无场景时提供物品栏 HUD（inventoryHudJson）最小编辑区。
  */
 
 import React, { useCallback, useMemo } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
 import { defaultHotspotLabel } from "../../domain/hotspot-label";
 import {
   normalizeLetterboxColor,
   normalizeLetterboxMode,
 } from "../../domain/letterbox";
 import { defaultElementMotion, normalizeElementMotion } from "../../domain/motion";
+import { normalizeInventoryHud } from "../../domain/inventory-hud";
+import {
+  parseInventoryHudJson,
+  stringifyInventoryHud,
+} from "../../domain/serialize";
 import type {
   HotspotElement,
+  InventoryHudConfig,
   ItemDefinition,
   SceneDefinition,
 } from "../../domain/types";
 import { ActionListField } from "../../schema/action-list-field";
 import { FormRenderer } from "../../schema/form-renderer";
 import { hotspotFields } from "../../schema/hotspot-schema";
+import { inventoryHudFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
+import { notifySettingsField } from "../../store/settings-sync";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
   useTheme,
 } from "../../theme/theme-provider";
 import type { ThemeTokens } from "../../theme/tokens";
+
+/** settings 字段名：物品栏外观 JSON */
+const INVENTORY_HUD_JSON_KEY = "inventoryHudJson";
 
 /**
  * PropertyPanel 组件属性。
@@ -137,6 +150,8 @@ export function PropertyPanel({
   items,
 }: PropertyPanelProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+  const [hudJsonRaw] = ctx.settings.useValue(INVENTORY_HUD_JSON_KEY);
 
   const selectedHotspot = useMemo((): HotspotElement | null => {
     if (scene === null || selectedHotspotId === null) {
@@ -146,9 +161,37 @@ export function PropertyPanel({
     return scene.hotspots.find((hs) => hs.id === selectedHotspotId) ?? null;
   }, [scene, selectedHotspotId]);
 
+  /**
+   * 无场景时展示的 HUD 表单值（来自 settings.inventoryHudJson）。
+   */
+  const hudFormValue = useMemo((): InventoryHudConfig => {
+    const raw =
+      typeof hudJsonRaw === "string"
+        ? hudJsonRaw
+        : String(ctx.settings.get(INVENTORY_HUD_JSON_KEY) ?? "");
+
+    return parseInventoryHudJson(raw);
+  }, [hudJsonRaw, ctx.settings]);
+
+  /**
+   * 写回 inventoryHudJson 并广播进程内订阅。
+   *
+   * @param next - 表单写出的 HUD 配置
+   */
+  const handleHudChange = useCallback(
+    (next: InventoryHudConfig) => {
+      const normalized = normalizeInventoryHud(next);
+      const json = stringifyInventoryHud(normalized);
+
+      ctx.settings.set(INVENTORY_HUD_JSON_KEY, json);
+      notifySettingsField(INVENTORY_HUD_JSON_KEY);
+    },
+    [ctx.settings],
+  );
+
   const panelTitle = useMemo(() => {
     if (scene === null) {
-      return "属性";
+      return "物品栏 UI";
     }
 
     if (selectedHotspot !== null) {
@@ -245,25 +288,29 @@ export function PropertyPanel({
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: scene === null ? 0 : 14,
+          padding: 14,
           minHeight: 0,
         }}
       >
         {scene === null && (
-          <div
-            data-testid="property-panel-empty"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              padding: 16,
-              color: tokens.textMuted,
-              fontSize: FONT_SIZE_DEFAULT,
-              textAlign: "center",
-            }}
-          >
-            从左侧新建或选择场景后，可在此编辑属性。
+          <div data-testid="property-panel-hud-editor">
+            <p
+              style={{
+                margin: "0 0 12px",
+                color: tokens.textMuted,
+                fontSize: FONT_SIZE_DEFAULT,
+                lineHeight: 1.45,
+              }}
+            >
+              未选场景时可编辑快捷栏外观（写入 inventoryHudJson）。也可从左侧选择场景编辑场景属性。
+            </p>
+            <FormRenderer
+              schema={inventoryHudFields()}
+              value={hudFormValue as InventoryHudConfig & Record<string, unknown>}
+              onChange={(next) => {
+                handleHudChange(next as InventoryHudConfig);
+              }}
+            />
           </div>
         )}
 
