@@ -2,19 +2,13 @@
  * backpack-visual-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.9
+ * 版本: 0.4.0
  *
  * 全屏背包布局可视化预览：设计分辨率 letterbox（flex 居中）。
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  bagLegacyDetailRatio,
-  bagLegacyGridCellMin,
-  bagLegacyHeroHeight,
-  bagLegacyPagePaddingX,
-  bagLegacyPagePaddingY,
-} from "../../domain/backpack-screen-config";
+import { resolveBackpackLayout } from "../../domain/backpack-layout";
 import type { BackpackScreenConfig } from "../../domain/types";
 import { fitDesignToHost } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
@@ -80,14 +74,21 @@ export function BackpackVisualCanvas({
   const scale = world.scale > 0 ? world.scale : 0.001;
   const frameW = designWidth * scale;
   const frameH = designHeight * scale;
-  const pagePaddingX = bagLegacyPagePaddingX(config);
-  const pagePaddingY = bagLegacyPagePaddingY(config);
-  const detailRatio = bagLegacyDetailRatio(config);
-  const gridCellMin = bagLegacyGridCellMin(config);
-  const heroHeight = bagLegacyHeroHeight(config);
+
+  /**
+   * 共享布局解析：过渡预览仍用 panel 边距近似旧 flex 布局，度量取自 resolve。
+   */
+  const layout = useMemo(() => resolveBackpackLayout(config), [config]);
+  const pagePaddingX = layout.panelChrome.rect.x;
+  const pagePaddingY = layout.panelChrome.rect.y;
+  const panelW = layout.panelChrome.rect.w;
+  const detailRatio =
+    panelW > 0 ? layout.detailPanel.rect.w / panelW : 0.36;
+  const gridCellMin = layout.itemGrid.cellMin;
+  const heroHeight = layout.detailPanel.heroHeight;
   const detailPct = Math.round(detailRatio * 100);
   const gridPct = 100 - detailPct;
-  const accent = config.accent || "#64e0d0";
+  const accent = layout.accent || "#64e0d0";
 
   return (
     <div

@@ -2,7 +2,7 @@
  * backpack-screen-config.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.4.1
  *
  * 全屏背包布局默认值、v1→v2 迁移与 JSON 规范化（参考设计尺寸 1920×1080）。
  */
@@ -874,69 +874,4 @@ export function resetBackpackScreenNode(
       [nodeId]: clonedDefaults[nodeId],
     },
   };
-}
-
-/**
- * 过渡期：读取水平内边距（等同旧 `cfg.pagePaddingX`）。
- *
- * Task 4 实现 resolveBackpackLayout 后删除各处适配。
- *
- * @param cfg - v2 背包配置
- * @returns panelChrome.rect.x
- */
-export function bagLegacyPagePaddingX(cfg: BackpackScreenConfig): number {
-  return cfg.nodes.panelChrome.rect.x;
-}
-
-/**
- * 过渡期：读取垂直内边距（等同旧 `cfg.pagePaddingY`）。
- *
- * @param cfg - v2 背包配置
- * @returns panelChrome.rect.y
- */
-export function bagLegacyPagePaddingY(cfg: BackpackScreenConfig): number {
-  return cfg.nodes.panelChrome.rect.y;
-}
-
-/**
- * 过渡期：读取详情栏宽度占比（等同旧 `cfg.detailRatio`）。
- *
- * @param cfg - v2 背包配置
- * @returns detailPanel.w / panelChrome.w（panel 宽非法时回退 0.36）
- */
-export function bagLegacyDetailRatio(cfg: BackpackScreenConfig): number {
-  const panelW = cfg.nodes.panelChrome.rect.w;
-  const detailW = cfg.nodes.detailPanel.rect.w;
-
-  if (
-    typeof panelW !== "number" ||
-    !Number.isFinite(panelW) ||
-    panelW <= 0 ||
-    typeof detailW !== "number" ||
-    !Number.isFinite(detailW)
-  ) {
-    return DEFAULT_DETAIL_RATIO;
-  }
-
-  return detailW / panelW;
-}
-
-/**
- * 过渡期：读取格子最小边（等同旧 `cfg.gridCellMin`）。
- *
- * @param cfg - v2 背包配置
- * @returns itemGrid.cellMin
- */
-export function bagLegacyGridCellMin(cfg: BackpackScreenConfig): number {
-  return cfg.nodes.itemGrid.cellMin;
-}
-
-/**
- * 过渡期：读取大图高度（等同旧 `cfg.heroHeight`）。
- *
- * @param cfg - v2 背包配置
- * @returns detailPanel.heroHeight
- */
-export function bagLegacyHeroHeight(cfg: BackpackScreenConfig): number {
-  return cfg.nodes.detailPanel.heroHeight;
 }

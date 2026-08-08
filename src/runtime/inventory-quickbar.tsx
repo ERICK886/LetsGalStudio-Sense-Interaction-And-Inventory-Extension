@@ -2,7 +2,7 @@
  * inventory-quickbar.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 运行时 8 格快捷栏：按最近获得截断，定位取自 InventoryHudConfig；
  * 点击槽打开大图，打开背包进入完整网格（含合成 Tab 接线）。
@@ -22,10 +22,7 @@ import {
 import { craftRecipeInInventory } from "../domain/crafting";
 import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
-import {
-  hudLegacyLeft,
-  hudLegacyTop,
-} from "../domain/inventory-hud";
+import { resolveHudLayout } from "../domain/hud-layout";
 import { parseInventoryHudJson } from "../domain/serialize";
 import type {
   InventoryEntry,
@@ -114,7 +111,7 @@ function padQuickbarSlots(
 /**
  * 8 格快捷栏 + 打开背包 + 大图 / 背包弹层。
  *
- * 定位使用 `hudLegacyLeft/Top`；槽位尺寸 / 间距取自 `nodes.quickbarRoot`。
+ * 定位 / 槽尺寸 / 间距取自 `resolveHudLayout(hud)`。
  * 默认纵向排列（左侧锚点）。
  *
  * @param props.inventory - 库存状态
@@ -150,17 +147,21 @@ export function InventoryQuickbar({
   );
 
   const itemList = items as ItemDefinition[];
-  const slotSize = Math.max(24, hud.nodes.quickbarRoot.slotSize || 64);
-  const gap = Math.max(0, hud.nodes.quickbarRoot.gap || 0);
-  const openBagLabel =
-    hud.nodes.openBagButton.style.label || "打开背包";
+
+  /**
+   * 共享布局解析：与 backpack-shell / 编辑器画布同源，避免定位漂移。
+   */
+  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
+  const slotSize = Math.max(24, layout.root.slotSize || 64);
+  const gap = Math.max(0, layout.root.gap || 0);
+  const openBagLabel = layout.openBagStyle.label || "打开背包";
 
   /**
    * HUD 强调色：作者配置优先，空串回退主题 accent。
    */
   const accent =
-    typeof hud.accent === "string" && hud.accent.trim().length > 0
-      ? hud.accent.trim()
+    typeof layout.accent === "string" && layout.accent.trim().length > 0
+      ? layout.accent.trim()
       : tokens.accent;
 
   /**
@@ -186,8 +187,8 @@ export function InventoryQuickbar({
 
   return (
     <>
-      {hud.customCss.trim() ? (
-        <style data-testid="inventory-hud-custom-css">{hud.customCss}</style>
+      {layout.customCss.trim() ? (
+        <style data-testid="inventory-hud-custom-css">{layout.customCss}</style>
       ) : null}
 
       <div
@@ -195,11 +196,11 @@ export function InventoryQuickbar({
         data-testid="inventory-quickbar"
         style={{
           position: "absolute",
-          left: hudLegacyLeft(hud),
-          top: hudLegacyTop(hud),
+          left: layout.root.x,
+          top: layout.root.y,
           zIndex: 40,
           display: "flex",
-          flexDirection: "column",
+          flexDirection: layout.root.direction,
           alignItems: "stretch",
           gap,
           pointerEvents: "auto",

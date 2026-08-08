@@ -2,17 +2,14 @@
  * hud-visual-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.9
+ * 版本: 0.4.0
  *
  * 快捷栏 HUD 可视化画布：设计分辨率 letterbox（flex 居中）+ 可拖拽快捷栏预览。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { resolveHudLayout } from "../../domain/hud-layout";
 import { QUICKBAR_SLOTS } from "../../domain/inventory";
-import {
-  hudLegacyLeft,
-  hudLegacyTop,
-} from "../../domain/inventory-hud";
 import type { InventoryHudConfig } from "../../domain/types";
 import { fitDesignToHost } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
@@ -111,6 +108,11 @@ export function HudVisualCanvas({
   const frameW = designWidth * scale;
   const frameH = designHeight * scale;
 
+  /**
+   * 共享布局：根定位 / 槽几何与运行时 resolveHudLayout 一致。
+   */
+  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
+
   const onPointerDown = useCallback(
     (event: React.PointerEvent): void => {
       event.preventDefault();
@@ -118,12 +120,12 @@ export function HudVisualCanvas({
       dragRef.current = {
         startX: event.clientX,
         startY: event.clientY,
-        originLeft: hudLegacyLeft(hud),
-        originTop: hudLegacyTop(hud),
+        originLeft: layout.root.x,
+        originTop: layout.root.y,
         scale,
       };
     },
-    [hud, scale],
+    [layout.root.x, layout.root.y, scale],
   );
 
   const onPointerMove = useCallback(
@@ -139,10 +141,7 @@ export function HudVisualCanvas({
       const nextLeft = Math.max(0, Math.round(drag.originLeft + dx));
       const nextTop = Math.max(0, Math.round(drag.originTop + dy));
 
-      if (
-        nextLeft === hudLegacyLeft(hud) &&
-        nextTop === hudLegacyTop(hud)
-      ) {
+      if (nextLeft === layout.root.x && nextTop === layout.root.y) {
         return;
       }
 
@@ -157,28 +156,23 @@ export function HudVisualCanvas({
         },
       });
     },
-    [hud, onHudChange],
+    [hud, layout.root.x, layout.root.y, onHudChange],
   );
 
   const onPointerUp = useCallback((): void => {
     dragRef.current = null;
   }, []);
 
-  const slotSize =
-    hud.nodes.quickbarRoot.slotSize > 0
-      ? hud.nodes.quickbarRoot.slotSize
-      : 64;
-  const gap =
-    hud.nodes.quickbarRoot.gap >= 0 ? hud.nodes.quickbarRoot.gap : 8;
-  const openBagLabel =
-    hud.nodes.openBagButton.style.label || "打开背包";
+  const slotSize = layout.root.slotSize > 0 ? layout.root.slotSize : 64;
+  const gap = layout.root.gap >= 0 ? layout.root.gap : 8;
+  const openBagLabel = layout.openBagStyle.label || "打开背包";
 
   /**
    * 预览强调色：配置优先，空串回退主题 accent。
    */
   const accent =
-    typeof hud.accent === "string" && hud.accent.trim().length > 0
-      ? hud.accent.trim()
+    typeof layout.accent === "string" && layout.accent.trim().length > 0
+      ? layout.accent.trim()
       : tokens.accent;
 
   return (
@@ -245,10 +239,10 @@ export function HudVisualCanvas({
               onPointerCancel={onPointerUp}
               style={{
                 position: "absolute",
-                left: hudLegacyLeft(hud),
-                top: hudLegacyTop(hud),
+                left: layout.root.x,
+                top: layout.root.y,
                 display: "flex",
-                flexDirection: "column",
+                flexDirection: layout.root.direction,
                 gap,
                 cursor: "grab",
                 touchAction: "none",

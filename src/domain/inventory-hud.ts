@@ -2,7 +2,7 @@
  * inventory-hud.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 物品栏 HUD 外观默认值、v1→v2 迁移与 JSON 规范化。
  */
@@ -396,28 +396,4 @@ export function resetInventoryHudNode(
       openBagButton: cloneOpenBagButton(defaults.nodes.openBagButton),
     },
   };
-}
-
-/**
- * 过渡期：读取快捷栏左边距（等同旧 `cfg.left`）。
- *
- * Task 3 实现 resolveHudLayout 后删除各处 `.left` 适配。
- *
- * @param cfg - v2 HUD 配置
- * @returns quickbarRoot.rect.x
- */
-export function hudLegacyLeft(cfg: InventoryHudConfig): number {
-  return cfg.nodes.quickbarRoot.rect.x;
-}
-
-/**
- * 过渡期：读取快捷栏顶边距（等同旧 `cfg.top`）。
- *
- * Task 3 实现 resolveHudLayout 后删除各处 `.top` 适配。
- *
- * @param cfg - v2 HUD 配置
- * @returns quickbarRoot.rect.y
- */
-export function hudLegacyTop(cfg: InventoryHudConfig): number {
-  return cfg.nodes.quickbarRoot.rect.y;
 }

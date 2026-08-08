@@ -2,7 +2,7 @@
  * backpack-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.9
+ * 版本: 0.4.0
  *
  * backpack-hud 主壳：常驻快捷栏 HUD + 可选全屏背包。
  * 根节点 pointer-events:none，仅交互控件接收事件，避免挡住场景。
@@ -24,10 +24,7 @@ import {
 } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
-import {
-  hudLegacyLeft,
-  hudLegacyTop,
-} from "../domain/inventory-hud";
+import { resolveHudLayout } from "../domain/hud-layout";
 import { parseInventoryHudJson } from "../domain/serialize";
 import type {
   InventoryEntry,
@@ -188,21 +185,20 @@ export function BackpackShell({
     [setInventory],
   );
 
-  const slotSize =
-    hud.nodes.quickbarRoot.slotSize > 0
-      ? hud.nodes.quickbarRoot.slotSize
-      : 56;
-  const gap =
-    hud.nodes.quickbarRoot.gap >= 0 ? hud.nodes.quickbarRoot.gap : 8;
-  const openBagLabel =
-    hud.nodes.openBagButton.style.label || "打开背包";
+  /**
+   * 共享布局解析：根定位 / 槽尺寸 / 按钮样式，与编辑器画布同源。
+   */
+  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
+  const slotSize = layout.root.slotSize > 0 ? layout.root.slotSize : 56;
+  const gap = layout.root.gap >= 0 ? layout.root.gap : 8;
+  const openBagLabel = layout.openBagStyle.label || "打开背包";
 
   /**
    * HUD 强调色：作者配置优先，非法 / 空串回退主题 accent。
    */
   const accent =
-    typeof hud.accent === "string" && hud.accent.trim().length > 0
-      ? hud.accent.trim()
+    typeof layout.accent === "string" && layout.accent.trim().length > 0
+      ? layout.accent.trim()
       : tokens.accent;
 
   return (
@@ -222,11 +218,11 @@ export function BackpackShell({
         data-testid="backpack-quickbar"
         style={{
           position: "absolute",
-          left: hudLegacyLeft(hud),
-          top: hudLegacyTop(hud),
+          left: layout.root.x,
+          top: layout.root.y,
           zIndex: 81,
           display: "flex",
-          flexDirection: "column",
+          flexDirection: layout.root.direction,
           alignItems: "stretch",
           gap,
           pointerEvents: "auto",
