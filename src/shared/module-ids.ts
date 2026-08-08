@@ -14,5 +14,5 @@ export const EDITOR_MODULE_ID = "editor";
 /** 游戏运行时：场景交互 + 阻塞会话 + 玩家存档 */
 export const SCENE_INTERACTION_MODULE_ID = "scene-interaction";
 
-/** 日后：背包 / 快捷栏 HUD（本版不实现） */
+/** 背包 / 快捷栏 HUD（独立程序） */
 export const BACKPACK_HUD_MODULE_ID = "backpack-hud";

@@ -2,13 +2,16 @@
  * item-preview-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 物品库编辑器中栏：icon + detailImage + 名称/描述文案预览。
+ * 图片路径经 ctx.asset.resolve 解析（与场景底图 / 交互点一致）。
  */
 
-import React from "react";
+import React, { useMemo } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
 import type { ItemDefinition } from "../../domain/types";
+import { resolveAssetUrl } from "../../shared/resolve-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -25,13 +28,14 @@ export interface ItemPreviewPanelProps {
 }
 
 /**
- * 预览区图片块：有 URI 则展示，否则占位。
+ * 预览区图片块：有 URI 则 resolve 后展示，否则占位。
  *
  * @param props.label - 区块标题
- * @param props.src - 图片 URI
+ * @param props.src - 领域资源路径（如 ui/item1.png）
  * @param props.maxHeight - 最大高度
  * @param props.testId - data-testid
  * @param props.tokens - 主题
+ * @param props.resolve - SDK asset.resolve
  * @returns 预览块
  */
 function PreviewImageBlock({
@@ -40,14 +44,19 @@ function PreviewImageBlock({
   maxHeight,
   testId,
   tokens,
+  resolve,
 }: {
   label: string;
   src: string;
   maxHeight: number;
   testId: string;
   tokens: ThemeTokens;
+  resolve: ((uri: string) => { url: string }) | undefined;
 }): React.ReactElement {
-  const trimmed = src.trim();
+  const url = useMemo(
+    () => resolveAssetUrl(src, resolve),
+    [src, resolve],
+  );
 
   return (
     <div
@@ -85,9 +94,9 @@ function PreviewImageBlock({
           overflow: "hidden",
         }}
       >
-        {trimmed ? (
+        {url ? (
           <img
-            src={trimmed}
+            src={url}
             alt={label}
             style={{
               maxWidth: "100%",
@@ -121,6 +130,8 @@ export function ItemPreviewPanel({
   item,
 }: ItemPreviewPanelProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
 
   if (item === null) {
     return (
@@ -209,6 +220,7 @@ export function ItemPreviewPanel({
         maxHeight={96}
         testId="item-preview-icon"
         tokens={tokens}
+        resolve={resolve}
       />
 
       <PreviewImageBlock
@@ -217,6 +229,7 @@ export function ItemPreviewPanel({
         maxHeight={240}
         testId="item-preview-detail"
         tokens={tokens}
+        resolve={resolve}
       />
     </div>
   );

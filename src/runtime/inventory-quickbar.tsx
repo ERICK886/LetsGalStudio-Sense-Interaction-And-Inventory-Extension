@@ -6,7 +6,8 @@
  *
  * 运行时 8 格快捷栏：按最近获得截断，定位取自 InventoryHudConfig；
  * 点击槽打开大图，打开背包进入完整网格（含合成 Tab 接线）。
- * 另导出 InventoryHudLayer：自订阅 inventory / items / recipes / hud JSON。
+ * @deprecated 玩家快捷栏已迁至 `backpack/` + `backpack-hud` 模块；
+ * 本文件仅保留 InventoryQuickbar / InventoryHudLayer 作兼容参考，勿再挂到场景壳。
  */
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -29,9 +30,11 @@ import type {
   ItemDefinition,
   RecipeDefinition,
 } from "../domain/types";
+import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { useInventory } from "../store/inventory-persistence";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
+import { readRuntimeSetting } from "../store/runtime-settings";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import {
   FONT_SIZE_DEFAULT,
@@ -132,6 +135,8 @@ export function InventoryQuickbar({
   onCraftRecipe,
 }: InventoryQuickbarProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
   const [bagOpen, setBagOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ItemDefinition | null>(null);
 
@@ -189,7 +194,10 @@ export function InventoryQuickbar({
         {slots.map((entry, index) => {
           const def =
             entry !== null ? findItem(itemList, entry.itemId) : undefined;
-          const icon = def?.icon?.trim() || "";
+          const iconRaw = def?.icon?.trim() || "";
+          const icon = iconRaw
+            ? resolveAssetUrl(iconRaw, resolve)
+            : "";
           const name = def?.name || entry?.itemId || "";
           const count =
             entry?.kind === "stack" && entry.count > 1
@@ -352,7 +360,10 @@ export function InventoryHudLayer({
   const [inventory, setInventory] = useInventory(save, ctx);
   const [itemsLibrary] = useItemsLibrary();
   const [recipesLibrary] = useRecipesLibrary();
-  const [hudJsonRaw] = ctx.settings.useValue("inventoryHudJson");
+  /**
+   * HUD JSON：本模块 settings.useValue；编辑器预览则 cross 读 scene-interaction。
+   */
+  const [hudJsonLocal] = ctx.settings.useValue("inventoryHudJson");
 
   /** 最新库存 / 库引用，供合成闭包读取 */
   const inventoryRef = useRef<InventoryState>(inventory);
@@ -405,16 +416,19 @@ export function InventoryHudLayer({
     [setInventory],
   );
 
-  const hud = useMemo(() => {
-    const raw =
-      typeof hudJsonRaw === "string"
-        ? hudJsonRaw
-        : hudJsonRaw === undefined || hudJsonRaw === null
-          ? String(ctx.settings.get("inventoryHudJson") ?? "")
-          : String(hudJsonRaw);
+  const hud = useMemo((): InventoryHudConfig => {
+    let raw = "";
+
+    if (typeof hudJsonLocal === "string" && hudJsonLocal.length > 0) {
+      raw = hudJsonLocal;
+    } else {
+      const cross = readRuntimeSetting(ctx, "inventoryHudJson");
+
+      raw = typeof cross === "string" ? cross : String(cross ?? "");
+    }
 
     return parseInventoryHudJson(raw);
-  }, [hudJsonRaw, ctx.settings]);
+  }, [hudJsonLocal, ctx]);
 
   return (
     <InventoryQuickbar

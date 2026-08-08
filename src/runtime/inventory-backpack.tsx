@@ -9,6 +9,7 @@
  */
 
 import React, { useMemo, useState } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
 import { sortEntriesRecentFirst } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
 import type {
@@ -17,6 +18,7 @@ import type {
   ItemDefinition,
   RecipeDefinition,
 } from "../domain/types";
+import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -166,6 +168,8 @@ export function InventoryBackpack({
   onCraftRecipe: onCraftRecipeProp,
 }: InventoryBackpackProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
   const craftCtx = useCraftBagContext();
   const [detailItem, setDetailItem] = useState<ItemDefinition | null>(null);
   const [activeTab, setActiveTab] = useState<BagTab>("items");
@@ -367,7 +371,10 @@ export function InventoryBackpack({
               >
                 {sorted.map((entry) => {
                   const def = findItem(itemList, entry.itemId);
-                  const icon = def?.icon?.trim() || "";
+                  const iconRaw = def?.icon?.trim() || "";
+                  const icon = iconRaw
+                    ? resolveAssetUrl(iconRaw, resolve)
+                    : "";
                   const name = def?.name || entry.itemId;
                   const count = entryCountLabel(entry);
 

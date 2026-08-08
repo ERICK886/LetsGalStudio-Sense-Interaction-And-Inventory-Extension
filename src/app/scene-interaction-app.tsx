@@ -2,30 +2,32 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.2
  *
- * 运行时程序 App 壳：异步加载 RuntimeShell / PlayerShell。
- * 编辑器已独立为 `editor` 程序，本 App 不再分流 EditorShell。
+ * 运行时程序 App：RuntimeShell / PlayerShell（纯场景画面）。
+ * 背包 UI 由独立程序 `backpack-hud` 负责。
  *
- * `playerSession === "modal"` 时分流至 PlayerShell。
- * `inventoryHudMode === "always"` 时在 App 层挂载快捷栏。
+ * - 预览（Studio 程序预览）：settings 沙箱 + **内嵌** BackpackShell
+ *   （不可 ctx.ui.show 背包，否则会顶掉当前预览容器，场景消失）
+ * - 玩家会话：slot save + ctx.ui.show(backpack-hud) 叠层
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
   type ExtensionProps,
   type SaveAPI,
 } from "@avg-studio/sdk";
-import type { InventoryHudMode } from "../domain/types";
 import { SCENE_INTERACTION_UI_ID } from "../methods/scene-methods";
 import { endPlayerSessionWait } from "../runtime/player-session";
 import {
-  EDITOR_MODULE_ID,
+  BACKPACK_HUD_MODULE_ID,
   SCENE_INTERACTION_MODULE_ID,
 } from "../shared/module-ids";
 import { logError } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import { bindInventoryPersistence } from "../store/inventory-session";
+import { createSettingsPreviewSave } from "../store/preview-save";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
 import {
@@ -37,75 +39,29 @@ import type { ThemeMode } from "../theme/tokens";
 
 /**
  * SceneInteractionApp 对外 props。
- *
- * `save` 由 Extension.render() 通过 props 注入；组件引用必须稳定。
- *
- * `playerPresentation` / `playerSession` 由 `ctx.ui.show` 第三参合并进组件 props。
  */
 export interface SceneInteractionAppProps extends ExtensionProps {
-  /**
-   * 强类型存档读写 API（来自扩展实例 `this.save`）。
-   */
   save: SaveAPI<SceneInteractionSaveMap>;
-
-  /**
-   * 玩家呈现标记（预览 openScene / 玩家会话均可为 true）。
-   * 仅 `playerSession === "modal"` 时走 PlayerShell。
-   */
   playerPresentation?: boolean;
-
-  /**
-   * 玩家阻塞会话：`"modal"` 时渲染 PlayerShell，不走 Runtime 预览壳。
-   */
   playerSession?: "modal";
 }
 
-/**
- * 解析「允许编辑」设置（声明在 editor 模块）。
- *
- * @param raw - settings / cross 读到的原始值
- * @returns 是否允许打开编辑器
- */
-function resolveAllowEdit(raw: unknown): boolean {
-  return raw !== false && raw !== "false" && raw !== 0;
-}
-
-/**
- * 解析物品栏 HUD 模式。
- *
- * @param raw - settings 原始值
- * @returns `"withScene"` | `"always"`
- */
-function resolveInventoryHudMode(raw: unknown): InventoryHudMode {
-  return raw === "always" ? "always" : "withScene";
-}
-
-/** 异步加载后的运行壳 props。 */
 type RuntimeShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
-  allowEdit: boolean;
-  onSetEditMode: (enabled: boolean) => void;
-  inventoryHudMode: InventoryHudMode;
 }>;
 
-/** 异步加载后的玩家壳 props。 */
 type PlayerShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
   onRequestClose: () => void | Promise<void>;
-  inventoryHudMode?: InventoryHudMode;
 }>;
 
-/** 异步加载后的常驻 HUD 层。 */
-type InventoryHudLayerComponent = React.ComponentType<{
-  save: SaveAPI<SceneInteractionSaveMap>;
+type BackpackShellComponent = React.ComponentType<{
+  openBackpack?: boolean;
 }>;
 
 /**
- * 全屏轻量占位：保证 Studio 预览能在超时前完成挂载。
- *
- * @param props.message - 提示文案
- * @param props.themeMode - 当前主题
- * @returns 占位 React 元素
+ * @param props.message - 提示
+ * @param props.themeMode - 主题
  */
 function MountPlaceholder({
   message,
@@ -154,14 +110,13 @@ function MountPlaceholder({
 }
 
 /**
- * 应用主内容：订阅 settings / save，异步加载 Runtime / Player。
- *
- * @param props.save - 扩展注入的存档 API
- * @param props.playerSession - `"modal"` 时强制 PlayerShell
- * @returns 主题包裹的壳 UI（或占位 / 错误）
+ * @param props.save - 存档
+ * @param props.playerPresentation - 玩家 openScene
+ * @param props.playerSession - modal 时 PlayerShell
  */
 function SceneInteractionAppContent({
   save,
+  playerPresentation,
   playerSession,
 }: {
   save: SaveAPI<SceneInteractionSaveMap>;
@@ -169,75 +124,83 @@ function SceneInteractionAppContent({
   playerSession?: "modal";
 }): React.ReactElement {
   const ctx = useExtensionContext();
-
-  /** 阻塞会话：true 时只挂 PlayerShell */
   const isPlayerModal = playerSession === "modal";
+  /**
+   * 玩家运行时：openScene(playerPresentation) / openSceneInteraction(modal)。
+   * Studio 程序预览无此标记 → 走扩展 settings 沙箱，不写玩家 slot。
+   */
+  const isPlayerRuntime =
+    isPlayerModal || playerPresentation === true;
 
-  /** theme / allowEdit 声明在 editor；本模块用 cross 读取 */
   const themeRaw = readAuthorSetting(ctx, "theme");
-  const allowEditRaw = readAuthorSetting(ctx, "allowEdit");
-
-  const [hudModeRaw] = ctx.settings.useValue("inventoryHudMode");
-
-  const allowEdit = resolveAllowEdit(
-    allowEditRaw !== undefined
-      ? allowEditRaw
-      : true,
-  );
-
   const themeMode: ThemeMode = themeRaw === "light" ? "light" : "dark";
 
-  const inventoryHudMode = resolveInventoryHudMode(
-    hudModeRaw !== undefined
-      ? hudModeRaw
-      : ctx.settings.get("inventoryHudMode"),
+  const effectiveSave = useMemo((): SaveAPI<SceneInteractionSaveMap> => {
+    if (isPlayerRuntime) {
+      return save;
+    }
+
+    const defaultSceneId = String(
+      readAuthorSetting(ctx, "defaultSceneId") ?? "",
+    ).trim();
+
+    return createSettingsPreviewSave(ctx, {
+      currentSceneId: defaultSceneId,
+      isEditMode: false,
+    });
+  }, [ctx, isPlayerRuntime, save]);
+
+  /** 绑定库存会话，供背包层共享 */
+  useEffect(
+    () => bindInventoryPersistence(effectiveSave),
+    [effectiveSave],
   );
 
   /**
-   * always：在 App 层挂载 HUD（与壳内 withScene 互斥）。
+   * 仅玩家运行时用 ui.show 叠背包。
+   * Studio 程序预览若 show 另一个程序，会顶掉当前容器导致场景消失。
    */
-  const showAlwaysHud = inventoryHudMode === "always";
+  useEffect(() => {
+    if (!isPlayerRuntime) {
+      return;
+    }
 
-  /**
-   * 打开独立编辑器程序（hide 本 UI 可选；编辑器叠在上层亦可）。
-   *
-   * @param enabled - true 显示 editor；false 仅隐藏 editor（预览已在本程序）
-   */
-  const setEditMode = useCallback(
-    (enabled: boolean) => {
-      void (async () => {
-        try {
-          if (enabled) {
-            await ctx.ui.show(
-              EDITOR_MODULE_ID,
-              {},
-              {
-                size: "(100%, 100%)",
-                position: "(0, 0)",
-                interactable: true,
-              },
-            );
-          } else {
-            await ctx.ui.hide(EDITOR_MODULE_ID);
-          }
-        } catch (err) {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await ctx.ui.show(
+          BACKPACK_HUD_MODULE_ID,
+          {},
+          {
+            size: "(100%, 100%)",
+            position: "(0, 0)",
+            interactable: true,
+          },
+        );
+      } catch (err) {
+        if (!cancelled) {
           logError(
             "scene-interaction-app",
-            "setEditMode: 显示/隐藏编辑器失败",
+            "自动显示 backpack-hud 失败",
             err,
           );
         }
-      })();
-    },
-    [ctx],
-  );
+      }
+    })();
 
-  /**
-   * 玩家壳退出：隐藏程序 UI 并解除 session wait。
-   *
-   * @returns Promise<void>
-   */
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx, isPlayerRuntime]);
+
   const handlePlayerRequestClose = useCallback(async (): Promise<void> => {
+    try {
+      await ctx.ui.hide(BACKPACK_HUD_MODULE_ID);
+    } catch {
+      // 背包可能未打开
+    }
+
     try {
       await ctx.ui.hide(SCENE_INTERACTION_UI_ID);
     } catch (err) {
@@ -253,13 +216,10 @@ function SceneInteractionAppContent({
 
   const [RuntimeShellComp, setRuntimeShellComp] =
     useState<RuntimeShellComponent | null>(null);
-
   const [PlayerShellComp, setPlayerShellComp] =
     useState<PlayerShellComponent | null>(null);
-
-  const [HudLayerComp, setHudLayerComp] =
-    useState<InventoryHudLayerComponent | null>(null);
-
+  const [BackpackShellComp, setBackpackShellComp] =
+    useState<BackpackShellComponent | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -269,10 +229,8 @@ function SceneInteractionAppContent({
 
     if (isPlayerModal) {
       setPlayerShellComp(null);
-      setHudLayerComp(null);
     } else {
       setRuntimeShellComp(null);
-      setHudLayerComp(null);
     }
 
     (async () => {
@@ -280,59 +238,46 @@ function SceneInteractionAppContent({
         if (isPlayerModal) {
           const playerMod = await import("../runtime/player-shell");
 
-          if (cancelled) {
-            return;
-          }
-
-          setPlayerShellComp(() => playerMod.PlayerShell);
-
-          if (inventoryHudMode === "always") {
-            const hudMod = await import("../runtime/inventory-quickbar");
-
-            if (cancelled) {
-              return;
-            }
-
-            setHudLayerComp(() => hudMod.InventoryHudLayer);
+          if (!cancelled) {
+            setPlayerShellComp(() => playerMod.PlayerShell);
           }
         } else {
           const runtimeMod = await import("../runtime/runtime-shell");
 
-          if (cancelled) {
-            return;
+          if (!cancelled) {
+            setRuntimeShellComp(() => runtimeMod.RuntimeShell);
           }
+        }
 
-          setRuntimeShellComp(() => runtimeMod.RuntimeShell);
+        /**
+         * 程序预览：同树内嵌背包，避免 ui.show 顶掉场景。
+         */
+        if (!isPlayerRuntime) {
+          const bagMod = await import("../backpack/backpack-shell");
 
-          if (inventoryHudMode === "always") {
-            const hudMod = await import("../runtime/inventory-quickbar");
-
-            if (cancelled) {
-              return;
-            }
-
-            setHudLayerComp(() => hudMod.InventoryHudLayer);
+          if (!cancelled) {
+            setBackpackShellComp(() => bagMod.BackpackShell);
           }
+        } else if (!cancelled) {
+          setBackpackShellComp(null);
         }
       } catch (err) {
-        if (cancelled) {
-          return;
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : String(err);
+
+          console.error(
+            `[${SCENE_INTERACTION_MODULE_ID}] 加载界面壳失败`,
+            err,
+          );
+          setLoadError(message);
         }
-
-        const message = err instanceof Error ? err.message : String(err);
-
-        console.error(
-          `[${SCENE_INTERACTION_MODULE_ID}] 加载界面壳失败`,
-          err,
-        );
-        setLoadError(message);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isPlayerModal, inventoryHudMode]);
+  }, [isPlayerModal, isPlayerRuntime]);
 
   const shellReady = isPlayerModal
     ? PlayerShellComp != null
@@ -361,30 +306,24 @@ function SceneInteractionAppContent({
           />
         ) : isPlayerModal && PlayerShellComp ? (
           <PlayerShellComp
-            save={save}
+            save={effectiveSave}
             onRequestClose={handlePlayerRequestClose}
-            inventoryHudMode={inventoryHudMode}
           />
         ) : RuntimeShellComp ? (
-          <RuntimeShellComp
-            save={save}
-            allowEdit={allowEdit}
-            onSetEditMode={setEditMode}
-            inventoryHudMode={inventoryHudMode}
-          />
+          <RuntimeShellComp save={effectiveSave} />
         ) : null}
 
-        {showAlwaysHud && HudLayerComp ? (
+        {!isPlayerRuntime && BackpackShellComp ? (
           <div
-            data-testid="inventory-hud-always-layer"
+            data-testid="scene-interaction-preview-backpack"
             style={{
               position: "absolute",
               inset: 0,
-              zIndex: 50,
+              zIndex: 90,
               pointerEvents: "none",
             }}
           >
-            <HudLayerComp save={save} />
+            <BackpackShellComp />
           </div>
         ) : null}
       </div>
@@ -393,15 +332,9 @@ function SceneInteractionAppContent({
 }
 
 /**
- * 场景交互运行时根组件（稳定导出，供 Extension.render 直接引用）。
+ * 场景交互运行时根组件。
  *
- * @param props - 含注入的 `save` API；可选 `playerSession` / `playerPresentation`
- * @returns 全屏主题壳 + 占位 / Runtime / Player
- *
- * @remarks
- * - 编辑器由独立程序 `editor` 提供，勿在本 App 内再挂 EditorShell
- * - `playerSession === "modal"` → PlayerShell
- * - `inventoryHudMode=always` → App 层挂载快捷栏
+ * @param props - 含 save / playerSession
  */
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,

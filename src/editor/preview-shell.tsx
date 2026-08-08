@@ -1,12 +1,14 @@
 /**
- * player-shell.tsx
+ * preview-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.3.2
  *
- * 玩家会话壳（modal）：纯运行时画面（场景 + 动作链 / toast / once）+ 库存 / 进度；
- * 无上方预览条；右上角浮层「退出」关闭阻塞会话。
- * 背包 / 快捷栏 UI 由独立程序 `backpack-hud` 模块负责，本壳不再挂载 InventoryHudLayer。
+ * 编辑器内「运行预览」壳（作者工具侧，≠ scene-interaction 玩家运行时）。
+ * 提供场景 / 动作链 / toast / once 预览。
+ * `save` 为扩展 settings 沙箱，与玩家 slot 隔离。
+ * 背包以内嵌 BackpackShell 叠层显示（勿 ui.show，以免顶掉编辑器预览容器）。
+ * 另带预览顶栏：品牌、场景名、「编辑」返回 EditorShell。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,66 +32,79 @@ import type {
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
+import { createActionRuntime } from "../runtime/create-action-runtime";
+import { SceneView } from "../runtime/scene-view";
 import {
   useInventory,
   useProgress,
 } from "../store/inventory-persistence";
+import { bindInventoryPersistence } from "../store/inventory-session";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
-import { FONT_SIZE_DEFAULT, useTheme } from "../theme/theme-provider";
+import {
+  FONT_SIZE_DEFAULT,
+  FONT_SIZE_TITLE,
+  useTheme,
+} from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
-import { createActionRuntime } from "./create-action-runtime";
-import { SceneView } from "./scene-view";
+
+type BackpackShellComponent = React.ComponentType<{
+  openBackpack?: boolean;
+}>;
 
 /**
- * PlayerShell 组件属性。
+ * PreviewShell 组件属性。
  */
-export interface PlayerShellProps {
+export interface PreviewShellProps {
   /**
-   * 强类型存档 API（读写 currentSceneId / inventory / progress）。
+   * 预览会话内存存档（与玩家 slot 隔离）。
    */
   save: SaveAPI<SceneInteractionSaveMap>;
 
   /**
-   * 玩家点击「退出」时调用。
-   * App 注入实现：`ctx.ui.hide(SCENE_INTERACTION_UI_ID)` + `endPlayerSessionWait()`。
+   * 返回编辑器（顶栏「编辑」）。
    *
-   * @returns void | Promise<void>
+   * @param enabled - 恒为 true（进入编辑）
    */
-  onRequestClose: () => void | Promise<void>;
+  onBackToEditor: (enabled: boolean) => void;
 }
 
 /**
- * 浮层退出按钮样式（非预览顶栏）。
+ * 预览顶栏按钮样式。
  *
  * @param tokens - 主题 token
+ * @param variant - 按钮变体
  * @returns CSSProperties
  */
-function exitButtonStyle(tokens: ThemeTokens): React.CSSProperties {
+function topBarButtonStyle(
+  tokens: ThemeTokens,
+  variant: "default" | "primary" = "default",
+): React.CSSProperties {
+  const isPrimary = variant === "primary";
+
   return {
     appearance: "none",
-    border: `1px solid ${tokens.accent}`,
-    background: tokens.accent,
-    color: "#0B1210",
+    border: `1px solid ${isPrimary ? tokens.accent : tokens.borderStrong}`,
+    background: isPrimary ? tokens.accent : tokens.bgSunken,
+    color: isPrimary ? "#0B1210" : tokens.textPrimary,
     borderRadius: 6,
     padding: "6px 12px",
     fontSize: FONT_SIZE_DEFAULT,
     fontFamily: "inherit",
-    fontWeight: 600,
+    fontWeight: isPrimary ? 600 : 500,
     cursor: "pointer",
     lineHeight: 1.2,
-    pointerEvents: "auto",
   };
 }
 
 /**
- * 根据 save.currentSceneId 与场景库解析当前场景；空 id 时回退首个场景。
+ * 根据 currentSceneId 与场景库解析当前场景；空 id 时回退首个场景。
  *
  * @param scenes - 场景列表
- * @param currentSceneId - 存档中的场景 id
+ * @param currentSceneId - 预览存档中的场景 id
  * @returns 场景定义或 null
  */
 function resolveCurrentScene(
@@ -112,31 +127,26 @@ function resolveCurrentScene(
 }
 
 /**
- * 玩家会话壳：全屏场景交互，无编辑入口，顶栏「退出」关闭会话。
+ * 编辑器运行预览壳：顶栏 + 场景交互能力（作者调试用）。
  *
- * 交互逻辑与 RuntimeShell 对齐（动作链、toast、once 防抖）；
- * 背包 UI 由 `backpack-hud` 模块提供，不在本壳内渲染。
+ * 背包以内嵌 BackpackShell 叠在场景上（与库存会话共享）。
  *
- * @param props.save - 存档 API
- * @param props.onRequestClose - 退出回调
- * @returns 全屏玩家 UI
+ * @param props.save - settings 沙箱预览存档
+ * @param props.onBackToEditor - 点「编辑」返回 EditorShell
+ * @returns 带预览顶栏的运行时 UI
  *
  * @example
  * ```tsx
- * <PlayerShell
- *   save={save}
- *   onRequestClose={() => endPlayerSessionWait()}
+ * <PreviewShell
+ *   save={previewSave}
+ *   onBackToEditor={() => setMode("edit")}
  * />
  * ```
- *
- * @remarks
- * - data-testid：`player-shell` / `player-shell-exit`
- * - 不自动 end session；仅由退出按钮触发 onRequestClose
  */
-export function PlayerShell({
+export function PreviewShell({
   save,
-  onRequestClose,
-}: PlayerShellProps): React.ReactElement {
+  onBackToEditor,
+}: PreviewShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
   const { size: designSize } = useDesignSize();
@@ -155,15 +165,13 @@ export function PlayerShell({
     emptyToastQueue(),
   );
 
-  /** 最新库存 / 库引用，供 ActionRuntime 闭包读取 */
+  const [BackpackShellComp, setBackpackShellComp] =
+    useState<BackpackShellComponent | null>(null);
+
   const inventoryRef = useRef<InventoryState>(inventory);
   const scenesRef = useRef<SceneDefinition[]>(library.scenes);
   const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
   const progressRef = useRef<SceneProgress>(progress);
-
-  /**
-   * 动作链执行中为 true；期间忽略重复 hotspot 点击，避免并发动作链。
-   */
   const hotspotBusyRef = useRef(false);
 
   inventoryRef.current = inventory;
@@ -176,20 +184,38 @@ export function PlayerShell({
     [library.scenes, currentSceneId],
   );
 
-  /**
-   * 存档 currentSceneId 为空但库有场景时，回写首个场景 id。
-   */
+  const sceneTitle = scene?.name ?? "（无场景）";
+
   useEffect(() => {
     if (!currentSceneId && scene !== null) {
       setCurrentSceneId(scene.id);
     }
   }, [currentSceneId, scene, setCurrentSceneId]);
 
-  /**
-   * toast 入队（ActionRuntime 回调）。
-   *
-   * @param payload - toast 载荷
-   */
+  /** 绑定库存会话，供内嵌背包共享 */
+  useEffect(() => bindInventoryPersistence(save), [save]);
+
+  /** 预览内嵌背包壳（不走 ui.show） */
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const mod = await import("../backpack/backpack-shell");
+
+        if (!cancelled) {
+          setBackpackShellComp(() => mod.BackpackShell);
+        }
+      } catch (err) {
+        console.warn("[editor-preview]", "加载 BackpackShell 失败", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleEnqueueToast = useCallback(
     (payload: {
       text: string;
@@ -220,19 +246,10 @@ export function PlayerShell({
     [setInventory, setCurrentSceneId, handleEnqueueToast],
   );
 
-  /**
-   * 推进 toast 队列。
-   */
   const handleToastAdvance = useCallback((): void => {
     setToastQueue((prev) => advanceToastQueue(prev));
   }, []);
 
-  /**
-   * 交互点点击：执行动作链；once 完成后 markConsumed 并隐藏。
-   * 动作链未结束前忽略再次点击（防抖）。
-   *
-   * @param hotspot - 被激活的交互点
-   */
   const handleHotspotActivate = useCallback(
     async (hotspot: HotspotElement): Promise<void> => {
       if (hotspotBusyRef.current) {
@@ -252,7 +269,7 @@ export function PlayerShell({
           setProgress(markConsumed(progressRef.current, hotspot.id));
         }
       } catch (err) {
-        console.warn("[scene-interaction]", "hotspot activate failed", err);
+        console.warn("[editor-preview]", "hotspot activate failed", err);
       } finally {
         hotspotBusyRef.current = false;
       }
@@ -260,30 +277,85 @@ export function PlayerShell({
     [actionRuntime, setProgress],
   );
 
-  /**
-   * 顶栏「退出」：委托给 App / 方法层注入的关闭回调。
-   */
-  const handleExit = useCallback((): void => {
-    onRequestClose();
-  }, [onRequestClose]);
-
   return (
     <div
-      data-testid="player-shell"
+      data-testid="preview-shell"
       style={{
         width: "100%",
         height: "100%",
-        position: "relative",
+        display: "flex",
+        flexDirection: "column",
         minHeight: 0,
         background: tokens.bgBase,
         color: tokens.textPrimary,
       }}
     >
-      <div
-        data-testid="player-body"
+      <header
+        data-testid="preview-top-bar"
         style={{
-          width: "100%",
-          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 16px",
+          borderBottom: `1px solid ${tokens.border}`,
+          background: tokens.bgElevated,
+          flexShrink: 0,
+          boxShadow: "0 1px 0 rgba(0,0,0,0.25)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginRight: 4,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: tokens.accent,
+              boxShadow: `0 0 0 3px ${tokens.accent}33`,
+            }}
+          />
+          <span
+            style={{
+              fontSize: FONT_SIZE_TITLE,
+              fontWeight: 650,
+              color: tokens.textPrimary,
+              letterSpacing: "0.02em",
+            }}
+          >
+            运行预览
+          </span>
+        </div>
+
+        <button
+          type="button"
+          data-testid="preview-mode-toggle"
+          onClick={() => onBackToEditor(true)}
+          style={topBarButtonStyle(tokens, "primary")}
+        >
+          编辑
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <span
+          style={{ fontSize: FONT_SIZE_DEFAULT, color: tokens.textMuted }}
+        >
+          {sceneTitle}
+        </span>
+      </header>
+
+      <main
+        data-testid="preview-body"
+        style={{
+          flex: 1,
+          minHeight: 0,
           position: "relative",
         }}
       >
@@ -296,27 +368,21 @@ export function PlayerShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
         />
-      </div>
 
-      {/* 浮层退出：不占用预览顶栏区域 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          right: 12,
-          zIndex: 60,
-          pointerEvents: "none",
-        }}
-      >
-        <button
-          type="button"
-          data-testid="player-shell-exit"
-          onClick={handleExit}
-          style={exitButtonStyle(tokens)}
-        >
-          退出
-        </button>
-      </div>
+        {BackpackShellComp ? (
+          <div
+            data-testid="preview-backpack-overlay"
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 90,
+              pointerEvents: "none",
+            }}
+          >
+            <BackpackShellComp />
+          </div>
+        ) : null}
+      </main>
     </div>
   );
 }

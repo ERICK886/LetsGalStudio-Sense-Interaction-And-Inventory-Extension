@@ -17,6 +17,7 @@ import React, {
 } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import type { SceneDefinition } from "../../domain/types";
+import { resolveAssetUrl } from "../../shared/resolve-asset-url";
 import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
 import { SceneBaseLayer } from "./scene-base-layer";
@@ -76,40 +77,6 @@ export interface SceneCanvasProps {
   designHeight: number;
 }
 
-/**
- * 解析资源 URI 为可加载 URL。
- *
- * @param uri - 领域 URI / 绝对 URL
- * @param resolve - SDK asset.resolve
- * @returns 可加载 URL；空输入返回空串
- */
-function resolveAssetUrl(
-  uri: string,
-  resolve: ((uri: string) => { url: string }) | undefined,
-): string {
-  if (!uri) {
-    return "";
-  }
-
-  if (
-    uri.startsWith("http://") ||
-    uri.startsWith("https://") ||
-    uri.startsWith("blob:") ||
-    uri.startsWith("data:")
-  ) {
-    return uri;
-  }
-
-  if (resolve === undefined) {
-    return uri;
-  }
-
-  try {
-    return resolve(uri).url || uri;
-  } catch {
-    return uri;
-  }
-}
 
 /**
  * 编辑器中部场景画布。

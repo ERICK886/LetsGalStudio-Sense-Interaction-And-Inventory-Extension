@@ -765,10 +765,20 @@ export function stringifyProgress(progress: SceneProgress): string {
 /**
  * 解析物品栏 HUD JSON 并规范化。
  *
- * @param raw - JSON 字符串
+ * @param raw - JSON 字符串；空串 / 仅空白为 settings 默认「未配置」，静默回退默认 HUD（不记 ERROR）
  * @returns 规范化后的 InventoryHudConfig
+ *
+ * @example
+ * ```ts
+ * parseInventoryHudJson(""); // → defaultInventoryHud()，无控制台报错
+ * ```
  */
 export function parseInventoryHudJson(raw: string): InventoryHudConfig {
+  // settings.inventoryHudJson 默认 ""；视为未配置，勿 JSON.parse（避免 Unexpected end of JSON input）
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return defaultInventoryHud();
+  }
+
   const parsed = safeParseJson(raw, "inventoryHud");
 
   if (parsed === null) {

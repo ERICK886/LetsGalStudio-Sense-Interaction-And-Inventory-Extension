@@ -8,7 +8,9 @@
  * 支持 string / number / boolean / enum / asset / color 叶子，以及 section / grid 布局。
  */
 
-import React from "react";
+import React, { useMemo } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
+import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -328,6 +330,57 @@ function renderEnumField<T extends Record<string, unknown>>(
  * @param tokens - 主题
  * @returns 控件节点
  */
+/**
+ * asset 字段内联缩略图：经 asset.resolve 后再给 img.src。
+ *
+ * @param props.uri - 领域路径
+ * @param props.tokens - 主题
+ * @returns 缩略图或 null
+ */
+function AssetFieldThumb({
+  uri,
+  tokens,
+}: {
+  uri: string;
+  tokens: ThemeTokens;
+}): React.ReactElement | null {
+  const ctx = useExtensionContext();
+  const url = useMemo(
+    () =>
+      resolveAssetUrl(uri, ctx.asset?.resolve?.bind(ctx.asset)),
+    [uri, ctx.asset],
+  );
+
+  if (!url) {
+    return null;
+  }
+
+  return (
+    <img
+      src={url}
+      alt=""
+      style={{
+        maxWidth: "100%",
+        maxHeight: 72,
+        objectFit: "contain",
+        borderRadius: 4,
+        border: `1px solid ${tokens.border}`,
+        background: tokens.bgSunken,
+        marginTop: 4,
+      }}
+    />
+  );
+}
+
+/**
+ * 渲染 asset 字段（文本路径 + 可选缩略图预览）。
+ *
+ * @param field - AssetFieldSchema
+ * @param value - 表单对象
+ * @param onChange - 变更回调
+ * @param tokens - 主题
+ * @returns 字段 React 元素
+ */
 function renderAssetField<T extends Record<string, unknown>>(
   field: AssetFieldSchema,
   value: T,
@@ -354,19 +407,7 @@ function renderAssetField<T extends Record<string, unknown>>(
         }}
       />
       {showPreview && str.trim() !== "" ? (
-        <img
-          src={str}
-          alt=""
-          style={{
-            maxWidth: "100%",
-            maxHeight: 72,
-            objectFit: "contain",
-            borderRadius: 4,
-            border: `1px solid ${tokens.border}`,
-            background: tokens.bgSunken,
-            marginTop: 4,
-          }}
-        />
+        <AssetFieldThumb uri={str} tokens={tokens} />
       ) : null}
       <FieldHint text={field.description} tokens={tokens} />
     </div>

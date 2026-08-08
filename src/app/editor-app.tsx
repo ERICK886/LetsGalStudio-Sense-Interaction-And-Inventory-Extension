@@ -2,22 +2,23 @@
  * editor-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.1
  *
  * 编辑器程序（`@extension id: editor`）根组件：
- * 异步加载 EditorShell，避免 Studio 挂载超时。
+ * - 编辑态：EditorShell
+ * - 预览态：本程序内 PreviewShell（settings 沙箱存档；≠ 玩家 slot）
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
   type ExtensionProps,
+  type SaveAPI,
 } from "@avg-studio/sdk";
-import {
-  EDITOR_MODULE_ID,
-  SCENE_INTERACTION_MODULE_ID,
-} from "../shared/module-ids";
 import { logError } from "../shared/logger";
+import { readAuthorSetting } from "../store/author-settings";
+import { createSettingsPreviewSave } from "../store/preview-save";
+import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
 import {
   FONT_SIZE_DEFAULT,
@@ -32,7 +33,12 @@ import type { ThemeMode } from "../theme/tokens";
 type EditorSection = "scenes" | "items" | "recipes";
 
 /**
- * EditorApp 对外 props（编辑器无 save 注入）。
+ * 编辑器 App 本地模式：作者编辑 vs 运行预览。
+ */
+type EditorAppMode = "edit" | "preview";
+
+/**
+ * EditorApp 对外 props（编辑器无玩家 save 注入）。
  */
 export interface EditorAppProps extends ExtensionProps {}
 
@@ -43,6 +49,14 @@ type EditorShellComponent = React.ComponentType<{
   editorSection: EditorSection;
   onEditorSectionChange: (section: EditorSection) => void;
   onSetEditMode: (enabled: boolean) => void;
+}>;
+
+/**
+ * 异步加载后的预览壳 props。
+ */
+type PreviewShellComponent = React.ComponentType<{
+  save: SaveAPI<SceneInteractionSaveMap>;
+  onBackToEditor: (enabled: boolean) => void;
 }>;
 
 /**
@@ -99,78 +113,106 @@ function MountPlaceholder({
 }
 
 /**
- * 编辑器主内容：订阅 theme，异步加载 EditorShell。
+ * 编辑器主内容：编辑 / 预览在本程序内切换（不跳转 scene-interaction）。
  *
- * 「运行预览」：隐藏本程序 UI，并显示 scene-interaction 预览壳。
- *
- * @returns 主题包裹的编辑器 UI
+ * @returns 主题包裹的编辑器或预览 UI
  */
 function EditorAppContent(): React.ReactElement {
   const ctx = useExtensionContext();
   const [themeSetting] = ctx.settings.useValue("theme");
   const themeMode: ThemeMode = themeSetting === "light" ? "light" : "dark";
 
+  const [mode, setMode] = useState<EditorAppMode>("edit");
   const [editorSection, setEditorSection] =
     useState<EditorSection>("scenes");
+
+  /**
+   * 进入预览时挂接扩展 settings 沙箱存档（与玩家 slot 隔离，可反复测试）。
+   * 用 previewSessionKey 强制 remount PreviewShell。
+   */
+  const [previewSessionKey, setPreviewSessionKey] = useState(0);
+  const [previewSave, setPreviewSave] =
+    useState<SaveAPI<SceneInteractionSaveMap> | null>(null);
 
   const [EditorShellComp, setEditorShellComp] =
     useState<EditorShellComponent | null>(null);
 
+  const [PreviewShellComp, setPreviewShellComp] =
+    useState<PreviewShellComponent | null>(null);
+
   const [loadError, setLoadError] = useState<string | null>(null);
 
   /**
-   * 退出编辑器并打开运行时预览（非玩家 modal）。
+   * 顶栏「运行预览」/「编辑」切换。
    *
-   * @param enabled - 仅当 false 时执行「运行预览」；true 忽略（编辑器已打开）
+   * @param enabled - true → 回到编辑；false → 进入本程序 PreviewShell
    */
   const handleSetEditMode = useCallback(
-    async (enabled: boolean): Promise<void> => {
+    (enabled: boolean): void => {
       if (enabled) {
+        setMode("edit");
+        setPreviewSave(null);
+
         return;
       }
 
       try {
-        await ctx.ui.hide(EDITOR_MODULE_ID);
-      } catch (err) {
-        logError("editor-app", "运行预览: hide editor 失败", err);
-      }
+        const defaultSceneId = String(
+          readAuthorSetting(ctx, "defaultSceneId") ?? "",
+        ).trim();
 
-      try {
-        await ctx.ui.show(
-          SCENE_INTERACTION_MODULE_ID,
-          {},
-          {
-            size: "(100%, 100%)",
-            position: "(0, 0)",
-            interactable: true,
-          },
+        /**
+         * 沙箱落在 scene-interaction.settings；
+         * 若预览尚未选场景，则用编辑器 defaultSceneId 填入。
+         */
+        setPreviewSave(
+          createSettingsPreviewSave(ctx, {
+            currentSceneId: defaultSceneId,
+            isEditMode: false,
+          }),
         );
+        setPreviewSessionKey((n) => n + 1);
+        setMode("preview");
       } catch (err) {
-        logError(
-          "editor-app",
-          "运行预览: show scene-interaction 失败",
-          err,
-        );
+        logError("editor-app", "进入运行预览失败", err);
       }
     },
     [ctx],
   );
 
+  /**
+   * 按模式异步加载 EditorShell / PreviewShell。
+   */
   useEffect(() => {
     let cancelled = false;
 
     setLoadError(null);
-    setEditorShellComp(null);
+
+    if (mode === "edit") {
+      setEditorShellComp(null);
+    } else {
+      setPreviewShellComp(null);
+    }
 
     (async () => {
       try {
-        const mod = await import("../editor/editor-shell");
+        if (mode === "edit") {
+          const mod = await import("../editor/editor-shell");
 
-        if (cancelled) {
-          return;
+          if (cancelled) {
+            return;
+          }
+
+          setEditorShellComp(() => mod.EditorShell);
+        } else {
+          const mod = await import("../editor/preview-shell");
+
+          if (cancelled) {
+            return;
+          }
+
+          setPreviewShellComp(() => mod.PreviewShell);
         }
-
-        setEditorShellComp(() => mod.EditorShell);
       } catch (err) {
         if (cancelled) {
           return;
@@ -178,7 +220,7 @@ function EditorAppContent(): React.ReactElement {
 
         const message = err instanceof Error ? err.message : String(err);
 
-        console.error("[editor] 加载 EditorShell 失败", err);
+        console.error("[editor] 加载界面壳失败", err);
         setLoadError(message);
       }
     })();
@@ -186,7 +228,15 @@ function EditorAppContent(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode]);
+
+  const shellReady = useMemo(() => {
+    if (mode === "edit") {
+      return EditorShellComp != null;
+    }
+
+    return PreviewShellComp != null && previewSave != null;
+  }, [mode, EditorShellComp, PreviewShellComp, previewSave]);
 
   return (
     <ThemeProvider initialMode={themeMode}>
@@ -204,20 +254,26 @@ function EditorAppContent(): React.ReactElement {
             themeMode={themeMode}
             message={`加载失败：${loadError}`}
           />
-        ) : !EditorShellComp ? (
+        ) : !shellReady ? (
           <MountPlaceholder
             themeMode={themeMode}
-            message="正在加载编辑器…"
+            message={
+              mode === "preview" ? "正在加载运行预览…" : "正在加载编辑器…"
+            }
           />
-        ) : (
+        ) : mode === "preview" && PreviewShellComp && previewSave ? (
+          <PreviewShellComp
+            key={previewSessionKey}
+            save={previewSave}
+            onBackToEditor={handleSetEditMode}
+          />
+        ) : EditorShellComp ? (
           <EditorShellComp
             editorSection={editorSection}
             onEditorSectionChange={setEditorSection}
-            onSetEditMode={(enabled) => {
-              void handleSetEditMode(enabled);
-            }}
+            onSetEditMode={handleSetEditMode}
           />
-        )}
+        ) : null}
       </div>
     </ThemeProvider>
   );
@@ -226,14 +282,11 @@ function EditorAppContent(): React.ReactElement {
 /**
  * 编辑器程序根组件（稳定导出，供 Extension.render 直接引用）。
  *
- * @param _props - ExtensionProps（本程序无 save）
- * @returns 全屏编辑器壳
+ * @param _props - ExtensionProps
+ * @returns 全屏编辑器 / 运行预览
  *
- * @example
- * ```tsx
- * // Extension.render():
- * // { component: EditorApp, props: {} }
- * ```
+ * @remarks
+ * 玩家实时运行在 `scene-interaction`；本程序的 PreviewShell 仅供作者调试。
  */
 export function EditorApp(_props: EditorAppProps): React.ReactElement {
   return <EditorAppContent />;

@@ -2,23 +2,27 @@
  * recipe-preview-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
- * 配方编辑器中栏：用物品 name 解析 itemId，展示配方公式文案。
- * 示例：`草药 x2 + 水 x1 → 药水 x1`
+ * 配方编辑器中栏：视觉化公式预览（物品图标 + 数量 + 箭头）。
+ * 图标路径经 ctx.asset.resolve 解析，与物品库预览一致。
  */
 
 import React, { useMemo } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
+import { findItem } from "../../domain/item-registry";
 import type {
   ItemDefinition,
   RecipeDefinition,
   RecipeItemAmount,
 } from "../../domain/types";
+import { resolveAssetUrl } from "../../shared/resolve-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
   useTheme,
 } from "../../theme/theme-provider";
+import type { ThemeTokens } from "../../theme/tokens";
 
 /**
  * RecipePreviewPanel 组件属性。
@@ -27,7 +31,7 @@ export interface RecipePreviewPanelProps {
   /** 当前选中配方；无选中时为 null */
   recipe: RecipeDefinition | null;
 
-  /** 物品库，用于 itemId → name */
+  /** 物品库，用于 itemId → name / icon */
   items: ItemDefinition[];
 }
 
@@ -54,17 +58,11 @@ export function formatRecipeLine(
 }
 
 /**
- * 将配方格式化为「原料 → 产物」预览串。
+ * 将配方格式化为「原料 → 产物」预览串（文本回退 / 测试用）。
  *
  * @param recipe - 配方定义
  * @param items - 物品定义列表
  * @returns 完整预览文案
- *
- * @example
- * ```ts
- * formatRecipePreview(recipe, items);
- * // "草药 x2 + 水 x1 → 药水 x1"
- * ```
  */
 export function formatRecipePreview(
   recipe: RecipeDefinition,
@@ -88,7 +86,213 @@ export function formatRecipePreview(
 }
 
 /**
- * 中栏配方公式预览。
+ * 单行物品卡片：图标 + 名称 + 数量角标。
+ *
+ * @param props.line - 原料或产物行
+ * @param props.items - 物品库
+ * @param props.tokens - 主题
+ * @param props.resolve - SDK asset.resolve
+ * @param props.role - 用于 data-testid：ingredient | product
+ * @returns 卡片元素
+ */
+function RecipeItemCard({
+  line,
+  items,
+  tokens,
+  resolve,
+  role,
+}: {
+  line: RecipeItemAmount;
+  items: readonly ItemDefinition[];
+  tokens: ThemeTokens;
+  resolve: ((uri: string) => { url: string }) | undefined;
+  role: "ingredient" | "product";
+}): React.ReactElement {
+  const item = findItem(items, line.itemId);
+  const name = item?.name?.trim() || line.itemId || "（空）";
+  const iconUrl = useMemo(
+    () => resolveAssetUrl(item?.icon?.trim() || "", resolve),
+    [item?.icon, resolve],
+  );
+
+  return (
+    <div
+      data-testid={`recipe-preview-${role}-card`}
+      data-item-id={line.itemId}
+      style={{
+        width: 96,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: 72,
+          height: 72,
+          borderRadius: 10,
+          border: `1px solid ${tokens.borderStrong}`,
+          background: tokens.bgElevated,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.28)",
+        }}
+      >
+        {iconUrl ? (
+          <img
+            src={iconUrl}
+            alt={name}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              padding: 6,
+              boxSizing: "border-box",
+            }}
+          />
+        ) : (
+          <span
+            style={{
+              fontSize: 11,
+              color: tokens.textMuted,
+              padding: 6,
+              textAlign: "center",
+              wordBreak: "break-all",
+              lineHeight: 1.2,
+            }}
+          >
+            {name}
+          </span>
+        )}
+
+        <span
+          data-testid={`recipe-preview-${role}-count`}
+          style={{
+            position: "absolute",
+            right: 4,
+            bottom: 4,
+            minWidth: 22,
+            height: 20,
+            padding: "0 5px",
+            borderRadius: 6,
+            background: tokens.accent,
+            color: "#0B1210",
+            fontSize: 12,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.35)",
+          }}
+        >
+          ×{line.count}
+        </span>
+      </div>
+
+      <span
+        title={name}
+        style={{
+          fontSize: 12,
+          color: tokens.textSecondary,
+          textAlign: "center",
+          lineHeight: 1.3,
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {name}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * 一组物品卡片，中间用「+」分隔。
+ *
+ * @param props.lines - 原料或产物列表
+ * @param props.emptyLabel - 空列表文案
+ * @param props.role - ingredient | product
+ */
+function RecipeItemGroup({
+  lines,
+  items,
+  tokens,
+  resolve,
+  role,
+  emptyLabel,
+}: {
+  lines: readonly RecipeItemAmount[];
+  items: readonly ItemDefinition[];
+  tokens: ThemeTokens;
+  resolve: ((uri: string) => { url: string }) | undefined;
+  role: "ingredient" | "product";
+  emptyLabel: string;
+}): React.ReactElement {
+  if (lines.length === 0) {
+    return (
+      <div
+        data-testid={`recipe-preview-${role}-empty`}
+        style={{
+          color: tokens.textMuted,
+          fontSize: FONT_SIZE_DEFAULT,
+          padding: "12px 16px",
+        }}
+      >
+        {emptyLabel}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid={`recipe-preview-${role}-group`}
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+      }}
+    >
+      {lines.map((line, index) => (
+        <React.Fragment key={`${role}-${line.itemId}-${index}`}>
+          {index > 0 ? (
+            <span
+              aria-hidden
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                color: tokens.textMuted,
+                lineHeight: 1,
+                paddingBottom: 22,
+              }}
+            >
+              +
+            </span>
+          ) : null}
+          <RecipeItemCard
+            line={line}
+            items={items}
+            tokens={tokens}
+            resolve={resolve}
+            role={role}
+          />
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 中栏配方视觉化预览：原料图标 → 产物图标。
  *
  * @param props - RecipePreviewPanelProps
  * @returns 预览面板 UI
@@ -103,8 +307,10 @@ export function RecipePreviewPanel({
   items,
 }: RecipePreviewPanelProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
+  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
 
-  const formula = useMemo(() => {
+  const formulaText = useMemo(() => {
     if (recipe === null) {
       return null;
     }
@@ -154,9 +360,10 @@ export function RecipePreviewPanel({
           alignItems: "center",
           justifyContent: "center",
           padding: 24,
+          overflow: "auto",
         }}
       >
-        {recipe === null || formula === null ? (
+        {recipe === null ? (
           <div
             data-testid="recipe-preview-empty"
             style={{
@@ -173,41 +380,107 @@ export function RecipePreviewPanel({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 12,
+              gap: 20,
               alignItems: "center",
-              maxWidth: 520,
-              textAlign: "center",
+              width: "100%",
+              maxWidth: 640,
             }}
           >
             <div
               style={{
-                fontSize: FONT_SIZE_TITLE,
-                fontWeight: 650,
-                color: tokens.textPrimary,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                alignItems: "center",
+                textAlign: "center",
               }}
             >
-              {recipe.name || "（未命名）"}
-            </div>
-            <div
-              style={{
-                fontSize: 16,
-                lineHeight: 1.5,
-                color: tokens.textPrimary,
-                wordBreak: "break-word",
-              }}
-            >
-              {formula}
-            </div>
-            {recipe.description ? (
               <div
-                data-testid="recipe-preview-description"
                 style={{
-                  fontSize: FONT_SIZE_DEFAULT,
-                  color: tokens.textMuted,
-                  lineHeight: 1.45,
+                  fontSize: FONT_SIZE_TITLE + 2,
+                  fontWeight: 650,
+                  color: tokens.textPrimary,
+                  letterSpacing: "0.02em",
                 }}
               >
-                {recipe.description}
+                {recipe.name || "（未命名）"}
+              </div>
+              {recipe.description?.trim() ? (
+                <div
+                  data-testid="recipe-preview-description"
+                  style={{
+                    fontSize: FONT_SIZE_DEFAULT,
+                    color: tokens.textMuted,
+                    lineHeight: 1.45,
+                    maxWidth: 420,
+                  }}
+                >
+                  {recipe.description}
+                </div>
+              ) : null}
+            </div>
+
+            <div
+              data-testid="recipe-preview-visual"
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+                width: "100%",
+                padding: "20px 16px",
+                borderRadius: 12,
+                border: `1px solid ${tokens.border}`,
+                background: tokens.bgElevated,
+              }}
+            >
+              <RecipeItemGroup
+                lines={recipe.ingredients}
+                items={items}
+                tokens={tokens}
+                resolve={resolve}
+                role="ingredient"
+                emptyLabel="（无原料）"
+              />
+
+              <span
+                aria-hidden
+                data-testid="recipe-preview-arrow"
+                style={{
+                  fontSize: 28,
+                  fontWeight: 700,
+                  color: tokens.accent,
+                  lineHeight: 1,
+                  paddingBottom: 22,
+                  flexShrink: 0,
+                }}
+              >
+                →
+              </span>
+
+              <RecipeItemGroup
+                lines={recipe.products}
+                items={items}
+                tokens={tokens}
+                resolve={resolve}
+                role="product"
+                emptyLabel="（无产物）"
+              />
+            </div>
+
+            {formulaText ? (
+              <div
+                data-testid="recipe-preview-formula-text"
+                style={{
+                  fontSize: 12,
+                  color: tokens.textMuted,
+                  textAlign: "center",
+                  lineHeight: 1.4,
+                  wordBreak: "break-word",
+                }}
+              >
+                {formulaText}
               </div>
             ) : null}
           </div>

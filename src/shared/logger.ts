@@ -22,5 +22,10 @@ export function logError(
   message: string,
   err?: unknown,
 ): void {
-  console.error("[scene-interaction]", scope, message, err);
+  // 无 err 时不要把 undefined 打进控制台（易被误读成「参数是 undefined」）
+  if (err !== undefined) {
+    console.error("[scene-interaction]", scope, message, err);
+  } else {
+    console.error("[scene-interaction]", scope, message);
+  }
 }

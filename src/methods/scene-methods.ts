@@ -113,6 +113,20 @@ function loadScenesLibrary(ctx: ExtensionContext): ScenesLibraryFile {
 }
 
 /**
+ * 场景库目录摘要（未找到场景时对照检查器参数）。
+ *
+ * @param lib - 当前场景库
+ * @returns 简短列表；空库时提示检查 editor 设置
+ */
+function formatSceneCatalog(lib: ScenesLibraryFile): string {
+  if (lib.scenes.length === 0) {
+    return "(库为空：请在「场景编辑器」保存场景，并确认 settings 挂在 editor 模块)";
+  }
+
+  return lib.scenes.map((s) => `${s.name} [${s.id}]`).join(", ");
+}
+
+/**
  * 按 id 或名称打开场景：写入 currentSceneId，退出编辑模式，并显示程序 UI。
  *
  * @param params.sceneIdOrName - 场景 id 或名称（必填）
@@ -137,7 +151,10 @@ export const openScene = method({
     const key = normalizeKey(params.sceneIdOrName);
 
     if (key === null) {
-      logError("scene-methods", "openScene: 场景参数无效", params.sceneIdOrName);
+      logError(
+        "scene-methods",
+        "openScene: 场景参数无效（请用「值」填写场景 id/名称，勿用未绑定变量）",
+      );
       writeResult(ctx, params.resultVariable, false);
 
       return;
@@ -146,7 +163,10 @@ export const openScene = method({
     const scene = findScene(lib.scenes, key);
 
     if (scene === undefined) {
-      logError("scene-methods", `openScene: 未找到场景: ${key}`);
+      logError(
+        "scene-methods",
+        `openScene: 未找到场景「${key}」。当前库: ${formatSceneCatalog(lib)}`,
+      );
       writeResult(ctx, params.resultVariable, false);
 
       return;

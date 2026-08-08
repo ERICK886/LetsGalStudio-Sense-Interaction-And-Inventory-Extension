@@ -2,10 +2,11 @@
  * inventory-methods.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.1
  *
  * 场景交互扩展剧本 methods：给予物品、是否持有、数量查询、配方合成。
- * 物品/配方定义从 editor settings（cross）读取；库存读写 save.inventoryJson。
+ * 物品/配方定义从 editor settings（cross）读取；
+ * 库存优先写已绑定会话（玩家 slot 或预览 settings 沙箱），否则写 this.save。
  */
 
 import { method, type ExtensionContext, type SaveAPI } from "@avg-studio/sdk";
@@ -23,9 +24,18 @@ import {
   parseRecipesLibraryJson,
   stringifyInventory,
 } from "../domain/serialize";
-import type { ItemsLibraryFile, RecipesLibraryFile } from "../domain/types";
+import type {
+  InventoryState,
+  ItemsLibraryFile,
+  RecipesLibraryFile,
+} from "../domain/types";
 import { logError } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import {
+  getInventorySession,
+  isInventoryPersistenceBound,
+  setInventorySession,
+} from "../store/inventory-session";
 import { readItemsLibraryJson } from "../store/items-persistence";
 import { readRecipesLibraryJson } from "../store/recipes-persistence";
 import { notifySaveField } from "../store/save-sync";
@@ -39,6 +49,42 @@ import type { SceneInteractionSaveMap } from "../store/save-types";
  */
 function narrowSave(save: unknown): SaveAPI<SceneInteractionSaveMap> {
   return save as SaveAPI<SceneInteractionSaveMap>;
+}
+
+/**
+ * 读取当前库存：已绑定会话（含预览沙箱）优先，否则读宿主 save。
+ *
+ * @param save - 宿主 SaveAPI
+ * @returns InventoryState
+ */
+function readInventoryState(
+  save: SaveAPI<SceneInteractionSaveMap>,
+): InventoryState {
+  if (isInventoryPersistenceBound()) {
+    return getInventorySession();
+  }
+
+  return parseInventoryJson(save.get("inventoryJson"));
+}
+
+/**
+ * 写回库存：已绑定会话则走 setInventorySession（同步沙箱/slot），否则写宿主 save。
+ *
+ * @param save - 宿主 SaveAPI
+ * @param next - 新库存
+ */
+function writeInventoryState(
+  save: SaveAPI<SceneInteractionSaveMap>,
+  next: InventoryState,
+): void {
+  if (isInventoryPersistenceBound()) {
+    setInventorySession(next);
+
+    return;
+  }
+
+  save.set("inventoryJson", stringifyInventory(next));
+  notifySaveField("inventoryJson");
 }
 
 /**
@@ -185,11 +231,10 @@ export const giveItem = method({
         ? Math.max(1, Math.floor(amountRaw))
         : 1;
 
-    const inventory = parseInventoryJson(save.get("inventoryJson"));
+    const inventory = readInventoryState(save);
     const next = giveItemToInventory(inventory, item, amount, Date.now());
 
-    save.set("inventoryJson", stringifyInventory(next));
-    notifySaveField("inventoryJson");
+    writeInventoryState(save, next);
     writeBoolResult(ctx, params.resultVariable, true);
   },
 });
@@ -217,7 +262,7 @@ export const hasItem = method({
       return;
     }
 
-    const inventory = parseInventoryJson(save.get("inventoryJson"));
+    const inventory = readInventoryState(save);
     const owned = domainHasItem(inventory, itemId);
 
     writeBoolResult(ctx, params.resultVariable, owned);
@@ -247,7 +292,7 @@ export const getItemCount = method({
       return;
     }
 
-    const inventory = parseInventoryJson(save.get("inventoryJson"));
+    const inventory = readInventoryState(save);
     const count = domainGetItemCount(inventory, itemId);
 
     writeNumber(ctx, params.targetVariable, count);
@@ -287,7 +332,10 @@ export const craftRecipe = method({
     const key = normalizeItemId(params.recipeIdOrName);
 
     if (key === null) {
-      logError("inventory-methods", "craftRecipe: recipeIdOrName 无效");
+      logError(
+        "inventory-methods",
+        "craftRecipe: recipeIdOrName 无效（请用「值」填写配方 id/名称，勿用未绑定变量）",
+      );
       writeBoolResult(ctx, params.resultVariable, false);
 
       return;
@@ -304,7 +352,7 @@ export const craftRecipe = method({
     }
 
     const itemsLib = loadItemsLibrary(ctx);
-    const inventory = parseInventoryJson(save.get("inventoryJson"));
+    const inventory = readInventoryState(save);
     const result = craftRecipeInInventory(
       inventory,
       recipe,
@@ -322,8 +370,7 @@ export const craftRecipe = method({
       return;
     }
 
-    save.set("inventoryJson", stringifyInventory(result.state));
-    notifySaveField("inventoryJson");
+    writeInventoryState(save, result.state);
     writeBoolResult(ctx, params.resultVariable, true);
   },
 });

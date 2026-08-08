@@ -74,9 +74,9 @@ export interface EditorShellProps {
   onEditorSectionChange: (section: EditorSection) => void;
 
   /**
-   * 退出编辑器并打开运行时预览（由 EditorApp 实现：hide editor + show scene-interaction）。
+   * 切换编辑 / 运行预览（由 EditorApp 在本程序内切换 EditorShell ↔ PreviewShell）。
    *
-   * @param enabled - false 时执行「运行预览」；true 忽略
+   * @param enabled - false → 运行预览；true → 回到编辑
    */
   onSetEditMode: (enabled: boolean) => void;
 }

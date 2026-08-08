@@ -2,10 +2,11 @@
  * property-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
  * 编辑器右侧属性面板：按选中场景 / 交互点渲染 schema 表单与动作列表；
- * 无场景时提供物品栏 HUD（inventoryHudJson）最小编辑区。
+ * 无场景时提供物品栏 HUD（inventoryHudJson）最小编辑区，
+ * 读写目标为 `backpack-hud` 模块 settings（见 store/hud-settings）。
  */
 
 import React, { useCallback, useMemo, useState } from "react";
@@ -33,9 +34,10 @@ import { hotspotFields } from "../../schema/hotspot-schema";
 import { inventoryHudFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
 import {
-  readRuntimeSetting,
-  writeRuntimeSetting,
-} from "../../store/runtime-settings";
+  INVENTORY_HUD_JSON_KEY,
+  readHudSetting,
+  writeHudSetting,
+} from "../../store/hud-settings";
 import { notifySettingsField } from "../../store/settings-sync";
 import {
   FONT_SIZE_DEFAULT,
@@ -43,9 +45,6 @@ import {
   useTheme,
 } from "../../theme/theme-provider";
 import type { ThemeTokens } from "../../theme/tokens";
-
-/** settings 字段名：物品栏外观 JSON */
-const INVENTORY_HUD_JSON_KEY = "inventoryHudJson";
 
 /**
  * PropertyPanel 组件属性。
@@ -156,11 +155,11 @@ export function PropertyPanel({
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
   /**
-   * HUD JSON 声明在 scene-interaction；编辑器内用 cross 读（无本地 useValue）。
+   * HUD JSON 声明在 backpack-hud；编辑器内经 hud-settings 读写。
    * 用本地 state + 写回同步，避免跨模块 useValue 不可用。
    */
   const [hudJsonRaw, setHudJsonRaw] = useState<string>(() => {
-    const raw = readRuntimeSetting(ctx, INVENTORY_HUD_JSON_KEY);
+    const raw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
 
     return typeof raw === "string" ? raw : String(raw ?? "");
   });
@@ -174,14 +173,14 @@ export function PropertyPanel({
   }, [scene, selectedHotspotId]);
 
   /**
-   * 无场景时展示的 HUD 表单值（来自 scene-interaction.settings.inventoryHudJson）。
+   * 无场景时展示的 HUD 表单值（来自 backpack-hud.settings.inventoryHudJson）。
    */
   const hudFormValue = useMemo((): InventoryHudConfig => {
     return parseInventoryHudJson(hudJsonRaw);
   }, [hudJsonRaw]);
 
   /**
-   * 写回 inventoryHudJson（cross → scene-interaction）并广播进程内订阅。
+   * 写回 inventoryHudJson（→ backpack-hud）并广播进程内订阅。
    *
    * @param next - 表单写出的 HUD 配置
    */
@@ -190,7 +189,7 @@ export function PropertyPanel({
       const normalized = normalizeInventoryHud(next);
       const json = stringifyInventoryHud(normalized);
 
-      writeRuntimeSetting(ctx, INVENTORY_HUD_JSON_KEY, json);
+      writeHudSetting(ctx, INVENTORY_HUD_JSON_KEY, json);
       setHudJsonRaw(json);
       notifySettingsField(INVENTORY_HUD_JSON_KEY);
     },

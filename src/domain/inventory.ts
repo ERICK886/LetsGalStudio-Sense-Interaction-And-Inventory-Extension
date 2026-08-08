@@ -30,7 +30,9 @@ export const QUICKBAR_SLOTS = 8;
 export function sortEntriesRecentFirst(
   entries: InventoryEntry[],
 ): InventoryEntry[] {
-  return [...entries].sort((a, b) => b.lastGainedAt - a.lastGainedAt);
+  const list = Array.isArray(entries) ? entries : [];
+
+  return [...list].sort((a, b) => b.lastGainedAt - a.lastGainedAt);
 }
 
 /**
@@ -72,7 +74,9 @@ export function hasItem(state: InventoryState, itemId: string): boolean {
  * @returns 最多 8 条 InventoryEntry 副本
  */
 export function getQuickbarEntries(state: InventoryState): InventoryEntry[] {
-  return sortEntriesRecentFirst(state.entries).slice(0, QUICKBAR_SLOTS);
+  const entries = Array.isArray(state?.entries) ? state.entries : [];
+
+  return sortEntriesRecentFirst(entries).slice(0, QUICKBAR_SLOTS);
 }
 
 /**

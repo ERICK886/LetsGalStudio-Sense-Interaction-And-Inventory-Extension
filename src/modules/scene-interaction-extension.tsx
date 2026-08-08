@@ -2,10 +2,10 @@
  * scene-interaction-extension.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.1
  *
  * 游戏运行时程序：`@extension({ id: "scene-interaction" })`。
- * 持有玩家 save、HUD settings、剧本 methods；render Runtime / Player。
+ * 持有玩家 save、预览沙箱 settings、剧本 methods；render Runtime / Player（不含背包 UI）。
  */
 
 import {
@@ -40,18 +40,34 @@ import type { SceneInteractionSaveMap } from "../store/save-types";
 /**
  * 场景交互 — 运行时模块。
  *
- * - saveSchema：库存 / 进度 / 编辑模式兼容字段 / 当前场景
- * - settings：HUD 相关（迁出 backpack-hud 前暂留本模块）
+ * - saveSchema：玩家 slot（库存 / 进度 / 当前场景）
+ * - settings：预览沙箱（Studio/编辑器测试用，不进玩家档）
  * - methods：打开场景 / 阻塞会话 / 库存等
- * - render：SceneInteractionApp（RuntimeShell / PlayerShell）
+ * - render：SceneInteractionApp（RuntimeShell / PlayerShell；不含背包 UI）
  *
  * @remarks
- * 作者库（场景/物品/配方）在 `editor` 模块；本模块用 `settings.cross` 读取。
+ * 作者库在 `editor`；背包 HUD 在 `backpack-hud`；库存 save 经会话桥接共享。
  */
 @extension({ id: SCENE_INTERACTION_MODULE_ID, label: "场景交互" })
 export class SceneInteractionExtension extends Extension<SceneInteractionAppProps> {
   /**
-   * 存档字段：JSON 字符串存复杂结构，boolean/string 存运行时状态。
+   * 预览沙箱：与 saveSchema 字段同形，但写在扩展 settings，便于测试。
+   * 玩家游戏只读写下方 saveSchema，不会使用这些字段。
+   */
+  static settings = settings((s) => ({
+    previewInventoryJson: s
+      .string("预览库存 JSON（测试用）")
+      .default('{"entries":[]}'),
+    previewProgressJson: s
+      .string("预览进度 JSON（测试用）")
+      .default('{"consumed":{}}'),
+    previewCurrentSceneId: s
+      .string("预览当前场景 ID（测试用）")
+      .default(""),
+  }));
+
+  /**
+   * 玩家存档字段：JSON 字符串存复杂结构，boolean/string 存运行时状态。
    *
    * @see SceneInteractionSaveMap
    */
@@ -95,17 +111,6 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
   static hasItem = hasItem;
   static getItemCount = getItemCount;
   static craftRecipe = craftRecipe;
-
-  /**
-   * HUD 相关设置（作者库已迁至 editor；此处仅保留运行时 HUD）。
-   */
-  static settings = settings((s) => ({
-    inventoryHudMode: s
-      .enum("物品栏显示模式", ["withScene", "always"] as const)
-      .labels({ withScene: "跟随场景交互", always: "常驻 HUD" })
-      .default("withScene"),
-    inventoryHudJson: s.string("物品栏外观 JSON").default(""),
-  }));
 
   /**
    * 渲染运行时 UI 根组件。
