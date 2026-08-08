@@ -2,9 +2,11 @@
  * backpack-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.5.0
  *
  * backpack-hud 主壳：常驻快捷栏 HUD + 可选全屏背包。
+ * 快捷栏几何与样式完全来自 resolveHudLayout（与编辑器 WYSIWYG 同源）：
+ * 槽位 / 打开背包按钮按解析后的绝对矩形定位，并套用 applyUiBoxStyle / applyUiTextStyle。
  * 根节点 pointer-events:none，仅交互控件接收事件，避免挡住场景。
  * 全屏背包的入场 / 退场动画由 BackpackScreen 内部处理，退场后再卸载。
  */
@@ -26,6 +28,10 @@ import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
 import { resolveHudLayout } from "../domain/hud-layout";
 import { parseInventoryHudJson } from "../domain/serialize";
+import {
+  applyUiBoxStyle,
+  applyUiTextStyle,
+} from "../domain/ui-style";
 import type {
   InventoryEntry,
   InventoryState,
@@ -43,10 +49,7 @@ import { useInventorySession } from "../store/inventory-session";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
 import { subscribeSettingsField } from "../store/settings-sync";
-import {
-  FONT_SIZE_DEFAULT,
-  useTheme,
-} from "../theme/theme-provider";
+import { useTheme } from "../theme/theme-provider";
 import { BackpackScreen } from "./backpack-screen";
 
 /**
@@ -60,8 +63,11 @@ export interface BackpackShellProps {
 }
 
 /**
- * @param entry - 槽位条目
- * @param index - 下标
+ * 槽位稳定 React key。
+ *
+ * @param entry - 槽位条目；空槽为 null
+ * @param index - 下标 0..QUICKBAR_SLOTS-1
+ * @returns React key
  */
 function slotKey(entry: InventoryEntry | null, index: number): string {
   if (entry === null) {
@@ -76,7 +82,10 @@ function slotKey(entry: InventoryEntry | null, index: number): string {
 }
 
 /**
- * @param entries - 快捷栏条目
+ * 将快捷栏条目补齐到固定格数（空位为 null）。
+ *
+ * @param entries - getQuickbarEntries 结果
+ * @returns 长度固定为 QUICKBAR_SLOTS 的数组
  */
 function padSlots(
   entries: InventoryEntry[],
@@ -98,6 +107,11 @@ function padSlots(
  *
  * @param props.openBackpack - 是否默认打开全屏
  * @returns 透明全屏层
+ *
+ * @example
+ * ```tsx
+ * <BackpackShell openBackpack={false} />
+ * ```
  */
 export function BackpackShell({
   openBackpack: openBackpackProp = false,
@@ -163,6 +177,36 @@ export function BackpackShell({
     [inventory],
   );
 
+  /**
+   * 共享布局解析：根 / 槽矩形 / 按钮矩形 / 样式与编辑器画布同源。
+   */
+  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
+
+  const openBagLabel = layout.openBagStyle.label || "打开背包";
+
+  /**
+   * HUD 强调色：作者配置优先，非法 / 空串回退主题 accent。
+   */
+  const accent =
+    typeof layout.accent === "string" && layout.accent.trim().length > 0
+      ? layout.accent.trim()
+      : tokens.accent;
+
+  const slotBoxCss = applyUiBoxStyle(layout.slotStyle);
+  const badgeBoxCss = applyUiBoxStyle(layout.badgeStyle);
+  const badgeTextCss = applyUiTextStyle(layout.badgeStyle);
+  const openBagBoxCss = applyUiBoxStyle(layout.openBagStyle);
+  const openBagTextCss = applyUiTextStyle(layout.openBagStyle);
+
+  /**
+   * 角标背景：配置缺 background 时回退 layout.accent（再经 accent 变量）。
+   */
+  const badgeBackground =
+    layout.badgeStyle.background !== undefined &&
+    layout.badgeStyle.background.trim().length > 0
+      ? layout.badgeStyle.background
+      : accent;
+
   const handleCraftRecipe = useCallback(
     (recipeId: string): void => {
       const recipe = findRecipe(recipesRef.current, recipeId);
@@ -185,22 +229,6 @@ export function BackpackShell({
     [setInventory],
   );
 
-  /**
-   * 共享布局解析：根定位 / 槽尺寸 / 按钮样式，与编辑器画布同源。
-   */
-  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
-  const slotSize = layout.root.slotSize > 0 ? layout.root.slotSize : 56;
-  const gap = layout.root.gap >= 0 ? layout.root.gap : 8;
-  const openBagLabel = layout.openBagStyle.label || "打开背包";
-
-  /**
-   * HUD 强调色：作者配置优先，非法 / 空串回退主题 accent。
-   */
-  const accent =
-    typeof layout.accent === "string" && layout.accent.trim().length > 0
-      ? layout.accent.trim()
-      : tokens.accent;
-
   return (
     <div
       data-testid="backpack-shell"
@@ -213,22 +241,31 @@ export function BackpackShell({
         zIndex: 80,
       }}
     >
-      {/* 快捷栏 HUD */}
+      {layout.customCss.trim() ? (
+        <style data-testid="backpack-hud-custom-css">{layout.customCss}</style>
+      ) : null}
+
+      {/*
+        快捷栏 HUD：槽位与打开按钮均按 resolveHudLayout 绝对坐标绘制，
+        避免 flex 二次排布导致与编辑器 WYSIWYG 漂移。
+      */}
       <div
         data-testid="backpack-quickbar"
+        className="inventory-hud-root"
         style={{
           position: "absolute",
-          left: layout.root.x,
-          top: layout.root.y,
+          inset: 0,
           zIndex: 81,
-          display: "flex",
-          flexDirection: layout.root.direction,
-          alignItems: "stretch",
-          gap,
-          pointerEvents: "auto",
+          pointerEvents: "none",
         }}
       >
         {slots.map((entry, index) => {
+          const rect = layout.slots[index] ?? {
+            x: layout.root.x,
+            y: layout.root.y + index * (layout.root.slotSize + layout.root.gap),
+            w: layout.root.slotSize,
+            h: layout.root.slotSize,
+          };
           const def =
             entry !== null
               ? findItem(itemsLibrary.items, entry.itemId)
@@ -245,6 +282,7 @@ export function BackpackShell({
               key={slotKey(entry, index)}
               type="button"
               data-testid="backpack-quickbar-slot"
+              data-slot-index={index}
               disabled={entry === null}
               title={entry === null ? "空槽" : name}
               onClick={() => {
@@ -254,9 +292,12 @@ export function BackpackShell({
               }}
               style={{
                 appearance: "none",
-                position: "relative",
-                width: slotSize,
-                height: slotSize,
+                position: "absolute",
+                left: rect.x,
+                top: rect.y,
+                width: rect.w,
+                height: rect.h,
+                boxSizing: "border-box",
                 padding: 4,
                 borderRadius: 8,
                 border:
@@ -275,6 +316,9 @@ export function BackpackShell({
                 overflow: "hidden",
                 boxShadow:
                   entry === null ? "none" : "0 2px 8px rgba(0,0,0,0.35)",
+                pointerEvents: "auto",
+                ...slotBoxCss,
+                ...(entry === null ? { opacity: 0.55 } : null),
               }}
             >
               {entry !== null && icon ? (
@@ -310,10 +354,13 @@ export function BackpackShell({
                     minWidth: 16,
                     padding: "0 3px",
                     borderRadius: 4,
-                    background: accent,
                     color: "#0B1210",
                     fontSize: 10,
                     fontWeight: 700,
+                    boxSizing: "border-box",
+                    ...badgeBoxCss,
+                    ...badgeTextCss,
+                    backgroundColor: badgeBackground,
                   }}
                 >
                   {count}
@@ -329,16 +376,25 @@ export function BackpackShell({
           onClick={() => setBagOpen(true)}
           style={{
             appearance: "none",
+            position: "absolute",
+            left: layout.openBagButton.x,
+            top: layout.openBagButton.y,
+            width: layout.openBagButton.w,
+            height: layout.openBagButton.h,
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             border: `1px solid ${accent}`,
             background: accent,
             color: "#0B1210",
             borderRadius: 8,
-            padding: "8px 10px",
-            fontSize: FONT_SIZE_DEFAULT,
             fontFamily: "inherit",
             fontWeight: 650,
             cursor: "pointer",
-            marginTop: 4,
+            pointerEvents: "auto",
+            ...openBagBoxCss,
+            ...openBagTextCss,
           }}
         >
           {openBagLabel}

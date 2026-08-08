@@ -2,10 +2,11 @@
  * inventory-quickbar.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.1
+ * 版本: 0.3.0
  *
  * 运行时 8 格快捷栏：按最近获得截断，定位取自 InventoryHudConfig；
  * 点击槽打开大图，打开背包进入完整网格（含合成 Tab 接线）。
+ * 几何 / 样式与 backpack-shell 同源：resolveHudLayout + 绝对槽位 / 按钮 + applyUi*Style。
  * @deprecated 玩家快捷栏已迁至 `backpack/` + `backpack-hud` 模块；
  * 本文件仅保留 InventoryQuickbar / InventoryHudLayer 作兼容参考，勿再挂到场景壳。
  */
@@ -24,6 +25,10 @@ import { findItem } from "../domain/item-registry";
 import { findRecipe } from "../domain/recipe-registry";
 import { resolveHudLayout } from "../domain/hud-layout";
 import { parseInventoryHudJson } from "../domain/serialize";
+import {
+  applyUiBoxStyle,
+  applyUiTextStyle,
+} from "../domain/ui-style";
 import type {
   InventoryEntry,
   InventoryHudConfig,
@@ -37,10 +42,7 @@ import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
 import { readRuntimeSetting } from "../store/runtime-settings";
 import type { SceneInteractionSaveMap } from "../store/save-types";
-import {
-  FONT_SIZE_DEFAULT,
-  useTheme,
-} from "../theme/theme-provider";
+import { useTheme } from "../theme/theme-provider";
 import { InventoryBackpack } from "./inventory-backpack";
 import { ItemDetailModal } from "./item-detail-modal";
 
@@ -111,8 +113,8 @@ function padQuickbarSlots(
 /**
  * 8 格快捷栏 + 打开背包 + 大图 / 背包弹层。
  *
- * 定位 / 槽尺寸 / 间距取自 `resolveHudLayout(hud)`。
- * 默认纵向排列（左侧锚点）。
+ * 定位 / 槽尺寸 / 间距取自 `resolveHudLayout(hud)`；
+ * 槽位与打开按钮按解析后的绝对矩形绘制，与编辑器 WYSIWYG 对齐。
  *
  * @param props.inventory - 库存状态
  * @param props.items - 物品库
@@ -152,8 +154,6 @@ export function InventoryQuickbar({
    * 共享布局解析：与 backpack-shell / 编辑器画布同源，避免定位漂移。
    */
   const layout = useMemo(() => resolveHudLayout(hud), [hud]);
-  const slotSize = Math.max(24, layout.root.slotSize || 64);
-  const gap = Math.max(0, layout.root.gap || 0);
   const openBagLabel = layout.openBagStyle.label || "打开背包";
 
   /**
@@ -163,6 +163,21 @@ export function InventoryQuickbar({
     typeof layout.accent === "string" && layout.accent.trim().length > 0
       ? layout.accent.trim()
       : tokens.accent;
+
+  const slotBoxCss = applyUiBoxStyle(layout.slotStyle);
+  const badgeBoxCss = applyUiBoxStyle(layout.badgeStyle);
+  const badgeTextCss = applyUiTextStyle(layout.badgeStyle);
+  const openBagBoxCss = applyUiBoxStyle(layout.openBagStyle);
+  const openBagTextCss = applyUiTextStyle(layout.openBagStyle);
+
+  /**
+   * 角标背景：缺 background 时回退 accent。
+   */
+  const badgeBackground =
+    layout.badgeStyle.background !== undefined &&
+    layout.badgeStyle.background.trim().length > 0
+      ? layout.badgeStyle.background
+      : accent;
 
   /**
    * 点击非空槽：打开物品大图。
@@ -196,17 +211,18 @@ export function InventoryQuickbar({
         data-testid="inventory-quickbar"
         style={{
           position: "absolute",
-          left: layout.root.x,
-          top: layout.root.y,
+          inset: 0,
           zIndex: 40,
-          display: "flex",
-          flexDirection: layout.root.direction,
-          alignItems: "stretch",
-          gap,
-          pointerEvents: "auto",
+          pointerEvents: "none",
         }}
       >
         {slots.map((entry, index) => {
+          const rect = layout.slots[index] ?? {
+            x: layout.root.x,
+            y: layout.root.y + index * (layout.root.slotSize + layout.root.gap),
+            w: layout.root.slotSize,
+            h: layout.root.slotSize,
+          };
           const def =
             entry !== null ? findItem(itemList, entry.itemId) : undefined;
           const iconRaw = def?.icon?.trim() || "";
@@ -235,9 +251,12 @@ export function InventoryQuickbar({
               }}
               style={{
                 appearance: "none",
-                position: "relative",
-                width: slotSize,
-                height: slotSize,
+                position: "absolute",
+                left: rect.x,
+                top: rect.y,
+                width: rect.w,
+                height: rect.h,
+                boxSizing: "border-box",
                 padding: 4,
                 borderRadius: 8,
                 border: `1px solid ${tokens.borderStrong}`,
@@ -253,6 +272,9 @@ export function InventoryQuickbar({
                   entry === null
                     ? "none"
                     : "0 2px 8px rgba(0,0,0,0.35)",
+                pointerEvents: "auto",
+                ...slotBoxCss,
+                ...(entry === null ? { opacity: 0.55 } : null),
               }}
             >
               {entry !== null && icon ? (
@@ -287,10 +309,13 @@ export function InventoryQuickbar({
                     position: "absolute",
                     right: 3,
                     bottom: 1,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: tokens.textPrimary,
-                    textShadow: "0 1px 2px rgba(0,0,0,0.85)",
+                    minWidth: 16,
+                    padding: "0 3px",
+                    borderRadius: 4,
+                    boxSizing: "border-box",
+                    ...badgeBoxCss,
+                    ...badgeTextCss,
+                    backgroundColor: badgeBackground,
                   }}
                 >
                   {count}
@@ -306,18 +331,26 @@ export function InventoryQuickbar({
           onClick={() => setBagOpen(true)}
           style={{
             appearance: "none",
-            width: slotSize,
-            minHeight: 32,
-            padding: "6px 4px",
+            position: "absolute",
+            left: layout.openBagButton.x,
+            top: layout.openBagButton.y,
+            width: layout.openBagButton.w,
+            height: layout.openBagButton.h,
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             borderRadius: 8,
             border: `1px solid ${accent}`,
             background: `${accent}22`,
             color: tokens.textPrimary,
-            fontSize: Math.max(11, FONT_SIZE_DEFAULT - 1),
             fontFamily: "inherit",
             fontWeight: 600,
             cursor: "pointer",
             lineHeight: 1.2,
+            pointerEvents: "auto",
+            ...openBagBoxCss,
+            ...openBagTextCss,
           }}
         >
           {openBagLabel}
