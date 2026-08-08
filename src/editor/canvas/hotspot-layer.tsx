@@ -2,9 +2,9 @@
  * hotspot-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 场景画布上的交互点层：框选显示 + 拖拽写回归一化 x/y。
+ * 场景画布上的交互点层：框选显示、拖拽移动、选中后 8 点拉伸改大小。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -17,9 +17,24 @@ import {
   type ContentRect,
 } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
+import { ResizeHandles } from "./resize-handles";
+import type { ResizeBox } from "./resize-math";
 
 /** 无图时的默认占位边长（设计像素） */
 export const HOTSPOT_PLACEHOLDER_SIZE = 64;
+
+/** 拉伸最小边长（设计像素），对齐大地图地点下限 */
+export const HOTSPOT_MIN_SIZE = 8;
+
+/**
+ * 交互点几何提交（中心归一化 + 设计像素宽高）。
+ */
+export interface HotspotGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /**
  * HotspotLayer 属性。
@@ -42,13 +57,21 @@ export interface HotspotLayerProps {
   onSelect: (id: string) => void;
 
   /**
-   * 拖拽结束（或拖动中）写回归一化坐标。
+   * 拖拽结束写回归一化坐标。
    *
    * @param id - hotspot id
    * @param x - 归一化 X
    * @param y - 归一化 Y
    */
   onMove: (id: string, x: number, y: number) => void;
+
+  /**
+   * 边框拉伸松手提交：更新位置与 visual 宽高。
+   *
+   * @param id - hotspot id
+   * @param geometry - 中心归一化坐标 + 设计像素尺寸
+   */
+  onResize: (id: string, geometry: HotspotGeometry) => void;
 
   /**
    * 解析资源 URI → 可加载 URL。
@@ -60,7 +83,6 @@ export interface HotspotLayerProps {
 
   /**
    * 承载 world transform 的 DOM（用于 client→设计坐标）。
-   * 若为空，拖拽时退化为相对元素自身。
    */
   worldElement: HTMLElement | null;
 }
@@ -88,18 +110,17 @@ function hotspotDisplaySize(hs: HotspotElement): {
 }
 
 /**
- * 拖拽会话状态。
+ * 拖拽移动会话状态。
  */
 interface DragSession {
   id: string;
   pointerId: number;
-  /** 按下时指针相对 hotspot 中心的设计像素偏移 */
   grabOffsetX: number;
   grabOffsetY: number;
 }
 
 /**
- * 交互点叠层：选中框 + 拖拽移动。
+ * 交互点叠层：选中框 + 拖拽移动 + 拉伸手柄。
  *
  * @param props - HotspotLayerProps
  * @returns overlay 节点
@@ -112,6 +133,7 @@ interface DragSession {
  *   selectedId={id}
  *   onSelect={setId}
  *   onMove={handleMove}
+ *   onResize={handleResize}
  *   resolveUrl={resolve}
  *   worldElement={worldEl}
  * />
@@ -123,6 +145,7 @@ export function HotspotLayer({
   selectedId,
   onSelect,
   onMove,
+  onResize,
   resolveUrl,
   worldElement,
 }: HotspotLayerProps): React.ReactElement {
@@ -132,21 +155,52 @@ export function HotspotLayer({
     x: number;
     y: number;
   } | null>(null);
+  const [resizePose, setResizePose] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
   const sessionRef = useRef<DragSession | null>(null);
   const dragPoseRef = useRef<{ id: string; x: number; y: number } | null>(
     null,
   );
   const onMoveRef = useRef(onMove);
+  const onResizeRef = useRef(onResize);
   const contentRectRef = useRef(contentRect);
   const worldElementRef = useRef(worldElement);
 
   onMoveRef.current = onMove;
+  onResizeRef.current = onResize;
   contentRectRef.current = contentRect;
   worldElementRef.current = worldElement;
   dragPoseRef.current = dragPose;
 
   /**
-   * 指针按下：开始拖拽。
+   * 将 overlay 布局盒（设计像素）转为领域几何并提交预览/写回。
+   *
+   * @param next - ResizeHandles 给出的盒（相对 hotspot-layer）
+   * @returns HotspotGeometry
+   */
+  const boxToGeometry = useCallback((next: ResizeBox): HotspotGeometry => {
+    const norm = worldToNorm(
+      next.centerLeft,
+      next.centerTop,
+      contentRectRef.current,
+    );
+
+    return {
+      x: clamp01(norm.x),
+      y: clamp01(norm.y),
+      width: Math.max(HOTSPOT_MIN_SIZE, next.width),
+      height: Math.max(HOTSPOT_MIN_SIZE, next.height),
+    };
+  }, []);
+
+  /**
+   * 指针按下：开始拖拽移动（手柄自身 stopPropagation，不会进这里）。
    *
    * @param event - 指针事件
    * @param hs - 目标 hotspot
@@ -180,20 +234,17 @@ export function HotspotLayer({
       const initialPose = { id: hs.id, x: hs.x, y: hs.y };
       dragPoseRef.current = initialPose;
       setDragPose(initialPose);
+      setResizePose(null);
 
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
       } catch {
-        // 部分环境不支持 capture，忽略
+        // ignore
       }
     },
     [onSelect],
   );
 
-  /**
-   * 全局 pointermove / pointerup（capture 期间仍可能丢事件，双保险）。
-   * 使用 ref 读取最新 pose，避免闭包过期导致抬起时写回旧坐标。
-   */
   useEffect(() => {
     /**
      * @param event - 指针移动
@@ -215,9 +266,11 @@ export function HotspotLayer({
       const centerX = local.x - session.grabOffsetX;
       const centerY = local.y - session.grabOffsetY;
       const norm = worldToNorm(centerX, centerY, contentRectRef.current);
-      const x = clamp01(norm.x);
-      const y = clamp01(norm.y);
-      const next = { id: session.id, x, y };
+      const next = {
+        id: session.id,
+        x: clamp01(norm.x),
+        y: clamp01(norm.y),
+      };
 
       dragPoseRef.current = next;
       setDragPose(next);
@@ -270,12 +323,21 @@ export function HotspotLayer({
       }}
     >
       {hotspots.map((hs) => {
-        const poseX =
-          dragPose?.id === hs.id ? dragPose.x : hs.x;
-        const poseY =
-          dragPose?.id === hs.id ? dragPose.y : hs.y;
+        const resizing = resizePose?.id === hs.id ? resizePose : null;
+        const poseX = resizing
+          ? resizing.x
+          : dragPose?.id === hs.id
+            ? dragPose.x
+            : hs.x;
+        const poseY = resizing
+          ? resizing.y
+          : dragPose?.id === hs.id
+            ? dragPose.y
+            : hs.y;
+        const baseSize = hotspotDisplaySize(hs);
+        const width = resizing ? resizing.width : baseSize.width;
+        const height = resizing ? resizing.height : baseSize.height;
         const center = normToWorld(poseX, poseY, contentRect);
-        const size = hotspotDisplaySize(hs);
         const selected = hs.id === selectedId;
         const url = resolveUrl(hs.visual.src);
 
@@ -287,24 +349,21 @@ export function HotspotLayer({
             onPointerDown={(e) => handlePointerDown(e, hs)}
             style={{
               position: "absolute",
-              left: center.x - size.width / 2,
-              top: center.y - size.height / 2,
-              width: size.width,
-              height: size.height,
+              left: center.x - width / 2,
+              top: center.y - height / 2,
+              width,
+              height,
               boxSizing: "border-box",
               border: selected
                 ? `2px solid ${tokens.accent}`
                 : "1px dashed rgba(180, 180, 200, 0.55)",
               borderRadius: 4,
-              background: url
-                ? "transparent"
-                : "rgba(46, 196, 164, 0.12)",
+              background: url ? "transparent" : "rgba(46, 196, 164, 0.12)",
               cursor: "grab",
               pointerEvents: "auto",
-              overflow: "hidden",
-              boxShadow: selected
-                ? `0 0 0 1px ${tokens.accent}55`
-                : undefined,
+              // 选中时允许手柄溢出边框；图片仍由宽高约束
+              overflow: selected ? "visible" : "hidden",
+              boxShadow: selected ? `0 0 0 1px ${tokens.accent}55` : undefined,
               touchAction: "none",
             }}
           >
@@ -339,6 +398,33 @@ export function HotspotLayer({
                 交互点
               </div>
             )}
+
+            {selected ? (
+              <ResizeHandles
+                layout="fill"
+                minWidth={HOTSPOT_MIN_SIZE}
+                minHeight={HOTSPOT_MIN_SIZE}
+                accentColor={tokens.accent}
+                onResizeLive={(next) => {
+                  const geo = boxToGeometry(next);
+
+                  setDragPose(null);
+                  setResizePose({
+                    id: hs.id,
+                    x: geo.x,
+                    y: geo.y,
+                    width: geo.width,
+                    height: geo.height,
+                  });
+                }}
+                onResizeCommit={(next) => {
+                  const geo = boxToGeometry(next);
+
+                  onResizeRef.current(hs.id, geo);
+                  setResizePose(null);
+                }}
+              />
+            ) : null}
           </div>
         );
       })}

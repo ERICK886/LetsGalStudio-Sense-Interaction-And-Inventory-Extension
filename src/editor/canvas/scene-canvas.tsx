@@ -2,9 +2,10 @@
  * scene-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 编辑器中部场景画布：DOM 底图 + hotspot overlay（设计分辨率 letterbox）。
+ * 0.1.1：宿主节点在空态也保持挂载，ResizeObserver 才能测到真实中栏尺寸并居中。
  */
 
 import React, {
@@ -45,6 +46,17 @@ export interface SceneCanvasProps {
    * @param y - 归一化 Y
    */
   onHotspotMove: (id: string, x: number, y: number) => void;
+
+  /**
+   * 边框拉伸 hotspot（写回中心坐标 + visual 宽高）。
+   *
+   * @param id - hotspot id
+   * @param geometry - 中心归一化 + 设计像素尺寸
+   */
+  onHotspotResize: (
+    id: string,
+    geometry: { x: number; y: number; width: number; height: number },
+  ) => void;
 
   /**
    * 点击空白放置新 hotspot（放置模式开启时）。
@@ -122,6 +134,7 @@ export function SceneCanvas({
   selectedHotspotId,
   onSelectHotspot,
   onHotspotMove,
+  onHotspotResize,
   onCanvasPlace,
   placementActive = false,
   designWidth,
@@ -190,12 +203,40 @@ export function SceneCanvas({
 
   layoutRef.current = layout;
 
+  /**
+   * 测量宿主尺寸。
+   *
+   * 注意：外层 host 节点必须始终挂载（含空态），否则 ResizeObserver 在
+   * `scene === null` 首帧挂不上，后续选中场景后仍停留在初始 800×600，
+   * 设计画幅会看起来贴在中栏左上角而非居中。
+   *
+   * @returns 清理函数（断开观察）
+   */
   useEffect(() => {
     const host = rootRef.current;
 
     if (host === null) {
       return;
     }
+
+    /**
+     * 将测量结果写回 state（忽略 0 尺寸，避免布局未完成时把 scale 打崩）。
+     *
+     * @param width - 宿主宽
+     * @param height - 宿主高
+     */
+    const applySize = (width: number, height: number): void => {
+      const w = width > 1 ? width : 0;
+      const h = height > 1 ? height : 0;
+
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+
+      setHostSize((prev) =>
+        prev.width === w && prev.height === h ? prev : { width: w, height: h },
+      );
+    };
 
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -206,19 +247,13 @@ export function SceneCanvas({
 
       const { width, height } = entry.contentRect;
 
-      setHostSize({
-        width: Math.max(1, width),
-        height: Math.max(1, height),
-      });
+      applySize(width, height);
     });
 
     ro.observe(host);
     const rect = host.getBoundingClientRect();
 
-    setHostSize({
-      width: Math.max(1, rect.width || 800),
-      height: Math.max(1, rect.height || 600),
-    });
+    applySize(rect.width, rect.height);
 
     return () => ro.disconnect();
   }, []);
@@ -261,60 +296,60 @@ export function SceneCanvas({
     [],
   );
 
-  if (scene === null) {
-    return (
-      <div
-        data-testid="scene-canvas"
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#141418",
-          color: "rgba(200,200,210,0.55)",
-          fontSize: 13,
-        }}
-      >
-        请选择或新建场景
-      </div>
-    );
-  }
-
   return (
     <div
       ref={rootRef}
       data-testid="scene-canvas"
       style={{
-        width: "100%",
-        height: "100%",
-        position: "relative",
+        // 铺满中栏 host（父级需 position:relative + 明确高度）
+        position: "absolute",
+        inset: 0,
         overflow: "hidden",
         background: "#141418",
-        cursor: placementActive ? "crosshair" : "default",
+        cursor:
+          scene !== null && placementActive ? "crosshair" : "default",
       }}
     >
-      <SceneBaseLayer
-        layout={layout}
-        imageUrl={imageUrl}
-        onImageNaturalSize={(w, h) => {
-          setImageNatural({ width: w, height: h });
-        }}
-        onImageError={() => {
-          setImageNatural({ width: 0, height: 0 });
-        }}
-        onBlankPointerDown={handleBlankPointerDown}
-      >
-        <HotspotLayer
-          hotspots={scene.hotspots}
-          contentRect={layout.contentRect}
-          selectedId={selectedHotspotId}
-          onSelect={(id) => onSelectRef.current(id)}
-          onMove={onHotspotMove}
-          resolveUrl={resolveUrl}
-          worldElement={worldEl}
-        />
-      </SceneBaseLayer>
+      {scene === null ? (
+        <div
+          data-testid="scene-canvas-empty"
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "rgba(200,200,210,0.55)",
+            fontSize: 13,
+            pointerEvents: "none",
+          }}
+        >
+          请选择或新建场景
+        </div>
+      ) : (
+        <SceneBaseLayer
+          layout={layout}
+          imageUrl={imageUrl}
+          onImageNaturalSize={(w, h) => {
+            setImageNatural({ width: w, height: h });
+          }}
+          onImageError={() => {
+            setImageNatural({ width: 0, height: 0 });
+          }}
+          onBlankPointerDown={handleBlankPointerDown}
+        >
+          <HotspotLayer
+            hotspots={scene.hotspots}
+            contentRect={layout.contentRect}
+            selectedId={selectedHotspotId}
+            onSelect={(id) => onSelectRef.current(id)}
+            onMove={onHotspotMove}
+            onResize={onHotspotResize}
+            resolveUrl={resolveUrl}
+            worldElement={worldEl}
+          />
+        </SceneBaseLayer>
+      )}
     </div>
   );
 }
