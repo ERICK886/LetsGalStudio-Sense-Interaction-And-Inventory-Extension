@@ -2,11 +2,12 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.5.0
  *
  * 场景交互编辑器主壳：顶栏 + 左中右三栏。
  * - 场景分区：场景/交互点列表、画布、Schema 属性
  * - 物品库分区：物品列表、预览、物品属性（Task 12）
+ * - Ctrl/Cmd+Z / Ctrl+Y / Ctrl+Shift+Z 按当前分区撤销重做（Task 16）
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -193,13 +194,19 @@ export function EditorShell({
   const [placementActive, setPlacementActive] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
-  /** 场景库撤销栈（Task 16 再接快捷键；此处先 push） */
+  /** 场景库撤销栈：commit 时 push；快捷键 undo/redo 后写回 setLibrary */
   const historyRef = useRef(createHistory<ScenesLibraryFile>());
   const historySeededRef = useRef(false);
 
-  /** 物品库撤销栈（Task 16 再接快捷键；此处先 push） */
+  /** 物品库撤销栈：commit 时 push；快捷键 undo/redo 后写回 setItemsLibrary */
   const itemsHistoryRef = useRef(createHistory<ItemsLibraryFile>());
   const itemsHistorySeededRef = useRef(false);
+
+  /**
+   * 强制刷新顶栏撤销/重做按钮的 disabled（history 存在 ref 内，push 后需重渲染）。
+   * 仅用于 chrome；快捷键不依赖此 state。
+   */
+  const [, setHistoryUiTick] = useState(0);
 
   /** 隐藏文件选择器：场景库 / 物品库 JSON 导入 */
   const scenesImportInputRef = useRef<HTMLInputElement>(null);
@@ -283,6 +290,7 @@ export function EditorShell({
     (next: ScenesLibraryFile) => {
       historyRef.current.push(next);
       setLibrary(next);
+      setHistoryUiTick((n) => n + 1);
     },
     [setLibrary],
   );
@@ -296,9 +304,133 @@ export function EditorShell({
     (next: ItemsLibraryFile) => {
       itemsHistoryRef.current.push(next);
       setItemsLibrary(next);
+      setHistoryUiTick((n) => n + 1);
     },
     [setItemsLibrary],
   );
+
+  /**
+   * 按当前编辑分区撤销一步，并用 history.present 写回对应库。
+   *
+   * @returns 是否实际发生了撤销
+   */
+  const handleUndo = useCallback((): boolean => {
+    if (editorSection === "scenes") {
+      const next = historyRef.current.undo();
+
+      if (next === undefined) {
+        return false;
+      }
+
+      // 规格：undo 后以 present 写回（undo() 返回值即 present 副本）
+      setLibrary(historyRef.current.present ?? next);
+      setHistoryUiTick((n) => n + 1);
+
+      return true;
+    }
+
+    const next = itemsHistoryRef.current.undo();
+
+    if (next === undefined) {
+      return false;
+    }
+
+    setItemsLibrary(itemsHistoryRef.current.present ?? next);
+    setHistoryUiTick((n) => n + 1);
+
+    return true;
+  }, [editorSection, setLibrary, setItemsLibrary]);
+
+  /**
+   * 按当前编辑分区重做一步，并用 history.present 写回对应库。
+   *
+   * @returns 是否实际发生了重做
+   */
+  const handleRedo = useCallback((): boolean => {
+    if (editorSection === "scenes") {
+      const next = historyRef.current.redo();
+
+      if (next === undefined) {
+        return false;
+      }
+
+      setLibrary(historyRef.current.present ?? next);
+      setHistoryUiTick((n) => n + 1);
+
+      return true;
+    }
+
+    const next = itemsHistoryRef.current.redo();
+
+    if (next === undefined) {
+      return false;
+    }
+
+    setItemsLibrary(itemsHistoryRef.current.present ?? next);
+    setHistoryUiTick((n) => n + 1);
+
+    return true;
+  }, [editorSection, setLibrary, setItemsLibrary]);
+
+  /**
+   * 全局快捷键：Ctrl/Cmd+Z 撤销；Ctrl/Cmd+Y 或 Ctrl/Cmd+Shift+Z 重做。
+   * 在 INPUT / TEXTAREA / contentEditable 内不拦截，避免破坏文本编辑。
+   */
+  useEffect(() => {
+    /**
+     * @param event - 键盘事件
+     */
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const mod = event.ctrlKey || event.metaKey;
+
+      if (!mod) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable === true
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const isUndo = key === "z" && !event.shiftKey;
+      const isRedo = key === "y" || (key === "z" && event.shiftKey);
+
+      if (!isUndo && !isRedo) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (isUndo) {
+        handleUndo();
+      } else {
+        handleRedo();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [handleUndo, handleRedo]);
+
+  const canUndo =
+    editorSection === "scenes"
+      ? historyRef.current.canUndo
+      : itemsHistoryRef.current.canUndo;
+  const canRedo =
+    editorSection === "scenes"
+      ? historyRef.current.canRedo
+      : itemsHistoryRef.current.canRedo;
 
   /**
    * 更新当前场景定义并写回库。
@@ -637,6 +769,31 @@ export function EditorShell({
             </button>
           </>
         )}
+
+        <button
+          type="button"
+          data-testid="editor-undo"
+          title="撤销 (Ctrl+Z)"
+          disabled={!canUndo}
+          onClick={() => {
+            handleUndo();
+          }}
+          style={topBarButtonStyle(tokens, { disabled: !canUndo })}
+        >
+          撤销
+        </button>
+        <button
+          type="button"
+          data-testid="editor-redo"
+          title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
+          disabled={!canRedo}
+          onClick={() => {
+            handleRedo();
+          }}
+          style={topBarButtonStyle(tokens, { disabled: !canRedo })}
+        >
+          重做
+        </button>
 
         <button
           type="button"

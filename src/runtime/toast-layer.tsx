@@ -2,9 +2,10 @@
  * toast-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 运行时轻提示层：展示 toast 队列 current，按 enter+hold+exit 时长推进。
+ * Task 16：增加 exit 相位视觉（退场动画后再 onAdvance）。
  */
 
 import React, { useEffect, useMemo } from "react";
@@ -20,6 +21,9 @@ export const TOAST_DEFAULT_TOTAL_MS = 1500;
 
 /** 默认 hold（停留）时长（毫秒） */
 export const TOAST_DEFAULT_HOLD_MS = 900;
+
+/** toast 生命周期相位 */
+type ToastPhase = "enter" | "shown" | "exit";
 
 /**
  * ToastLayer 组件属性。
@@ -76,33 +80,60 @@ export function estimateToastDisplayMs(motion: ElementMotion): number {
     return TOAST_DEFAULT_TOTAL_MS;
   }
 
-  // 下限下限，避免闪一下
+  // 可视下限，避免闪一下
   return Math.max(TOAST_DEFAULT_TOTAL_MS, total);
 }
 
 /**
- * 由 motion preset 生成简单进场样式（CSS transition）。
+ * 拆分 enter / hold / exit 各段毫秒，供相位计时。
+ *
+ * @param motion - toast 动效
+ * @returns `{ enterMs, holdMs, exitMs }`
+ */
+function splitToastTiming(motion: ElementMotion): {
+  enterMs: number;
+  holdMs: number;
+  exitMs: number;
+} {
+  const enterMs = Math.max(
+    0,
+    (motion.enter?.delayMs ?? 0) + (motion.enter?.durationMs ?? 0),
+  );
+  const rawExit =
+    (motion.exit?.delayMs ?? 0) + (motion.exit?.durationMs ?? 0);
+  /** 退场至少 80ms，保证 exit 相位可见 */
+  const exitMs = Math.max(80, rawExit > 0 ? rawExit : 220);
+  const total = estimateToastDisplayMs(motion);
+  const holdMs = Math.max(120, total - enterMs - exitMs);
+
+  return { enterMs, holdMs, exitMs };
+}
+
+/**
+ * 由 motion preset 生成进场 / 退场样式（CSS transition）。
  *
  * @param motion - 动效
- * @param phase - `"enter"` | `"shown"`
+ * @param phase - `"enter"` | `"shown"` | `"exit"`
  * @returns 内联样式片段
  */
 function toastMotionStyle(
   motion: ElementMotion,
-  phase: "enter" | "shown",
+  phase: ToastPhase,
 ): React.CSSProperties {
-  const duration = Math.max(80, motion.enter.durationMs || 300);
-  const delay = Math.max(0, motion.enter.delayMs || 0);
-  const preset = motion.enter.preset;
+  const useExit = phase === "exit";
+  const segment = useExit ? motion.exit : motion.enter;
+  const duration = Math.max(80, segment.durationMs || 300);
+  const delay = Math.max(0, segment.delayMs || 0);
+  const preset = segment.preset;
 
   const base: React.CSSProperties = {
     transitionProperty: "opacity, transform",
     transitionDuration: `${duration}ms`,
     transitionDelay: `${delay}ms`,
-    transitionTimingFunction: "ease-out",
+    transitionTimingFunction: useExit ? "ease-in" : "ease-out",
   };
 
-  if (phase === "enter") {
+  if (phase === "enter" || phase === "exit") {
     switch (preset) {
       case "fade":
         return { ...base, opacity: 0 };
@@ -129,7 +160,7 @@ function toastMotionStyle(
 }
 
 /**
- * 轻提示叠层：锚在交互点上方，队列 FIFO，展示结束后 `onAdvance`。
+ * 轻提示叠层：锚在交互点上方，队列 FIFO；enter → hold → exit 后再 `onAdvance`。
  *
  * @param props - ToastLayerProps
  * @returns toast 层节点；无 current 时返回 null
@@ -152,45 +183,41 @@ export function ToastLayer({
   resolveText,
 }: ToastLayerProps): React.ReactElement | null {
   const current = queue.current;
-  const [phase, setPhase] = React.useState<"enter" | "shown">("enter");
+  const [phase, setPhase] = React.useState<ToastPhase>("enter");
 
-  const displayMs = useMemo(
-    () => (current ? estimateToastDisplayMs(current.motion) : 0),
+  const timing = useMemo(
+    () => (current ? splitToastTiming(current.motion) : null),
     [current],
   );
 
   /**
-   * current 变化后启动计时，到期推进队列。
+   * 新 toast：先进场 → shown；hold 后切 exit；exit 结束后推进队列。
    */
   useEffect(() => {
-    if (current === null) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      onAdvance();
-    }, displayMs);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [current?.id, displayMs, onAdvance]);
-
-  /**
-   * 新 toast 先进场再切到 shown，触发 CSS transition。
-   */
-  useEffect(() => {
-    if (current === null) {
+    if (current === null || timing === null) {
       return;
     }
 
     setPhase("enter");
-    const raf = window.requestAnimationFrame(() => {
+
+    const enterRaf = window.requestAnimationFrame(() => {
       setPhase("shown");
     });
 
-    return () => window.cancelAnimationFrame(raf);
-  }, [current?.id]);
+    const exitTimer = window.setTimeout(() => {
+      setPhase("exit");
+    }, timing.enterMs + timing.holdMs);
+
+    const advanceTimer = window.setTimeout(() => {
+      onAdvance();
+    }, timing.enterMs + timing.holdMs + timing.exitMs);
+
+    return () => {
+      window.cancelAnimationFrame(enterRaf);
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(advanceTimer);
+    };
+  }, [current?.id, timing, onAdvance]);
 
   if (current === null) {
     return null;
@@ -224,6 +251,7 @@ export function ToastLayer({
       <div
         data-testid="runtime-toast-current"
         data-toast-id={current.id}
+        data-toast-phase={phase}
         style={{
           position: "absolute",
           left: anchorPos.x,

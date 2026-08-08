@@ -2,10 +2,11 @@
  * runtime-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.3.1
  *
  * 场景交互运行时壳：顶栏 + 当前场景渲染 + 动作链 / toast / once 进度；
  * `inventoryHudMode === "withScene"` 时挂载快捷栏 HUD。
+ * 动作链执行中忽略重复 hotspot 点击（防抖）。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -202,6 +203,11 @@ export function RuntimeShell({
   const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
   const progressRef = useRef<SceneProgress>(progress);
 
+  /**
+   * 动作链执行中为 true；期间忽略重复 hotspot 点击，避免并发动作链。
+   */
+  const hotspotBusyRef = useRef(false);
+
   inventoryRef.current = inventory;
   scenesRef.current = library.scenes;
   itemsRef.current = itemsLibrary.items;
@@ -265,11 +271,18 @@ export function RuntimeShell({
 
   /**
    * 交互点点击：执行动作链；once 完成后 markConsumed 并隐藏。
+   * 动作链未结束前忽略再次点击（防抖）。
    *
    * @param hotspot - 被激活的交互点
    */
   const handleHotspotActivate = useCallback(
     async (hotspot: HotspotElement): Promise<void> => {
+      if (hotspotBusyRef.current) {
+        return;
+      }
+
+      hotspotBusyRef.current = true;
+
       try {
         await executeSceneActions(
           hotspot.actions,
@@ -282,6 +295,8 @@ export function RuntimeShell({
         }
       } catch (err) {
         console.warn("[scene-interaction]", "hotspot activate failed", err);
+      } finally {
+        hotspotBusyRef.current = false;
       }
     },
     [actionRuntime, setProgress],
