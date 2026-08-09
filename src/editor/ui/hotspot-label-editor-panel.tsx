@@ -1,118 +1,139 @@
 /**
- * hotspot-hover-editor-panel.tsx
+ * hotspot-label-editor-panel.tsx
  * 作者: 池水三两升
- * 日期: 2026-08-08
+ * 日期: 2026-08-09
  * 版本: 0.1.0
  *
- * 全局交互点悬停预设（`SceneUiConfig.hotspotHover`）的表单编辑器。
- * - 读取 / 写入 `editor.sceneUiJson` 的 `hotspotHover` 段（经 readSceneUiConfig / writeSceneUiConfig）
- * - 字段复用 `hotspotHoverPresetFields()`（不含 useGlobal）
- * - 顶部展示说明文案：「未勾选自定义的交互点将使用此预设」
+ * 全局交互点提示文本外观（`SceneUiConfig.hotspotLabel`）的表单编辑器。
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
-  defaultHotspotHoverShadow,
-  normalizeHotspotHoverShadow,
-} from "../../domain/hover-shadow";
-import type { HotspotHoverShadow } from "../../domain/types";
+  defaultHotspotLabelStyleConfigForDesign,
+  normalizeHotspotLabelStyleConfig,
+} from "../../domain/hotspot-label";
+import type { HotspotLabelStyleConfig } from "../../domain/types";
+import {
+  applyUiBoxStyle,
+  applyUiTextStyle,
+} from "../../domain/ui-style";
 import { FormRenderer } from "../../schema/form-renderer";
-import { hotspotHoverPresetFields } from "../../schema/hotspot-schema";
+import { hotspotLabelPresetFields } from "../../schema/hotspot-schema";
 import {
   readSceneUiConfig,
   writeSceneUiConfig,
 } from "../../store/scene-ui-settings";
 import { notifyUiHistoryTick } from "../../store/ui-edit-history-bridge";
+import { useDesignSize } from "../../store/use-design-size";
 import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
 
 /**
- * 从场景 UI 预设中读取 hotspotHover 段。
+ * 从场景 UI 预设中读取 hotspotLabel 段。
  *
  * @param ctx - 扩展上下文
- * @returns 规范化后的全局悬停阴影配置（不含 useGlobal）
+ * @param designW - 设计宽
+ * @param designH - 设计高
+ * @returns 规范化后的全局提示外观
  */
-function loadHotspotHover(
+function loadHotspotLabel(
   ctx: ReturnType<typeof useExtensionContext>,
-): HotspotHoverShadow {
-  return readSceneUiConfig(ctx).hotspotHover;
+  designW: number,
+  designH: number,
+): HotspotLabelStyleConfig {
+  return readSceneUiConfig(ctx, designW, designH).hotspotLabel;
 }
 
 /**
- * 将 hotspotHover 段写回场景 UI 预设并通知刷新。
- *
- * 读整包 → 替换 hotspotHover 段 → 写整包，避免覆盖 itemToast 段。
+ * 将 hotspotLabel 段写回场景 UI 预设并通知刷新。
  *
  * @param ctx - 扩展上下文
- * @param next - 新的全局悬停阴影配置
+ * @param next - 新的全局提示外观
+ * @param designW - 设计宽
+ * @param designH - 设计高
  */
-function persistHotspotHover(
+function persistHotspotLabel(
   ctx: ReturnType<typeof useExtensionContext>,
-  next: HotspotHoverShadow,
+  next: HotspotLabelStyleConfig,
+  designW: number,
+  designH: number,
 ): void {
-  const ui = readSceneUiConfig(ctx);
+  const ui = readSceneUiConfig(ctx, designW, designH);
 
-  writeSceneUiConfig(ctx, { ...ui, hotspotHover: next });
+  writeSceneUiConfig(ctx, { ...ui, hotspotLabel: next });
   notifyUiHistoryTick();
 }
 
 /**
- * 全局交互点悬停预设编辑器面板。
+ * 全局交互点提示文本外观编辑器面板。
  *
  * @returns 编辑器 React 元素
  */
-export function HotspotHoverEditorPanel(): React.ReactElement {
+export function HotspotLabelEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
 
-  const [config, setConfig] = useState<HotspotHoverShadow>(() =>
-    loadHotspotHover(ctx),
+  const [config, setConfig] = useState<HotspotLabelStyleConfig>(() =>
+    loadHotspotLabel(ctx, designSize.width, designSize.height),
   );
 
-  /**
-   * 上下文切换后重新加载配置。
-   */
   useEffect(() => {
-    setConfig(loadHotspotHover(ctx));
-  }, [ctx]);
+    setConfig(loadHotspotLabel(ctx, designSize.width, designSize.height));
+  }, [ctx, designSize.height, designSize.width]);
 
   const formValue = useMemo(
     () => config as unknown as Record<string, unknown>,
     [config],
   );
 
-  /**
-   * 表单字段变更回调。
-   *
-   * @param next - FormRenderer 返回的下一个扁平对象
-   */
   const handleChange = useCallback(
     (next: Record<string, unknown>): void => {
-      // normalize 会自动剥离 useGlobal（全局段不使用该决策字段）
-      const parsed = normalizeHotspotHoverShadow(next);
+      const parsed = normalizeHotspotLabelStyleConfig(
+        next,
+        designSize.width,
+        designSize.height,
+      );
 
       setConfig(parsed);
-      persistHotspotHover(ctx, parsed);
+      persistHotspotLabel(
+        ctx,
+        parsed,
+        designSize.width,
+        designSize.height,
+      );
     },
-    [ctx],
+    [ctx, designSize.height, designSize.width],
   );
 
-  /**
-   * 全部重置为默认悬停效果。
-   */
   const handleResetAll = useCallback((): void => {
-    const next = defaultHotspotHoverShadow();
+    const next = defaultHotspotLabelStyleConfigForDesign(
+      designSize.width,
+      designSize.height,
+    );
 
-    // 全局段不携带 useGlobal
-    const { useGlobal: _omit, ...withoutUseGlobal } = next;
+    setConfig(next);
+    persistHotspotLabel(ctx, next, designSize.width, designSize.height);
+  }, [ctx, designSize.height, designSize.width]);
 
-    setConfig(withoutUseGlobal);
-    persistHotspotHover(ctx, withoutUseGlobal);
-  }, [ctx]);
+  const previewStyle: React.CSSProperties = useMemo(
+    () => ({
+      display: "inline-block",
+      padding: `${config.paddingY}px ${config.paddingX}px`,
+      maxWidth: config.maxWidth,
+      whiteSpace: "nowrap" as const,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      lineHeight: 1.3,
+      ...applyUiBoxStyle(config.style),
+      ...applyUiTextStyle(config.style),
+    }),
+    [config],
+  );
 
   return (
     <div
-      data-testid="hotspot-hover-editor-panel"
+      data-testid="hotspot-label-editor-panel"
       style={{
         display: "flex",
         width: "100%",
@@ -121,7 +142,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
       }}
     >
       <main
-        data-testid="hotspot-hover-info-area"
+        data-testid="hotspot-label-preview-area"
         style={{
           flex: 1,
           minWidth: 0,
@@ -143,24 +164,25 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
             marginBottom: 8,
           }}
         >
-          说明
+          预览
         </div>
+        <div style={previewStyle}>交互点提示</div>
         <p
           style={{
             margin: 0,
             fontSize: FONT_SIZE_DEFAULT,
-            color: tokens.textPrimary,
+            color: tokens.textMuted,
             lineHeight: 1.6,
             textAlign: "center",
             maxWidth: 360,
           }}
         >
-          未勾选自定义的交互点将使用此预设。
+          未关闭「跟随全局提示样式」的交互点将使用此外观。
         </p>
       </main>
 
       <aside
-        data-testid="hotspot-hover-form-aside"
+        data-testid="hotspot-label-form-aside"
         style={{
           width: 300,
           flexShrink: 0,
@@ -185,7 +207,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
 
         <button
           type="button"
-          data-testid="hotspot-hover-reset-all"
+          data-testid="hotspot-label-reset-all"
           onClick={handleResetAll}
           style={{
             appearance: "none",
@@ -206,7 +228,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
         </button>
 
         <FormRenderer
-          schema={hotspotHoverPresetFields()}
+          schema={hotspotLabelPresetFields()}
           value={formValue}
           onChange={handleChange}
         />

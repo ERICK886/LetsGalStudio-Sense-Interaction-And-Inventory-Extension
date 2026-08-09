@@ -2,12 +2,11 @@
  * letterbox.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.3
+ * 版本: 0.2.0
  *
- * 场景 letterbox（黑边/白边/自定义色）字段规范化与运行时底色解析。
- * 自定义色可为 `#RRGGBB` 或带透明度的 `#RRGGBBAA` / `rgba(...)`。
- * 渲染前经 {@link letterboxColorToCss} 转为 `rgba()` / `transparent`，
- * 避免部分宿主对八位 hex 支持不佳。
+ * 历史 letterbox 字段的规范化（存档兼容）与底色解析。
+ * 0.2.0 起运行时/画布一律透明铺底，不再使用黑/白/自定义色兜底；
+ * {@link resolveLetterboxColor} 恒返回 `"transparent"`。
  */
 import type { LetterboxMode, SceneDefinition } from "./types";
 
@@ -136,33 +135,20 @@ export function normalizeLetterboxColor(raw: unknown): string | undefined {
 }
 
 /**
- * 根据场景 letterbox 字段解析 CSS 底色（供编辑器画布 / 运行时 SceneView）。
+ * 场景画幅 / 宿主铺底色。
  *
- * - `white` → `#FFFFFF`
- * - `custom` + 非空 `letterboxColor` → 原样返回（可含 Alpha）
- * - 其余（含 `black`、缺省、custom 无色）→ {@link LETTERBOX_COLOR_BLACK}
+ * 沉浸式转场：忽略历史 letterbox 字段，恒为透明，透出引擎下层 UI。
  *
- * @param scene - 场景定义（读取 letterboxMode / letterboxColor）
- * @returns CSS 颜色字符串
+ * @param _scene - 场景定义（兼容旧调用方，不再读取 letterbox）
+ * @returns 恒为 `"transparent"`
  *
  * @example
  * ```ts
- * resolveLetterboxColor({ letterboxMode: "custom", letterboxColor: "#00000000", ... });
- * // "#00000000"
+ * resolveLetterboxColor({ letterboxMode: "black" }); // "transparent"
  * ```
  */
 export function resolveLetterboxColor(
-  scene: Pick<SceneDefinition, "letterboxMode" | "letterboxColor">,
+  _scene: Pick<SceneDefinition, "letterboxMode" | "letterboxColor">,
 ): string {
-  const mode = scene.letterboxMode ?? "black";
-
-  if (mode === "white") {
-    return letterboxColorToCss(LETTERBOX_COLOR_WHITE);
-  }
-
-  if (mode === "custom" && scene.letterboxColor) {
-    return letterboxColorToCss(scene.letterboxColor);
-  }
-
-  return letterboxColorToCss(LETTERBOX_COLOR_BLACK);
+  return "transparent";
 }

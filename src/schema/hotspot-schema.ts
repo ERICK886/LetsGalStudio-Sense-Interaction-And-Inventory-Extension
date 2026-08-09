@@ -2,17 +2,19 @@
  * hotspot-schema.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.4.0
+ * 版本: 0.5.0
  *
  * 交互点（HotspotElement）的属性表单 schema 生成。
- * 视觉区含 hoverShadow 总开关、跟随全局开关；关闭跟随时才显示光晕/底影本地层字段。
+ * 视觉区含 hoverShadow 总开关、跟随全局开关；关闭跟随时才显示光晕/底影与动效本地字段。
  * 动作列表由 ActionListField 单独渲染，不在本 schema 内。
  * 另导出 `hotspotHoverPresetFields()`：全局场景 UI 悬停预设字段（不含 useGlobal）。
  */
 
+import { HOTSPOT_HOVER_CURSOR_OPTIONS } from "../domain/hover-shadow";
 import type { HotspotElement, HotspotLabelMode } from "../domain/types";
 import { motionSection } from "./motion-section";
 import type { FieldSchema } from "./types";
+import { boxStyleFields, textStyleFields } from "./ui-style-fields";
 
 /** 标签显示模式选项 */
 export const HOTSPOT_LABEL_MODE_OPTIONS: ReadonlyArray<{
@@ -46,13 +48,166 @@ export const HOTSPOT_LABEL_MODE_OPTIONS: ReadonlyArray<{
  * />
  * ```
  */
+/**
+ * 悬停动效 / 色调 / 光标字段（全局预设，无 hoverShadow. 前缀）。
+ *
+ * @returns FieldSchema 数组
+ */
+function hotspotHoverMotionPresetFields(): FieldSchema[] {
+  return [
+    {
+      kind: "section",
+      id: "preset-hover-motion",
+      title: "悬停动效",
+      description: "缩放、过渡与色调滤镜；与光晕/底影独立，总开关关闭时一并关闭",
+      children: [
+        {
+          kind: "grid",
+          id: "preset-hover-motion-nums",
+          columns: 2,
+          gap: 8,
+          children: [
+            {
+              key: "transitionMs",
+              kind: "number",
+              label: "过渡（毫秒）",
+              min: 0,
+              max: 2000,
+              step: 10,
+            },
+            {
+              key: "hoverScale",
+              kind: "number",
+              label: "悬停缩放",
+              min: 0.5,
+              max: 2,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "brightness",
+              kind: "number",
+              label: "亮度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "saturate",
+              kind: "number",
+              label: "饱和度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "contrast",
+              kind: "number",
+              label: "对比度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+          ],
+        },
+        {
+          key: "cursor",
+          kind: "enum",
+          label: "悬停光标",
+          options: HOTSPOT_HOVER_CURSOR_OPTIONS,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * 交互点本地悬停动效字段（`hoverShadow.*` 前缀）。
+ *
+ * @returns FieldSchema 数组
+ */
+function hotspotLocalHoverMotionFields(): FieldSchema[] {
+  return [
+    {
+      kind: "section",
+      id: "hover-motion",
+      title: "悬停动效",
+      description: "缩放、过渡与色调滤镜；与光晕/底影独立，总开关关闭时一并关闭",
+      children: [
+        {
+          kind: "grid",
+          id: "hover-motion-nums",
+          columns: 2,
+          gap: 8,
+          children: [
+            {
+              key: "hoverShadow.transitionMs",
+              kind: "number",
+              label: "过渡（毫秒）",
+              min: 0,
+              max: 2000,
+              step: 10,
+            },
+            {
+              key: "hoverShadow.hoverScale",
+              kind: "number",
+              label: "悬停缩放",
+              min: 0.5,
+              max: 2,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "hoverShadow.brightness",
+              kind: "number",
+              label: "亮度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "hoverShadow.saturate",
+              kind: "number",
+              label: "饱和度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+            {
+              key: "hoverShadow.contrast",
+              kind: "number",
+              label: "对比度",
+              min: 0,
+              max: 3,
+              step: 0.05,
+              description: "1 = 不变",
+            },
+          ],
+        },
+        {
+          key: "hoverShadow.cursor",
+          kind: "enum",
+          label: "悬停光标",
+          options: HOTSPOT_HOVER_CURSOR_OPTIONS,
+        },
+      ],
+    },
+  ];
+}
+
 export function hotspotHoverPresetFields(): FieldSchema[] {
   return [
     {
       key: "enabled",
       kind: "boolean",
-      label: "悬停阴影",
-      description: "总开关；关闭时不显示阴影。打开后由光晕/底影层开关决定",
+      label: "悬停效果",
+      description:
+        "总开关；关闭时不显示阴影/动效/色调。打开后由各层与动效参数决定",
     },
     {
       kind: "section",
@@ -179,6 +334,59 @@ export function hotspotHoverPresetFields(): FieldSchema[] {
           ],
         },
       ],
+    },
+    ...hotspotHoverMotionPresetFields(),
+  ];
+}
+
+/**
+ * 全局交互点提示文本外观（`SceneUiConfig.hotspotLabel`）的属性表单字段。
+ *
+ * @returns FieldSchema 数组
+ */
+export function hotspotLabelPresetFields(): FieldSchema[] {
+  return [
+    {
+      kind: "grid",
+      id: "preset-label-padding",
+      columns: 2,
+      gap: 8,
+      children: [
+        {
+          key: "paddingX",
+          kind: "number",
+          label: "内边距 X",
+          min: 0,
+          step: 1,
+        },
+        {
+          key: "paddingY",
+          kind: "number",
+          label: "内边距 Y",
+          min: 0,
+          step: 1,
+        },
+        {
+          key: "maxWidth",
+          kind: "number",
+          label: "最大宽度",
+          min: 1,
+          step: 1,
+          description: "像素；超出省略号",
+        },
+      ],
+    },
+    {
+      kind: "section",
+      id: "preset-label-box",
+      title: "盒样式",
+      children: boxStyleFields("style"),
+    },
+    {
+      kind: "section",
+      id: "preset-label-text",
+      title: "文本样式",
+      children: textStyleFields("style"),
     },
   ];
 }
@@ -340,6 +548,7 @@ function hotspotLocalHoverShadowLayerFields(): FieldSchema[] {
  */
 export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
   const followGlobal = hotspot.hoverShadow?.useGlobal !== false;
+  const followGlobalLabelStyle = hotspot.label?.useGlobalStyle !== false;
   return [
     {
       kind: "section",
@@ -438,16 +647,16 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
           kind: "boolean",
           label: "跟随全局悬停预设",
           description:
-            "开启后由「界面 → 场景 UI → 交互点悬停」控制；关闭后可单独设置总开关与光晕/底影",
+            "开启后由「界面 → 场景 UI → 交互点悬停」控制；关闭后可单独设置总开关、光晕/底影与动效",
         },
         ...(followGlobal
           ? [
               {
                 kind: "section" as const,
                 id: "hover-shadow-global-hint",
-                title: "悬停阴影",
+                title: "悬停效果",
                 description:
-                  "当前跟随全局悬停预设，总开关与光晕/底影均由「界面 → 场景 UI → 交互点悬停」统一控制。",
+                  "当前跟随全局悬停预设，阴影与动效均由「界面 → 场景 UI → 交互点悬停」统一控制。",
                 children: [],
               },
             ]
@@ -455,18 +664,19 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
               {
                 key: "hoverShadow.enabled",
                 kind: "boolean" as const,
-                label: "悬停阴影",
+                label: "悬停效果",
                 description:
-                  "总开关；关闭时不显示阴影。打开后由光晕/底影层开关决定",
+                  "总开关；关闭时不显示阴影/动效/色调。打开后由各层与动效参数决定",
               },
               ...hotspotLocalHoverShadowLayerFields(),
+              ...hotspotLocalHoverMotionFields(),
             ]),
       ],
     },
     {
       kind: "section",
       id: "label",
-      title: "标签",
+      title: "提示文本",
       children: [
         {
           key: "label.mode",
@@ -477,7 +687,7 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
         {
           key: "label.text",
           kind: "string",
-          label: "标签文本",
+          label: "提示文案",
           placeholder: "可选；空则使用交互点名称",
         },
         {
@@ -489,17 +699,83 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
             {
               key: "label.offsetX",
               kind: "number",
-              label: "标签 X 偏移",
+              label: "偏移 X",
               step: 1,
             },
             {
               key: "label.offsetY",
               kind: "number",
-              label: "标签 Y 偏移",
+              label: "偏移 Y",
               step: 1,
             },
           ],
         },
+        {
+          key: "label.useGlobalStyle",
+          kind: "boolean",
+          label: "跟随全局提示样式",
+          description:
+            "开启后由「界面 → 场景 UI → 交互点提示」控制外观；关闭后可单独设置",
+        },
+        ...(followGlobalLabelStyle
+          ? [
+              {
+                kind: "section" as const,
+                id: "label-style-global-hint",
+                title: "提示样式",
+                description:
+                  "当前跟随全局提示样式，颜色/字号/内边距等由「界面 → 场景 UI → 交互点提示」统一控制。",
+                children: [] as FieldSchema[],
+              },
+            ]
+          : [
+              {
+                kind: "section" as const,
+                id: "label-style-local",
+                title: "提示样式",
+                description: "本交互点专用外观",
+                children: [
+                  {
+                    kind: "grid" as const,
+                    id: "label-padding",
+                    columns: 2,
+                    gap: 8,
+                    children: [
+                      {
+                        key: "label.paddingX",
+                        kind: "number" as const,
+                        label: "内边距 X",
+                        min: 0,
+                        step: 1,
+                      },
+                      {
+                        key: "label.paddingY",
+                        kind: "number" as const,
+                        label: "内边距 Y",
+                        min: 0,
+                        step: 1,
+                      },
+                      {
+                        key: "label.maxWidth",
+                        kind: "number" as const,
+                        label: "最大宽度",
+                        min: 1,
+                        step: 1,
+                      },
+                    ],
+                  },
+                  ...boxStyleFields("label.style"),
+                  ...textStyleFields("label.style"),
+                  {
+                    key: "label.customCss",
+                    kind: "string" as const,
+                    label: "自定义 CSS",
+                    multiline: true,
+                    description: "可选；写入本标签节点，覆盖上方字段",
+                  },
+                ],
+              },
+            ]),
       ],
     },
     motionSection({

@@ -2,14 +2,11 @@
  * use-scene-ui-config.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * React Hook：订阅场景 UI 预设（editor.sceneUiJson）。
  * 同时支持 cross 读取与进程内 settings-sync 通知，UI 编辑后预览/运行时自动刷新。
- *
- * 返回的 SceneUiConfig 已规范化：
- * - `itemToast`：获得物品 Toast 全局默认
- * - `hotspotHover`：交互点悬停全局预设（不含 useGlobal）
+ * 解析时传入当前设计分辨率，使返回按钮 / Toast 默认值随画布缩放。
  */
 
 import { useEffect, useState } from "react";
@@ -17,9 +14,10 @@ import { useExtensionContext } from "@avg-studio/sdk";
 import type { SceneUiConfig } from "../domain/types";
 import { readSceneUiConfig, SCENE_UI_JSON_KEY } from "./scene-ui-settings";
 import { subscribeSettingsField } from "./settings-sync";
+import { useDesignSize } from "./use-design-size";
 
 /**
- * 订阅场景 UI 预设（itemToast + hotspotHover）。
+ * 订阅场景 UI 预设（itemToast + hotspotHover + sceneReturn）。
  *
  * 首次挂载与 `editor.sceneUiJson` 写入后均会拉取最新值并触发重渲染。
  *
@@ -34,20 +32,20 @@ import { subscribeSettingsField } from "./settings-sync";
  */
 export function useSceneUiConfig(): SceneUiConfig {
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
   const [config, setConfig] = useState<SceneUiConfig>(() =>
-    readSceneUiConfig(ctx),
+    readSceneUiConfig(ctx, designSize.width, designSize.height),
   );
 
   useEffect(() => {
-    // ctx 可能变更（理论上单实例不会），挂载/卸载时重新读取一次保证一致
-    setConfig(readSceneUiConfig(ctx));
+    setConfig(readSceneUiConfig(ctx, designSize.width, designSize.height));
 
     return subscribeSettingsField((key) => {
       if (key === SCENE_UI_JSON_KEY) {
-        setConfig(readSceneUiConfig(ctx));
+        setConfig(readSceneUiConfig(ctx, designSize.width, designSize.height));
       }
     });
-  }, [ctx]);
+  }, [ctx, designSize.height, designSize.width]);
 
   return config;
 }

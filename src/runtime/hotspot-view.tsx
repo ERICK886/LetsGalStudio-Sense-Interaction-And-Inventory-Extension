@@ -7,7 +7,7 @@
  * 运行时交互点：可配置悬浮阴影、标签、PNG 剪影 alpha-hit（对齐大地图地点）。
  *
  * 行为要点：
- * - 悬停阴影由 hotspot.hoverShadow 经 normalize + buildHoverShadowFilter 生成
+ * - 悬停效果由 hotspot.hoverShadow 经 resolve + buildHoverRuntimeStyle 生成
  * - 有图：透明区 `pointer-events: none`，不挡下方对话框；仅剪影命中时 `auto`
  * - 有图时用 window 级 pointermove 采样（因 none 时收不到元素事件）
  * - 镂空内部仍命中（剪影掩码）
@@ -15,9 +15,21 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { buildHoverShadowFilter } from "../domain/hover-shadow";
+import {
+  defaultHotspotLabelStyleConfig,
+  resolveHotspotLabelAppearance,
+} from "../domain/hotspot-label";
+import { buildHoverRuntimeStyle } from "../domain/hover-shadow";
 import { resolveHotspotHoverShadow } from "../domain/scene-ui-config";
-import type { HotspotElement, HotspotHoverShadow } from "../domain/types";
+import type {
+  HotspotElement,
+  HotspotHoverShadow,
+  HotspotLabelStyleConfig,
+} from "../domain/types";
+import {
+  applyUiBoxStyle,
+  applyUiTextStyle,
+} from "../domain/ui-style";
 import { isOpaqueImageHit } from "../shared/alpha-hit";
 import {
   normToWorld,
@@ -60,6 +72,21 @@ export interface HotspotViewProps {
    * （兼容旧调用方，等价于 useGlobal=false 且本地为默认）。
    */
   globalHoverShadow?: HotspotHoverShadow;
+
+  /**
+   * 全局交互点提示文本外观（`SceneUiConfig.hotspotLabel`）。
+   *
+   * 当交互点本地 `label.useGlobalStyle !== false` 时跟随该全局预设。
+   */
+  globalHotspotLabel?: HotspotLabelStyleConfig;
+
+  /**
+   * 是否允许悬停滤镜/缩放。
+   * 场景转场或交互点层淡入未完成时应为 false，避免显现时播放悬停放大。
+   *
+   * @default true
+   */
+  hoverEffectsEnabled?: boolean;
 }
 
 /**
@@ -134,6 +161,8 @@ export function HotspotView({
   resolveUrl,
   onActivate,
   globalHoverShadow,
+  globalHotspotLabel,
+  hoverEffectsEnabled = true,
 }: HotspotViewProps): React.ReactElement {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -141,17 +170,19 @@ export function HotspotView({
   const [alphaHit, setAlphaHit] = useState(false);
   /** 指针是否仍在外壳包围盒内（用于 leave 复位 / hover） */
   const [pointerInside, setPointerInside] = useState(false);
-
   const size = hotspotDisplaySize(hotspot);
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
   const hasImage = Boolean(url);
-  // 解析运行时实际使用的悬停阴影：跟随全局或使用本地
+  // 解析运行时实际使用的悬停效果：跟随全局或使用本地
   const resolvedHoverShadow = resolveHotspotHoverShadow(
     hotspot,
     globalHoverShadow ?? hotspot.hoverShadow,
   );
-  const hoverFilter = buildHoverShadowFilter(resolvedHoverShadow);
+  const labelAppearance = resolveHotspotLabelAppearance(
+    hotspot,
+    globalHotspotLabel ?? defaultHotspotLabelStyleConfig(),
+  );
 
   const label = hotspot.label;
   const labelText =
@@ -164,11 +195,16 @@ export function HotspotView({
    * 当前是否视为「悬停在可交互剪影上」。
    * - 无图：只要指针在框内
    * - 有图：需 alphaHit
+   * - 转场未完成时强制关闭，避免显现瞬间叠加热晕/缩放
    */
   const interactiveHover =
-    pointerInside && (!hasImage || alphaHit);
+    hoverEffectsEnabled && pointerInside && (!hasImage || alphaHit);
 
-  const showShadow = hoverFilter !== undefined && interactiveHover;
+  const hoverStyle = buildHoverRuntimeStyle(
+    resolvedHoverShadow,
+    interactiveHover,
+  );
+  const hoverCursor = hoverStyle.cursor ?? "pointer";
   const showLabel =
     labelMode === "always" ||
     (labelMode === "hover" && interactiveHover);
@@ -339,13 +375,15 @@ export function HotspotView({
         boxSizing: "border-box",
         cursor: hasImage
           ? alphaHit
-            ? "pointer"
+            ? hoverCursor
             : "default"
-          : "pointer",
+          : hoverCursor,
         pointerEvents: rootPointerEvents,
         overflow: "visible",
-        filter: showShadow ? hoverFilter : undefined,
-        transition: "filter 120ms ease-out",
+        filter: hoverStyle.filter,
+        transform: hoverStyle.transform,
+        transformOrigin: "center center",
+        transition: hoverStyle.transition,
       }}
     >
       {url ? (
@@ -381,30 +419,34 @@ export function HotspotView({
       )}
 
       {showLabel && labelText ? (
-        <div
-          data-testid={`runtime-hotspot-label-${hotspot.id}`}
-          style={{
-            position: "absolute",
-            left: "50%",
-            bottom: "100%",
-            transform: `translate(calc(-50% + ${label?.offsetX ?? 0}px), ${
-              (label?.offsetY ?? -6) - 4
-            }px)`,
-            padding: "2px 8px",
-            borderRadius: 4,
-            background: "rgba(12, 16, 14, 0.82)",
-            color: "#F2F4F3",
-            fontSize: 12,
-            lineHeight: 1.3,
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            maxWidth: 220,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {labelText}
-        </div>
+        <>
+          {labelAppearance.customCss.trim() ? (
+            <style>{`[data-testid="runtime-hotspot-label-${hotspot.id}"] { ${labelAppearance.customCss} }`}</style>
+          ) : null}
+          <div
+            data-testid={`runtime-hotspot-label-${hotspot.id}`}
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: "100%",
+              transform: `translate(calc(-50% + ${label?.offsetX ?? 0}px), ${
+                (label?.offsetY ?? -6) - 4
+              }px)`,
+              padding: `${labelAppearance.paddingY}px ${labelAppearance.paddingX}px`,
+              lineHeight: 1.3,
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+              maxWidth: labelAppearance.maxWidth,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              boxSizing: "border-box",
+              ...applyUiBoxStyle(labelAppearance.style),
+              ...applyUiTextStyle(labelAppearance.style),
+            }}
+          >
+            {labelText}
+          </div>
+        </>
       ) : null}
     </div>
   );

@@ -35,18 +35,23 @@ import {
 } from "../../store/scene-ui-settings";
 import { notifySettingsField } from "../../store/settings-sync";
 import { notifyUiHistoryTick } from "../../store/ui-edit-history-bridge";
+import { useDesignSize } from "../../store/use-design-size";
 import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
 
 /**
  * 从场景 UI 预设中读取 itemToast 段。
  *
  * @param ctx - 扩展上下文
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
  * @returns 规范化后的 `ItemToastConfig`
  */
 function loadItemToast(
   ctx: ReturnType<typeof useExtensionContext>,
+  designW: number,
+  designH: number,
 ): ItemToastConfig {
-  return readSceneUiConfig(ctx).itemToast;
+  return readSceneUiConfig(ctx, designW, designH).itemToast;
 }
 
 /**
@@ -56,12 +61,16 @@ function loadItemToast(
  *
  * @param ctx - 扩展上下文
  * @param next - 新的 Toast 配置
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
  */
 function persistItemToast(
   ctx: ReturnType<typeof useExtensionContext>,
   next: ItemToastConfig,
+  designW: number,
+  designH: number,
 ): void {
-  const ui = readSceneUiConfig(ctx);
+  const ui = readSceneUiConfig(ctx, designW, designH);
 
   writeSceneUiConfig(ctx, { ...ui, itemToast: next });
   notifyUiHistoryTick();
@@ -100,20 +109,21 @@ function shouldPersistMigration(
 export function ItemToastEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
 
   const [config, setConfig] = useState<ItemToastConfig>(() =>
-    loadItemToast(ctx),
+    loadItemToast(ctx, designSize.width, designSize.height),
   );
 
   /** 标记迁移落盘是否已执行（避免重复写入） */
   const migrationPersistedRef = useRef(false);
 
   /**
-   * 上下文切换后重新加载配置；首次挂载若处于迁移态则写回一次。
+   * 上下文 / 设计分辨率切换后重新加载配置；首次挂载若处于迁移态则写回一次。
    */
   useEffect(() => {
-    setConfig(loadItemToast(ctx));
-  }, [ctx]);
+    setConfig(loadItemToast(ctx, designSize.width, designSize.height));
+  }, [ctx, designSize.height, designSize.width]);
 
   useEffect(() => {
     if (migrationPersistedRef.current) {
@@ -122,13 +132,17 @@ export function ItemToastEditorPanel(): React.ReactElement {
 
     if (shouldPersistMigration(ctx)) {
       // 迁移态：将 readSceneUiConfig 的迁移结果完整落盘到 editor 键
-      const ui = readSceneUiConfig(ctx);
+      const ui = readSceneUiConfig(
+        ctx,
+        designSize.width,
+        designSize.height,
+      );
 
       writeSceneUiConfig(ctx, ui);
       notifySettingsField(SCENE_UI_JSON_KEY);
       migrationPersistedRef.current = true;
     }
-  }, [ctx]);
+  }, [ctx, designSize.height, designSize.width]);
 
   const formValue = useMemo(
     () => config as unknown as Record<string, unknown>,
@@ -142,23 +156,27 @@ export function ItemToastEditorPanel(): React.ReactElement {
    */
   const handleChange = useCallback(
     (next: Record<string, unknown>): void => {
-      const parsed = parseItemToastJson(JSON.stringify(next));
+      const parsed = parseItemToastJson(
+        JSON.stringify(next),
+        designSize.width,
+        designSize.height,
+      );
 
       setConfig(parsed);
-      persistItemToast(ctx, parsed);
+      persistItemToast(ctx, parsed, designSize.width, designSize.height);
     },
-    [ctx],
+    [ctx, designSize.height, designSize.width],
   );
 
   /**
    * 全部重置为默认配置。
    */
   const handleResetAll = useCallback((): void => {
-    const next = defaultItemToastConfig();
+    const next = defaultItemToastConfig(designSize.width, designSize.height);
 
     setConfig(next);
-    persistItemToast(ctx, next);
-  }, [ctx]);
+    persistItemToast(ctx, next, designSize.width, designSize.height);
+  }, [ctx, designSize.height, designSize.width]);
 
   /**
    * 示例气泡样式：合并盒样式与文本样式，并补充内边距与 flex 居中。

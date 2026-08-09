@@ -2,11 +2,11 @@
  * scene-base-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.2.0
  *
  * DOM 底图 + 设计画幅。children（hotspot overlay）渲染在同一 world
  * transform 内，与底图共用缩放/平移。
- * 0.1.1：支持底图 opacity / transition（场景切换分层淡入淡出）。
+ * 0.2.0：默认透明铺底；编辑器可选 chrome（描边/虚线占位），运行时无颜色兜底。
  */
 
 import React, { useRef } from "react";
@@ -22,7 +22,7 @@ export interface SceneBaseLayerProps {
   /** 布局快照 */
   layout: SceneLayout;
 
-  /** 已 resolve 的底图 URL；空串=占位 */
+  /** 已 resolve 的底图 URL；空串=无底图（透明） */
   imageUrl: string;
 
   /**
@@ -50,14 +50,22 @@ export interface SceneBaseLayerProps {
   children?: React.ReactNode;
 
   /**
-   * 设计画幅 / letterbox 底色（CSS）。
-   * 缺省 `#141418`。
+   * 设计画幅底色（CSS）。
+   * 缺省透明（沉浸式铺底）。
+   *
+   * @default "transparent"
    */
   frameBackground?: string;
 
   /**
-   * 底图（及无图占位）不透明度，0–1。
-   * 用于场景切换时「底图先于/后于交互点」淡入淡出；不影响 overlay children。
+   * 为 true 时显示编辑器辅助描边 / 无底图虚线框；运行时保持 false。
+   *
+   * @default false
+   */
+  editorChrome?: boolean;
+
+  /**
+   * 底图不透明度，0–1。
    *
    * @default 1
    */
@@ -69,6 +77,21 @@ export interface SceneBaseLayerProps {
    * @default 200
    */
   baseImageTransitionMs?: number;
+
+  /**
+   * 整层（含 world transform）不透明度。
+   * 必须与 scale 写在同一节点上，避免父级 opacity 动画被合成成「缩放感」。
+   *
+   * @default 1
+   */
+  layerOpacity?: number;
+
+  /**
+   * 整层 opacity 过渡时长（毫秒）；0 表示无过渡。
+   *
+   * @default 0
+   */
+  layerOpacityTransitionMs?: number;
 }
 
 /**
@@ -91,9 +114,12 @@ export function SceneBaseLayer({
   onImageError,
   onBlankPointerDown,
   children,
-  frameBackground = "#141418",
+  frameBackground = "transparent",
+  editorChrome = false,
   baseImageOpacity = 1,
   baseImageTransitionMs = 200,
+  layerOpacity = 1,
+  layerOpacityTransitionMs = 0,
 }: SceneBaseLayerProps): React.ReactElement {
   const worldRef = useRef<HTMLDivElement>(null);
   const { world, designW, designH, contentRect } = layout;
@@ -103,6 +129,11 @@ export function SceneBaseLayer({
     Number.isFinite(baseImageTransitionMs) && baseImageTransitionMs >= 0
       ? baseImageTransitionMs
       : 200;
+  const clampedLayerOpacity = Math.min(1, Math.max(0, layerOpacity));
+  const layerFadeMs =
+    Number.isFinite(layerOpacityTransitionMs) && layerOpacityTransitionMs >= 0
+      ? layerOpacityTransitionMs
+      : 0;
 
   /**
    * 空白点击 → 设计画幅布局坐标。
@@ -164,6 +195,11 @@ export function SceneBaseLayer({
           height: designH,
           transform: `translate(${world.offsetX}px, ${world.offsetY}px) scale(${world.scale})`,
           transformOrigin: "0 0",
+          opacity: clampedLayerOpacity,
+          transition:
+            layerFadeMs > 0
+              ? `opacity ${layerFadeMs}ms cubic-bezier(0.45, 0.05, 0.15, 1)`
+              : undefined,
           pointerEvents: onBlankPointerDown ? "auto" : "none",
         }}
       >
@@ -177,7 +213,9 @@ export function SceneBaseLayer({
             height: designH,
             boxSizing: "border-box",
             background: frameBackground,
-            border: "2px solid rgba(60, 60, 72, 0.85)",
+            border: editorChrome
+              ? "2px solid rgba(60, 60, 72, 0.85)"
+              : "none",
             pointerEvents: "none",
           }}
         />
@@ -218,25 +256,18 @@ export function SceneBaseLayer({
                 userSelect: "none",
               }}
             />
-          ) : (
+          ) : editorChrome ? (
             <div
               data-testid="scene-base-placeholder"
               style={{
                 width: "100%",
                 height: "100%",
                 boxSizing: "border-box",
-                /**
-                 * 与 letterbox 同源，避免无底图时硬编码深色挡住透明底。
-                 */
-                background: frameBackground,
-                border:
-                  frameBackground === "transparent" ||
-                  frameBackground.startsWith("rgba(0, 0, 0, 0")
-                    ? "1px dashed rgba(120, 120, 140, 0.45)"
-                    : "1px solid rgba(60, 60, 72, 0.9)",
+                background: "transparent",
+                border: "1px dashed rgba(120, 120, 140, 0.45)",
               }}
             />
-          )}
+          ) : null}
         </div>
 
         {/* overlay：与底图同一 transform，坐标为设计像素 */}

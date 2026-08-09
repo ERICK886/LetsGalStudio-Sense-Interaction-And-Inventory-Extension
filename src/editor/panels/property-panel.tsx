@@ -13,10 +13,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { normalizeHotspotHoverShadow } from "../../domain/hover-shadow";
 import { defaultHotspotLabel } from "../../domain/hotspot-label";
-import {
-  normalizeLetterboxColor,
-  normalizeLetterboxMode,
-} from "../../domain/letterbox";
 import { defaultElementMotion, normalizeElementMotion } from "../../domain/motion";
 import { normalizeInventoryHud } from "../../domain/inventory-hud";
 import {
@@ -40,6 +36,7 @@ import {
   writeHudSetting,
 } from "../../store/hud-settings";
 import { notifySettingsField } from "../../store/settings-sync";
+import { useDesignSize } from "../../store/use-design-size";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -111,7 +108,7 @@ function withHotspotFormDefaults(hotspot: HotspotElement): HotspotElement {
 }
 
 /**
- * 确保场景带有可编辑的 motion / letterbox 默认值。
+ * 确保场景带有可编辑的 motion 默认值。
  *
  * @param scene - 原始场景
  * @returns 补齐后的副本
@@ -119,8 +116,7 @@ function withHotspotFormDefaults(hotspot: HotspotElement): HotspotElement {
 function withSceneFormDefaults(scene: SceneDefinition): SceneDefinition {
   return {
     ...scene,
-    letterboxMode: normalizeLetterboxMode(scene.letterboxMode) ?? "black",
-    letterboxColor: normalizeLetterboxColor(scene.letterboxColor) ?? "#000000",
+    transitionMode: scene.transitionMode === "cover" ? "cover" : "fade",
     motion: normalizeElementMotion(scene.motion ?? defaultElementMotion()),
   };
 }
@@ -155,6 +151,7 @@ export function PropertyPanel({
 }: PropertyPanelProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
   /**
    * HUD JSON 声明在 backpack-hud；编辑器内经 hud-settings 读写。
    * 用本地 state + 写回同步，避免跨模块 useValue 不可用。
@@ -177,8 +174,12 @@ export function PropertyPanel({
    * 无场景时展示的 HUD 表单值（来自 backpack-hud.settings.inventoryHudJson）。
    */
   const hudFormValue = useMemo((): InventoryHudConfig => {
-    return parseInventoryHudJson(hudJsonRaw);
-  }, [hudJsonRaw]);
+    return parseInventoryHudJson(
+      hudJsonRaw,
+      designSize.width,
+      designSize.height,
+    );
+  }, [designSize.height, designSize.width, hudJsonRaw]);
 
   /**
    * 写回 inventoryHudJson（→ backpack-hud）并广播进程内订阅。
@@ -187,14 +188,18 @@ export function PropertyPanel({
    */
   const handleHudChange = useCallback(
     (next: InventoryHudConfig) => {
-      const normalized = normalizeInventoryHud(next);
+      const normalized = normalizeInventoryHud(
+        next,
+        designSize.width,
+        designSize.height,
+      );
       const json = stringifyInventoryHud(normalized);
 
       writeHudSetting(ctx, INVENTORY_HUD_JSON_KEY, json);
       setHudJsonRaw(json);
       notifySettingsField(INVENTORY_HUD_JSON_KEY);
     },
-    [ctx],
+    [ctx, designSize.height, designSize.width],
   );
 
   const panelTitle = useMemo(() => {
@@ -210,7 +215,7 @@ export function PropertyPanel({
   }, [scene, selectedHotspot]);
 
   /**
-   * 更新场景基础字段并规范化 letterbox / motion。
+   * 更新场景基础字段并规范化 motion（画面底色已弃用，透明铺底）。
    *
    * @param next - 表单写出的场景
    */
@@ -218,8 +223,6 @@ export function PropertyPanel({
     (next: SceneDefinition) => {
       onSceneChange({
         ...next,
-        letterboxMode: normalizeLetterboxMode(next.letterboxMode) ?? "black",
-        letterboxColor: normalizeLetterboxColor(next.letterboxColor),
         motion: normalizeElementMotion(next.motion),
       });
     },

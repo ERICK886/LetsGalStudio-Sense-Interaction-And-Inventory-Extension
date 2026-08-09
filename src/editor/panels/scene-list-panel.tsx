@@ -58,6 +58,7 @@ export function createDefaultScene(): SceneDefinition {
     name: "未命名场景",
     baseImage: "",
     hotspots: [],
+    transitionMode: "fade",
   };
 }
 

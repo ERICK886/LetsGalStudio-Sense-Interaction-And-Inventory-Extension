@@ -33,6 +33,13 @@ export type LetterboxMode = "black" | "white" | "custom";
 
 export type HotspotLabelMode = "hover" | "always" | "hidden";
 
+/**
+ * 场景↔场景切换转场模式（由「进入的目标场景」决定）。
+ * - fade：新旧同时溶换（交叉淡入淡出，避免露透明底闪一下）
+ * - cover：新场景叠在旧场景上覆入（可配合入场滑入/缩放）
+ */
+export type SceneTransitionMode = "fade" | "cover";
+
 /** 交互点悬停阴影的单层配置（光晕 glow 或底影 base） */
 export interface HoverShadowLayer {
   enabled: boolean;
@@ -44,18 +51,55 @@ export interface HoverShadowLayer {
   intensity: number;
 }
 
+/** 交互点悬停时的光标样式 */
+export type HotspotHoverCursor =
+  | "pointer"
+  | "default"
+  | "grab"
+  | "crosshair"
+  | "help"
+  | "zoom-in";
+
 /**
- * 交互点悬停阴影：总开关 + 光晕/底影双层独立配置。
+ * 交互点悬停效果：总开关 + 光晕/底影双层 + 动效/滤镜增强。
  *
  * `useGlobal` 仅用于交互点实例：缺省或 `true` 表示跟随 `SceneUiConfig.hotspotHover`；
  * 全局预设段不使用该字段。
  */
 export interface HotspotHoverShadow {
-  /** 缺省 / true = 跟随场景 UI 全局悬停预设；false = 使用本对象 glow/base */
+  /** 缺省 / true = 跟随场景 UI 全局悬停预设；false = 使用本对象字段 */
   useGlobal?: boolean;
   enabled: boolean;
   glow: HoverShadowLayer;
   base: HoverShadowLayer;
+  /** 悬停过渡时长（毫秒），默认 120 */
+  transitionMs?: number;
+  /** 悬停缩放（1 = 不变），默认 1 */
+  hoverScale?: number;
+  /** 悬停亮度（1 = 不变），默认 1 */
+  brightness?: number;
+  /** 悬停饱和度（1 = 不变），默认 1 */
+  saturate?: number;
+  /** 悬停对比度（1 = 不变），默认 1 */
+  contrast?: number;
+  /** 悬停光标；缺省 pointer */
+  cursor?: HotspotHoverCursor;
+}
+
+/**
+ * 交互点提示文本（标签）的外观配置。
+ *
+ * 全局段挂于 `SceneUiConfig.hotspotLabel`；交互点本地可跟随或覆盖。
+ */
+export interface HotspotLabelStyleConfig {
+  /** 盒模型 + 文本样式 */
+  style: UiBoxStyle & UiTextStyle;
+  /** 水平内边距（px） */
+  paddingX: number;
+  /** 垂直内边距（px） */
+  paddingY: number;
+  /** 最大宽度（px）；超出省略 */
+  maxWidth: number;
 }
 
 export interface HotspotLabel {
@@ -63,6 +107,16 @@ export interface HotspotLabel {
   mode: HotspotLabelMode;
   offsetX?: number;
   offsetY?: number;
+  /**
+   * 缺省 / true = 跟随 `SceneUiConfig.hotspotLabel` 外观；
+   * false = 使用本对象 style / padding / maxWidth。
+   */
+  useGlobalStyle?: boolean;
+  /** 本地外观（useGlobalStyle === false 时生效）；normalize 后保证有值 */
+  style: UiBoxStyle & UiTextStyle;
+  paddingX?: number;
+  paddingY?: number;
+  maxWidth?: number;
   customCss: string;
   motion: ElementMotion;
 }
@@ -143,9 +197,20 @@ export interface SceneDefinition {
   name: string;
   baseImage: string;
   hotspots: HotspotElement[];
+  /**
+   * @deprecated 已弃用：运行时恒透明铺底，编辑器不再提供画面底色配置。
+   * 存档字段仍可读入以兼容旧数据，渲染时忽略。
+   */
   letterboxMode?: LetterboxMode;
+  /**
+   * @deprecated 同 {@link SceneDefinition.letterboxMode}
+   */
   letterboxColor?: string;
   customCss?: string;
+  /**
+   * 进入本场景时的切换转场；缺省 `fade`。
+   */
+  transitionMode?: SceneTransitionMode;
   motion?: ElementMotion;
 }
 
@@ -273,7 +338,7 @@ export interface ItemToastConfig {
 }
 
 /**
- * 场景 UI 预设（version 1）：获得提示 + 交互点悬停 + 返回按钮全局默认。
+ * 场景 UI 预设（version 1）：获得提示 + 交互点悬停/提示文本 + 返回按钮全局默认。
  *
  * 持久化于 `editor.sceneUiJson`；`hotspotHover` 段不含 `useGlobal`。
  */
@@ -283,6 +348,8 @@ export interface SceneUiConfig {
   itemToast: ItemToastConfig;
   /** 交互点悬停阴影全局默认（不含 useGlobal） */
   hotspotHover: HotspotHoverShadow;
+  /** 交互点提示文本外观全局默认 */
+  hotspotLabel: HotspotLabelStyleConfig;
   /** 场景返回按钮外观与布局 */
   sceneReturn: SceneReturnButtonConfig;
 }

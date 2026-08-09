@@ -434,7 +434,7 @@ export function PlayerShell({
         height: "100%",
         position: "relative",
         minHeight: 0,
-        /** 见 runtime-shell：透明根以便 letterbox Alpha 透出引擎层 */
+        /** 透明根：场景透明铺底，透出引擎层 */
         background: "transparent",
         color: tokens.textPrimary,
         visibility: overlayYielded ? "hidden" : "visible",
@@ -463,6 +463,7 @@ export function PlayerShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
           globalHoverShadow={sceneUi.hotspotHover}
+          globalHotspotLabel={sceneUi.hotspotLabel}
         />
 
         {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}

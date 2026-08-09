@@ -14,6 +14,17 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useExtensionContext } from "@avg-studio/sdk";
+import { scaleBackpackScreenLayout } from "../domain/backpack-screen-config";
+import type { DesignSize } from "../domain/design-resolution";
+import { scaleInventoryHudLayout } from "../domain/inventory-hud";
+import {
+  parseBackpackScreenJson,
+  parseInventoryHudJson,
+  stringifyBackpackScreen,
+  stringifyInventoryHud,
+} from "../domain/serialize";
+import { scaleSceneUiLayout } from "../domain/scene-ui-config";
 import type {
   ItemDefinition,
   ItemsLibraryFile,
@@ -23,6 +34,17 @@ import type {
   ScenesLibraryFile,
 } from "../domain/types";
 import { createHistory } from "../store/history";
+import {
+  BACKPACK_SCREEN_JSON_KEY,
+  INVENTORY_HUD_JSON_KEY,
+  readHudSetting,
+  writeHudSetting,
+} from "../store/hud-settings";
+import {
+  readSceneUiConfig,
+  writeSceneUiConfig,
+} from "../store/scene-ui-settings";
+import { notifySettingsField } from "../store/settings-sync";
 import {
   subscribeUiHistoryTick,
   uiHistoryCanRedo,
@@ -235,10 +257,88 @@ export function EditorShell({
   onSetEditMode,
 }: EditorShellProps): React.ReactElement {
   const { tokens } = useTheme();
+  const ctx = useExtensionContext();
   const [library, setLibrary] = useScenesLibrary();
   const [itemsLibrary, setItemsLibrary] = useItemsLibrary();
   const [recipesLibrary, setRecipesLibrary] = useRecipesLibrary();
   const { size: designSize, setSize: setDesignSize } = useDesignSize();
+
+  /**
+   * 切换设计分辨率时，将背包 / HUD / 场景 UI 从旧画幅等比缩放到新画幅并写回。
+   *
+   * @param next - 新设计尺寸
+   */
+  const handleDesignSizeChange = useCallback(
+    (next: DesignSize): void => {
+      if (
+        next.width !== designSize.width ||
+        next.height !== designSize.height
+      ) {
+        const bagRaw = readHudSetting(ctx, BACKPACK_SCREEN_JSON_KEY);
+        const bagText =
+          typeof bagRaw === "string" ? bagRaw : String(bagRaw ?? "");
+        const bagScaled = scaleBackpackScreenLayout(
+          parseBackpackScreenJson(
+            bagText,
+            designSize.width,
+            designSize.height,
+          ),
+          designSize.width,
+          designSize.height,
+          next.width,
+          next.height,
+        );
+
+        writeHudSetting(
+          ctx,
+          BACKPACK_SCREEN_JSON_KEY,
+          stringifyBackpackScreen(bagScaled),
+        );
+        notifySettingsField(BACKPACK_SCREEN_JSON_KEY);
+
+        const hudRaw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
+        const hudText =
+          typeof hudRaw === "string" ? hudRaw : String(hudRaw ?? "");
+        const hudScaled = scaleInventoryHudLayout(
+          parseInventoryHudJson(
+            hudText,
+            designSize.width,
+            designSize.height,
+          ),
+          designSize.width,
+          designSize.height,
+          next.width,
+          next.height,
+        );
+
+        writeHudSetting(
+          ctx,
+          INVENTORY_HUD_JSON_KEY,
+          stringifyInventoryHud(hudScaled),
+        );
+        notifySettingsField(INVENTORY_HUD_JSON_KEY);
+
+        const sceneUi = readSceneUiConfig(
+          ctx,
+          designSize.width,
+          designSize.height,
+        );
+        writeSceneUiConfig(
+          ctx,
+          scaleSceneUiLayout(
+            sceneUi,
+            designSize.width,
+            designSize.height,
+            next.width,
+            next.height,
+          ),
+        );
+      }
+
+      setDesignSize(next);
+    },
+    [ctx, designSize.height, designSize.width, setDesignSize],
+  );
 
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(
@@ -1063,7 +1163,10 @@ export function EditorShell({
         </div>
 
         {editorSection === "scenes" || editorSection === "ui" ? (
-          <DesignResolutionMenu size={designSize} onChange={setDesignSize} />
+          <DesignResolutionMenu
+            size={designSize}
+            onChange={handleDesignSizeChange}
+          />
         ) : null}
 
         {editorSection === "scenes" ? (

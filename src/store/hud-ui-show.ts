@@ -46,6 +46,16 @@ export const BACKPACK_HUD_FULLSCREEN_SHOW_OPTIONS: HudUiShowOptions = {
 };
 
 /**
+ * 全屏不可交互宿主：HudShell 内 letterbox，空白穿透到场景 / 对话框。
+ * 玩家快捷栏推荐路径（与 SceneView 设计坐标对齐）。
+ */
+export const BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS: HudUiShowOptions = {
+  size: "(100%, 100%)",
+  position: "(0, 0)",
+  interactable: false,
+};
+
+/**
  * 读取设计分辨率（作者 settings）。
  *
  * @param ctx - 扩展上下文
@@ -68,9 +78,10 @@ function readDesignSize(ctx: ExtensionContext): {
  * @returns ResolvedHudLayout
  */
 export function readResolvedHudLayout(ctx: ExtensionContext): ResolvedHudLayout {
+  const design = readDesignSize(ctx);
   const raw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
   const json = typeof raw === "string" ? raw : "";
-  const cfg = parseInventoryHudJson(json);
+  const cfg = parseInventoryHudJson(json, design.width, design.height);
 
   return resolveHudLayout(cfg);
 }

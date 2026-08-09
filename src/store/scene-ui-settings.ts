@@ -42,12 +42,23 @@ export const SCENE_UI_JSON_KEY = "sceneUiJson";
  * ui.hotspotHover.enabled; // 全局悬停预设
  * ```
  */
-export function readSceneUiConfig(ctx: ExtensionContext): SceneUiConfig {
+export function readSceneUiConfig(
+  ctx: ExtensionContext,
+  designW?: number,
+  designH?: number,
+): SceneUiConfig {
+  const hasDesign =
+    typeof designW === "number" &&
+    typeof designH === "number" &&
+    Number.isFinite(designW) &&
+    Number.isFinite(designH);
   const raw = readAuthorSetting(ctx, SCENE_UI_JSON_KEY);
   const fromEditor = typeof raw === "string" ? raw.trim() : "";
 
   if (fromEditor.length > 0) {
-    return parseSceneUiJson(fromEditor);
+    return hasDesign
+      ? parseSceneUiJson(fromEditor, designW, designH)
+      : parseSceneUiJson(fromEditor);
   }
 
   // 迁移：旧 itemToastJson 仅用于首次回填 itemToast 段
@@ -55,14 +66,20 @@ export function readSceneUiConfig(ctx: ExtensionContext): SceneUiConfig {
   const legacyStr = typeof legacy === "string" ? legacy.trim() : "";
 
   if (legacyStr.length > 0) {
-    const base = defaultSceneUiConfig();
+    const base = hasDesign
+      ? defaultSceneUiConfig(designW, designH)
+      : defaultSceneUiConfig();
 
     base.itemToast = parseItemToastJson(legacyStr);
 
-    return normalizeSceneUiConfig(base);
+    return hasDesign
+      ? normalizeSceneUiConfig(base, designW, designH)
+      : normalizeSceneUiConfig(base);
   }
 
-  return defaultSceneUiConfig();
+  return hasDesign
+    ? defaultSceneUiConfig(designW, designH)
+    : defaultSceneUiConfig();
 }
 
 /**

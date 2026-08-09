@@ -18,7 +18,7 @@ import {
 } from "../runtime/visual-inventory-hud";
 import { BACKPACK_HUD_MODULE_ID } from "../shared/module-ids";
 import { logError } from "../shared/logger";
-import { getTightBackpackHudShowOptions } from "../store/hud-ui-show";
+import { BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS } from "../store/hud-ui-show";
 
 /** 与 @extension id 一致（React 回退路径） */
 export const BACKPACK_HUD_UI_ID = BACKPACK_HUD_MODULE_ID;
@@ -61,8 +61,8 @@ function exitPlayerSkipMode(ctx: ExtensionContext): void {
 async function showReactHudFallback(ctx: ExtensionContext): Promise<void> {
   await ctx.ui.show(
     BACKPACK_HUD_UI_ID,
-    { compactHost: true },
-    getTightBackpackHudShowOptions(ctx),
+    { compactHost: false },
+    { ...BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS },
   );
 }
 

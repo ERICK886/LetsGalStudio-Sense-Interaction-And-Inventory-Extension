@@ -30,13 +30,31 @@ export interface UiOverlayLayerProps {
   overlays: readonly UiOverlayElement[];
 
   /**
-   * 坐标原点偏移（紧凑 HUD 宿主时为包围盒左上角）。
+   * 坐标原点偏移（紧凑 HUD 宿主时为包围盒左上角，设计像素）。
    * @default 0
    */
   originX?: number;
 
   /** @default 0 */
   originY?: number;
+
+  /**
+   * 设计像素 → 宿主 CSS 像素的缩放（letterbox 时用，避免嵌套 CSS scale）。
+   * @default 1
+   */
+  layoutScale?: number;
+
+  /**
+   * 宿主内额外偏移（letterbox 的 offsetX，CSS 像素）。
+   * @default 0
+   */
+  screenOffsetX?: number;
+
+  /**
+   * 宿主内额外偏移（letterbox 的 offsetY，CSS 像素）。
+   * @default 0
+   */
+  screenOffsetY?: number;
 
   /**
    * 编辑器模式：禁用真实输入，点击只用于选中（由外层处理）。
@@ -80,6 +98,9 @@ function OverlayItem({
   el,
   originX,
   originY,
+  layoutScale,
+  screenOffsetX,
+  screenOffsetY,
   editorMode,
   onOverlayPointerDown,
   onOverlayAction,
@@ -89,6 +110,9 @@ function OverlayItem({
   el: UiOverlayElement;
   originX: number;
   originY: number;
+  layoutScale: number;
+  screenOffsetX: number;
+  screenOffsetY: number;
   editorMode: boolean;
   onOverlayPointerDown?: UiOverlayLayerProps["onOverlayPointerDown"];
   onOverlayAction?: UiOverlayLayerProps["onOverlayAction"];
@@ -119,12 +143,13 @@ function OverlayItem({
     el.flipV ? "scaleY(-1)" : "",
   ].filter(Boolean);
 
+  const s = layoutScale > 0 ? layoutScale : 1;
   const baseStyle: React.CSSProperties = {
     position: "absolute",
-    left: el.rect.x - originX,
-    top: el.rect.y - originY,
-    width: el.rect.w,
-    height: el.rect.h,
+    left: screenOffsetX + (el.rect.x - originX) * s,
+    top: screenOffsetY + (el.rect.y - originY) * s,
+    width: el.rect.w * s,
+    height: el.rect.h * s,
     boxSizing: "border-box",
     opacity: el.opacity,
     transform: transformParts.length > 0 ? transformParts.join(" ") : undefined,
@@ -578,6 +603,9 @@ export function UiOverlayLayer({
   overlays,
   originX = 0,
   originY = 0,
+  layoutScale = 1,
+  screenOffsetX = 0,
+  screenOffsetY = 0,
   editorMode = false,
   onOverlayPointerDown,
   onOverlayAction,
@@ -604,6 +632,9 @@ export function UiOverlayLayer({
       {sorted.map((el) => (
         <OverlayItem
           key={el.id}
+          layoutScale={layoutScale}
+          screenOffsetX={screenOffsetX}
+          screenOffsetY={screenOffsetY}
           el={el}
           originX={originX}
           originY={originY}

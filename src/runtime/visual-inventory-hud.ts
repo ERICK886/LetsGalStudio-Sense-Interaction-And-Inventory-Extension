@@ -43,6 +43,13 @@ import {
   EXTENSION_PACKAGE_ID,
 } from "../shared/module-ids";
 import { logError, logInfo, logWarn } from "../shared/logger";
+import {
+  DEFAULT_DESIGN_HEIGHT,
+  DEFAULT_DESIGN_WIDTH,
+  normalizeDesignSize,
+  SETTINGS_DESIGN_HEIGHT,
+  SETTINGS_DESIGN_WIDTH,
+} from "../domain/design-resolution";
 import { readAuthorSetting } from "../store/author-settings";
 import { ITEMS_LIBRARY_SETTINGS_KEY } from "../store/items-persistence";
 import {
@@ -126,9 +133,15 @@ function readItems(ctx: ExtensionContext): ItemDefinition[] {
  * @returns 按钮文案
  */
 function readOpenBagLabel(ctx: ExtensionContext): string {
+  const design = normalizeDesignSize(
+    Number(readAuthorSetting(ctx, SETTINGS_DESIGN_WIDTH)) ||
+      DEFAULT_DESIGN_WIDTH,
+    Number(readAuthorSetting(ctx, SETTINGS_DESIGN_HEIGHT)) ||
+      DEFAULT_DESIGN_HEIGHT,
+  );
   const raw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
   const json = typeof raw === "string" ? raw : "";
-  const hud = parseInventoryHudJson(json);
+  const hud = parseInventoryHudJson(json, design.width, design.height);
   const chrome = (hud.overlays ?? []).find(
     (el) => el.role === "openBag" || el.id === "hud-chrome-open-bag",
   );

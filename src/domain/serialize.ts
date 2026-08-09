@@ -29,6 +29,7 @@ import {
   defaultMotionSide,
   normalizeElementMotion,
 } from "./motion";
+import { normalizeSceneTransitionMode } from "./scene-transition";
 import type {
   BackpackScreenConfig,
   ElementMotion,
@@ -507,6 +508,10 @@ function normalizeSceneDefinition(raw: unknown): SceneDefinition | null {
     scene.motion = normalizeElementMotion(obj.motion);
   }
 
+  if (obj.transitionMode !== undefined) {
+    scene.transitionMode = normalizeSceneTransitionMode(obj.transitionMode);
+  }
+
   return scene;
 }
 
@@ -960,16 +965,28 @@ export function stringifyProgress(progress: SceneProgress): string {
  * parseInventoryHudJson(""); // → defaultInventoryHud()，无控制台报错
  * ```
  */
-export function parseInventoryHudJson(raw: string): InventoryHudConfig {
+export function parseInventoryHudJson(
+  raw: string,
+  refW?: number,
+  refH?: number,
+): InventoryHudConfig {
   // settings.inventoryHudJson 默认 ""；视为未配置，勿 JSON.parse（避免 Unexpected end of JSON input）
   if (typeof raw !== "string" || raw.trim().length === 0) {
-    return defaultInventoryHud();
+    return refW !== undefined && refH !== undefined
+      ? defaultInventoryHud(refW, refH)
+      : defaultInventoryHud();
   }
 
   const parsed = safeParseJson(raw, "inventoryHud");
 
   if (parsed === null) {
-    return defaultInventoryHud();
+    return refW !== undefined && refH !== undefined
+      ? defaultInventoryHud(refW, refH)
+      : defaultInventoryHud();
+  }
+
+  if (refW !== undefined && refH !== undefined) {
+    return normalizeInventoryHud(parsed, refW, refH);
   }
 
   return normalizeInventoryHud(parsed);
@@ -1014,7 +1031,11 @@ export function parseBackpackScreenJson(
       : defaultBackpackScreen();
   }
 
-  return normalizeBackpackScreen(parsed, refW, refH);
+  if (refW !== undefined && refH !== undefined) {
+    return normalizeBackpackScreen(parsed, refW, refH);
+  }
+
+  return normalizeBackpackScreen(parsed);
 }
 
 /**

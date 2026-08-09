@@ -986,19 +986,33 @@ function scaleRequiredUiRect(
 }
 
 /**
- * 将 1920×1080 默认预设缩放到目标设计尺寸。
+ * 将背包布局从一套设计分辨率等比缩放到另一套。
  *
- * @param cfg - 基准预设
- * @param refW - 目标宽
- * @param refH - 目标高
+ * @param cfg - 源配置
+ * @param fromW - 源设计宽
+ * @param fromH - 源设计高
+ * @param toW - 目标设计宽
+ * @param toH - 目标设计高
+ * @returns 新配置（不修改入参）
  */
-function scaleBackpackScreenPreset(
+export function scaleBackpackScreenLayout(
   cfg: BackpackScreenConfig,
-  refW: number,
-  refH: number,
+  fromW: number,
+  fromH: number,
+  toW: number,
+  toH: number,
 ): BackpackScreenConfig {
-  const sx = refW / DEFAULT_REF_W;
-  const sy = refH / DEFAULT_REF_H;
+  const fw = Math.max(1, fromW);
+  const fh = Math.max(1, fromH);
+  const tw = Math.max(1, toW);
+  const th = Math.max(1, toH);
+
+  if (fw === tw && fh === th) {
+    return cfg;
+  }
+
+  const sx = tw / fw;
+  const sy = th / fh;
   const nodes = cloneNodes(cfg.nodes);
 
   nodes.panelChrome.rect = scaleUiRect(nodes.panelChrome.rect, sx, sy);
@@ -1045,6 +1059,118 @@ function scaleBackpackScreenPreset(
     overlays: syncOverlaysZIndexFromLayerOrder(overlays, cfg.layerOrder ?? []),
     layerOrder: [...(cfg.layerOrder ?? [])],
   };
+}
+
+/**
+ * 将 1920×1080 默认预设缩放到目标设计尺寸。
+ *
+ * @param cfg - 基准预设
+ * @param refW - 目标宽
+ * @param refH - 目标高
+ */
+function scaleBackpackScreenPreset(
+  cfg: BackpackScreenConfig,
+  refW: number,
+  refH: number,
+): BackpackScreenConfig {
+  return scaleBackpackScreenLayout(
+    cfg,
+    DEFAULT_REF_W,
+    DEFAULT_REF_H,
+    refW,
+    refH,
+  );
+}
+
+/**
+ * 统计布局在设计坐标中的右/下边界。
+ *
+ * @param cfg - 背包配置
+ * @returns right / bottom（设计像素）
+ */
+function measureBackpackExtent(cfg: BackpackScreenConfig): {
+  right: number;
+  bottom: number;
+} {
+  let right = 0;
+  let bottom = 0;
+
+  const consider = (rect: UiRect | undefined): void => {
+    if (!rect) {
+      return;
+    }
+
+    const w = typeof rect.w === "number" && rect.w > 0 ? rect.w : 0;
+    const h = typeof rect.h === "number" && rect.h > 0 ? rect.h : 0;
+    right = Math.max(right, rect.x + w);
+    bottom = Math.max(bottom, rect.y + h);
+  };
+
+  consider(cfg.nodes.panelChrome.rect);
+  consider(cfg.nodes.titleBlock.rect);
+  consider(cfg.nodes.closeButton.rect);
+  consider(cfg.nodes.itemGrid.rect);
+  consider(cfg.nodes.detailPanel.rect);
+
+  const craft = cfg.nodes.craftButton;
+  const craftW = typeof craft.w === "number" && craft.w > 0 ? craft.w : 0;
+  const craftH = typeof craft.h === "number" && craft.h > 0 ? craft.h : 0;
+  const detail = cfg.nodes.detailPanel.rect;
+  const detailBottom =
+    detail.y +
+    (typeof detail.h === "number" && detail.h > 0 ? detail.h : 0);
+  const craftOffsetY =
+    typeof craft.offsetY === "number" ? craft.offsetY : 0;
+
+  if (craftW > 0 || craftH > 0) {
+    right = Math.max(right, detail.x + craftW);
+    bottom = Math.max(bottom, detailBottom + craftOffsetY + craftH);
+  }
+
+  for (const el of cfg.overlays ?? []) {
+    consider(el.rect);
+  }
+
+  return { right, bottom };
+}
+
+/**
+ * 若布局明显超出当前设计画幅（常见：存盘仍是 1920 预设、画布已是 1280），
+ * 则从推断的源分辨率等比缩放到目标设计尺寸。
+ *
+ * @param cfg - 当前配置
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
+ * @returns 适配后的配置；无需缩放时返回原引用
+ */
+export function adaptBackpackScreenToDesign(
+  cfg: BackpackScreenConfig,
+  designW: number,
+  designH: number,
+): BackpackScreenConfig {
+  const dw = Math.max(1, designW);
+  const dh = Math.max(1, designH);
+  const { right, bottom } = measureBackpackExtent(cfg);
+  /** 允许数像素贴边溢出，避免误缩放作者刻意的微调 */
+  const slack = 8;
+
+  if (right <= dw + slack && bottom <= dh + slack) {
+    return cfg;
+  }
+
+  /**
+   * 外接边落在默认 1920×1080 画幅内时按该参照缩放；
+   * 否则按内容外接尺寸缩放（兼容更大自定义画幅旧档）。
+   */
+  const looksLikeDefaultW =
+    right >= DEFAULT_REF_W * 0.85 && right <= DEFAULT_REF_W + slack;
+  const looksLikeDefaultH =
+    bottom >= DEFAULT_REF_H * 0.85 && bottom <= DEFAULT_REF_H + slack;
+
+  const fromW = looksLikeDefaultW ? DEFAULT_REF_W : Math.max(right, dw);
+  const fromH = looksLikeDefaultH ? DEFAULT_REF_H : Math.max(bottom, dh);
+
+  return scaleBackpackScreenLayout(cfg, fromW, fromH, dw, dh);
 }
 
 /**
@@ -1849,19 +1975,27 @@ export function normalizeBackpackScreen(
       BAG_DEFAULT_LAYER_ORDER,
     );
 
-    return {
-      version: 2,
-      accent:
-        typeof obj.accent === "string" && obj.accent.trim().length > 0
-          ? obj.accent.trim()
-          : defaults.accent,
-      overlays: syncOverlaysZIndexFromLayerOrder(overlays, layerOrder),
-      layerOrder,
-      nodes: normalizedNodes,
-    };
+    return adaptBackpackScreenToDesign(
+      {
+        version: 2,
+        accent:
+          typeof obj.accent === "string" && obj.accent.trim().length > 0
+            ? obj.accent.trim()
+            : defaults.accent,
+        overlays: syncOverlaysZIndexFromLayerOrder(overlays, layerOrder),
+        layerOrder,
+        nodes: normalizedNodes,
+      },
+      refW,
+      refH,
+    );
   }
 
-  return migrateBackpackScreenV1(obj, refW, refH);
+  return adaptBackpackScreenToDesign(
+    migrateBackpackScreenV1(obj, refW, refH),
+    refW,
+    refH,
+  );
 }
 
 /**

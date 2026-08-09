@@ -40,6 +40,7 @@ import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { useInventory } from "../store/inventory-persistence";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
+import { useDesignSize } from "../store/use-design-size";
 import { readRuntimeSetting } from "../store/runtime-settings";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useTheme } from "../theme/theme-provider";
@@ -405,6 +406,7 @@ export function InventoryHudLayer({
   save,
 }: InventoryHudLayerProps): React.ReactElement {
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
   const [inventory, setInventory] = useInventory(save, ctx);
   const [itemsLibrary] = useItemsLibrary();
   const [recipesLibrary] = useRecipesLibrary();
@@ -475,8 +477,12 @@ export function InventoryHudLayer({
       raw = typeof cross === "string" ? cross : String(cross ?? "");
     }
 
-    return parseInventoryHudJson(raw);
-  }, [hudJsonLocal, ctx]);
+    return parseInventoryHudJson(
+      raw,
+      designSize.width,
+      designSize.height,
+    );
+  }, [ctx, designSize.height, designSize.width, hudJsonLocal]);
 
   return (
     <InventoryQuickbar

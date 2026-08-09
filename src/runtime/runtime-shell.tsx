@@ -398,10 +398,7 @@ export function RuntimeShell({
         height: "100%",
         position: "relative",
         minHeight: 0,
-        /**
-         * 勿铺不透明主题底：SceneView 已按 letterbox 填色；
-         * 自定义透明时需透出引擎层（对话框等）。
-         */
+        /** 透明根：场景透明铺底，透出引擎层（对话框等） */
         background: "transparent",
         color: tokens.textPrimary,
         visibility: overlayYielded ? "hidden" : "visible",
@@ -430,6 +427,7 @@ export function RuntimeShell({
           onToastAdvance={handleToastAdvance}
           onHotspotActivate={handleHotspotActivate}
           globalHoverShadow={sceneUi.hotspotHover}
+          globalHotspotLabel={sceneUi.hotspotLabel}
         />
 
         {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}

@@ -21,7 +21,7 @@ import {
   backpackUiPathCandidates,
 } from "../shared/module-ids";
 import { logInfo, logWarn } from "../shared/logger";
-import { getTightBackpackHudShowOptions } from "../store/hud-ui-show";
+import { BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS } from "../store/hud-ui-show";
 import {
   closeVisualInventoryHud,
   isVisualInventoryHudSessionOpen,
@@ -223,8 +223,8 @@ function isReactHudVisible(ctx: ExtensionContext): boolean {
 async function showReactHudFallback(ctx: ExtensionContext): Promise<void> {
   await ctx.ui.show(
     BACKPACK_HUD_MODULE_ID,
-    { compactHost: true },
-    getTightBackpackHudShowOptions(ctx),
+    { compactHost: false },
+    { ...BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS },
   );
 }
 

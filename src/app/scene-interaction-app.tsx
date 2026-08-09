@@ -42,7 +42,9 @@ import {
   BACKPACK_MODULE_ID,
   SCENE_INTERACTION_MODULE_ID,
 } from "../shared/module-ids";
-import { getTightBackpackHudShowOptions } from "../store/hud-ui-show";
+import {
+  BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS,
+} from "../store/hud-ui-show";
 import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { bindInventoryPersistence } from "../store/inventory-session";
@@ -209,9 +211,8 @@ function SceneInteractionAppContent({
   }, [isPlayerModal, playerPresentation]);
 
   /**
-   * 仅玩家运行时叠快捷栏：先走 React 紧凑包围盒（可靠）。
-   * Visual UI（inventory-hud.json）缺失时 open 会失败并干扰调试；
-   * 有界面文件后再切回 preferVisual。
+   * 仅玩家运行时叠快捷栏：全屏 + interactable:false，
+   * HudShell 内与场景同套 letterbox（避免紧凑 % 定位相对场景错位）。
    * Studio 程序预览勿 ui.show，以免顶掉当前容器导致场景消失。
    */
   useEffect(() => {
@@ -225,8 +226,8 @@ function SceneInteractionAppContent({
       try {
         await ctx.ui.show(
           BACKPACK_HUD_MODULE_ID,
-          { compactHost: true },
-          getTightBackpackHudShowOptions(ctx),
+          { compactHost: false },
+          { ...BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS },
         );
 
         if (!cancelled) {

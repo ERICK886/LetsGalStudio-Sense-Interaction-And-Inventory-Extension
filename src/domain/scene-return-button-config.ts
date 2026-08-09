@@ -7,6 +7,10 @@
  * 场景返回按钮（SceneUiConfig.sceneReturn）的默认值与 JSON 规范化。
  */
 
+import {
+  DEFAULT_DESIGN_HEIGHT,
+  DEFAULT_DESIGN_WIDTH,
+} from "./design-resolution";
 import type {
   SceneReturnButtonConfig,
   UiBoxStyle,
@@ -19,7 +23,13 @@ import {
   normalizeUiTextStyle,
 } from "./ui-style";
 
-/** 默认按钮矩形（设计像素，左上角附近） */
+/** 默认布局参照宽 */
+const DEFAULT_REF_W = DEFAULT_DESIGN_WIDTH;
+
+/** 默认布局参照高 */
+const DEFAULT_REF_H = DEFAULT_DESIGN_HEIGHT;
+
+/** 默认按钮矩形（设计像素，左上角附近，基准 1920×1080） */
 const DEFAULT_RECT: UiRect = { x: 24, y: 24, w: 120, h: 48 };
 
 /** 默认按钮盒模型样式 */
@@ -42,8 +52,72 @@ const DEFAULT_TEXT_STYLE: UiTextStyle = {
 const DEFAULT_LABEL = "返回";
 
 /**
- * 返回场景返回按钮的完整默认配置。
+ * 将返回按钮布局从一套设计分辨率缩放到另一套。
  *
+ * @param cfg - 源配置
+ * @param fromW - 源设计宽
+ * @param fromH - 源设计高
+ * @param toW - 目标设计宽
+ * @param toH - 目标设计高
+ * @returns 新配置
+ */
+export function scaleSceneReturnButtonConfig(
+  cfg: SceneReturnButtonConfig,
+  fromW: number,
+  fromH: number,
+  toW: number,
+  toH: number,
+): SceneReturnButtonConfig {
+  const fw = Math.max(1, fromW);
+  const fh = Math.max(1, fromH);
+  const tw = Math.max(1, toW);
+  const th = Math.max(1, toH);
+
+  if (fw === tw && fh === th) {
+    return cfg;
+  }
+
+  const sx = tw / fw;
+  const sy = th / fh;
+  const s = Math.min(sx, sy);
+  const rect = cfg.rect;
+  const style = { ...cfg.style };
+
+  if (typeof style.borderRadius === "number") {
+    style.borderRadius = Math.max(0, Math.round(style.borderRadius * s));
+  }
+
+  if (typeof style.borderWidth === "number") {
+    style.borderWidth = Math.max(0, Math.round(style.borderWidth * s));
+  }
+
+  if (typeof style.fontSize === "number") {
+    style.fontSize = Math.max(1, Math.round(style.fontSize * s));
+  }
+
+  return {
+    ...cfg,
+    rect: {
+      x: Math.round(rect.x * sx),
+      y: Math.round(rect.y * sy),
+      w:
+        typeof rect.w === "number"
+          ? Math.max(1, Math.round(rect.w * sx))
+          : rect.w,
+      h:
+        typeof rect.h === "number"
+          ? Math.max(1, Math.round(rect.h * sy))
+          : rect.h,
+    },
+    style,
+  };
+}
+
+/**
+ * 返回场景返回按钮的完整默认配置（基准 1920×1080；其它设计尺寸等比缩放）。
+ *
+ * @param refW - 参考设计宽
+ * @param refH - 参考设计高
  * @returns 启用状态、默认矩形与可读底/边/字色
  *
  * @example
@@ -52,8 +126,11 @@ const DEFAULT_LABEL = "返回";
  * // cfg.enabled === true, cfg.label === "返回"
  * ```
  */
-export function defaultSceneReturnButtonConfig(): SceneReturnButtonConfig {
-  return {
+export function defaultSceneReturnButtonConfig(
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
+): SceneReturnButtonConfig {
+  const base: SceneReturnButtonConfig = {
     enabled: true,
     rect: { ...DEFAULT_RECT },
     label: DEFAULT_LABEL,
@@ -62,6 +139,18 @@ export function defaultSceneReturnButtonConfig(): SceneReturnButtonConfig {
       ...DEFAULT_TEXT_STYLE,
     },
   };
+
+  if (refW === DEFAULT_REF_W && refH === DEFAULT_REF_H) {
+    return base;
+  }
+
+  return scaleSceneReturnButtonConfig(
+    base,
+    DEFAULT_REF_W,
+    DEFAULT_REF_H,
+    refW,
+    refH,
+  );
 }
 
 /**
@@ -139,11 +228,13 @@ function normalizeHoverStyle(
  */
 export function normalizeSceneReturnButtonConfig(
   raw: unknown,
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
 ): SceneReturnButtonConfig {
-  const defaults = defaultSceneReturnButtonConfig();
+  const defaults = defaultSceneReturnButtonConfig(refW, refH);
 
   if (raw === null || raw === undefined || typeof raw !== "object") {
-    return defaultSceneReturnButtonConfig();
+    return defaultSceneReturnButtonConfig(refW, refH);
   }
 
   const obj = raw as Record<string, unknown>;

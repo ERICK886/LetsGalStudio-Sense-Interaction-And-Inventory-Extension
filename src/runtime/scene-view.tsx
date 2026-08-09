@@ -2,12 +2,10 @@
  * scene-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.1
+ * 版本: 0.5.0
  *
- * 运行时场景视图：底图 + 可见交互点 + toast 层（设计分辨率 letterbox）。
- * 0.1.1：空态与有场景共用同一 host，避免尺寸观测失效导致画面贴边。
- * 0.2.0：切换场景分层过渡——离开：交互点 → 底图；进入：底图 → 交互点。
- * 0.2.1：letterbox 解析改用 domain/letterbox.resolveLetterboxColor（支持透明）。
+ * 运行时场景视图：底图 + 可见交互点 + toast 层（透明铺底 + 设计分辨率 letterbox）。
+ * 0.5.0：场景切换支持淡入淡出（同时溶换）与覆盖（新层叠上），由目标场景 transitionMode 决定。
  */
 
 import React, {
@@ -18,11 +16,21 @@ import React, {
   useState,
 } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
-import { resolveLetterboxColor } from "../domain/letterbox";
 import { isHotspotVisible } from "../domain/progress";
+import {
+  coverEnterStartPose,
+  DEFAULT_SCENE_TRANSITION_MS,
+  hiddenSceneLayerPose,
+  normalizeSceneTransitionMode,
+  resolveSceneTransitionDelayMs,
+  resolveSceneTransitionMs,
+  restSceneLayerPose,
+  type SceneLayerPose,
+} from "../domain/scene-transition";
 import type {
   HotspotElement,
   HotspotHoverShadow,
+  HotspotLabelStyleConfig,
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
@@ -30,15 +38,19 @@ import type { ToastQueueState } from "../domain/toast-queue";
 import { SceneBaseLayer } from "../editor/canvas/scene-base-layer";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { buildSceneLayout } from "../shared/scene-layout";
-import { useTheme } from "../theme/theme-provider";
 import { HotspotView } from "./hotspot-view";
 import { ToastLayer } from "./toast-layer";
 
-/** 交互点淡入/淡出时长（毫秒）— 方案 A */
-const HOTSPOT_FADE_MS = 150;
+/** 层位姿 CSS 缓动 */
+const POSE_EASING = "cubic-bezier(0.45, 0.05, 0.15, 1)";
 
-/** 底图淡入/淡出时长（毫秒）— 方案 A */
-const BASE_FADE_MS = 200;
+/**
+ * 单层可绘制场景（含已解析的底图尺寸，避免换图时 layout 归零闪一下）。
+ */
+interface PaintedScene {
+  scene: SceneDefinition;
+  natural: { width: number; height: number };
+}
 
 /**
  * SceneView 组件属性。
@@ -89,10 +101,15 @@ export interface SceneViewProps {
    * 出运行时实际使用的悬停阴影（useGlobal !== false 时跟随全局）。
    */
   globalHoverShadow?: HotspotHoverShadow;
+
+  /**
+   * 全局交互点提示文本外观（来自 `SceneUiConfig.hotspotLabel`）。
+   */
+  globalHotspotLabel?: HotspotLabelStyleConfig;
 }
 
 /**
- * 可取消的延时。
+ * 可取消的延时；取消时尽快结束 await。
  *
  * @param ms - 毫秒
  * @param isCancelled - 返回 true 时提前结束（不抛错）
@@ -102,6 +119,10 @@ function waitMs(
   ms: number,
   isCancelled: () => boolean,
 ): Promise<void> {
+  if (ms <= 0 || isCancelled()) {
+    return Promise.resolve();
+  }
+
   return new Promise((resolve) => {
     const id = window.setTimeout(() => {
       resolve();
@@ -112,6 +133,142 @@ function waitMs(
       resolve();
     }
   });
+}
+
+/**
+ * 等两帧，确保双层 DOM / 缓存图已提交到屏幕再开过渡。
+ *
+ * @param isCancelled - 取消检测
+ * @returns Promise&lt;void&gt;
+ */
+async function waitPaint(isCancelled: () => boolean): Promise<void> {
+  if (isCancelled()) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
+/**
+ * 起始位姿落地后再开 CSS transition：强制 reflow + 再等一帧。
+ *
+ * @param host - 场景宿主（用于 offsetHeight reflow）
+ * @param isCancelled - 取消检测
+ */
+async function waitPoseCommit(
+  host: HTMLElement | null,
+  isCancelled: () => boolean,
+): Promise<void> {
+  await waitPaint(isCancelled);
+
+  if (isCancelled()) {
+    return;
+  }
+
+  if (host !== null) {
+    void host.offsetHeight;
+  }
+
+  await waitPaint(isCancelled);
+}
+
+/**
+ * 预加载单张图并尽量 decode；失败或空 URL 返回 0×0。
+ *
+ * @param url - 已 resolve 的图片 URL
+ * @returns 自然宽高
+ */
+function preloadSceneImage(
+  url: string,
+): Promise<{ width: number; height: number }> {
+  if (!url) {
+    return Promise.resolve({ width: 0, height: 0 });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    /**
+     * @param width - naturalWidth
+     * @param height - naturalHeight
+     */
+    const done = (width: number, height: number): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve({ width, height });
+    };
+
+    const img = new Image();
+
+    /**
+     * 加载完成后尽量 decode，减少首帧溶入时的解码卡顿。
+     */
+    const finish = (): void => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+
+      if (typeof img.decode === "function") {
+        void img
+          .decode()
+          .catch(() => undefined)
+          .finally(() => {
+            done(w, h);
+          });
+
+        return;
+      }
+
+      done(w, h);
+    };
+
+    img.onload = () => {
+      finish();
+    };
+    img.onerror = () => {
+      done(0, 0);
+    };
+    img.src = url;
+
+    if (img.complete && img.naturalWidth > 0) {
+      finish();
+    } else if (img.complete) {
+      done(0, 0);
+    }
+  });
+}
+
+/**
+ * 预加载场景底图 + 可见交互点图，再开交叉淡入淡出。
+ *
+ * @param scene - 目标场景
+ * @param resolveUrl - URI → URL
+ * @returns 底图 natural 尺寸
+ */
+async function preloadSceneBundle(
+  scene: SceneDefinition,
+  resolveUrl: (uri: string) => string,
+): Promise<{ width: number; height: number }> {
+  const baseUrl = resolveUrl(scene.baseImage ?? "");
+  const baseNatural = await preloadSceneImage(baseUrl);
+
+  const hotspotUrls = scene.hotspots
+    .map((hs) => resolveUrl(hs.visual?.src ?? ""))
+    .filter((u) => u.length > 0);
+
+  if (hotspotUrls.length > 0) {
+    await Promise.all(hotspotUrls.map((u) => preloadSceneImage(u)));
+  }
+
+  return baseNatural;
 }
 
 /**
@@ -137,9 +294,7 @@ function sameSceneId(
 }
 
 /**
- * 运行时场景视图：渲染底图、可见 hotspot、toast；切换时分层淡入淡出。
- *
- * 离开：交互点 150ms → 底图 200ms；进入：底图 200ms → 交互点 150ms。
+ * 运行时场景视图：渲染底图、可见 hotspot、toast；切换时交叉淡入淡出。
  *
  * @param props - SceneViewProps
  * @returns 场景舞台
@@ -167,36 +322,44 @@ export function SceneView({
   onHotspotActivate,
   resolveToastText,
   globalHoverShadow,
+  globalHotspotLabel,
 }: SceneViewProps): React.ReactElement {
-  const { tokens } = useTheme();
   const ctx = useExtensionContext();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [hostSize, setHostSize] = useState({ width: 800, height: 600 });
-  const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
+  /**
+   * 宿主实测尺寸；未测到前不布局/不播转场，避免默认 800×600 → 真尺寸时
+   * world.scale 跳变被看成交互点「从小放大」。
+   */
+  const [hostSize, setHostSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
 
   /**
-   * 当前实际绘制的场景（过渡中仍为旧场景，直到淡出完成再切换）。
+   * 当前层（上层）：交叉淡入的目标 / 稳态展示。
+   * 初始为 null，首帧经预加载后再挂载，避免未解码底图闪一下。
    */
-  const [displayScene, setDisplayScene] = useState<SceneDefinition | null>(
-    scene,
-  );
+  const [current, setCurrent] = useState<PaintedScene | null>(null);
 
-  const [baseOpacity, setBaseOpacity] = useState(1);
-  const [hotspotOpacity, setHotspotOpacity] = useState(1);
+  /** 离开层（下层）：转场中的旧场景 */
+  const [outgoing, setOutgoing] = useState<PaintedScene | null>(null);
+
+  const [currentPose, setCurrentPose] = useState<SceneLayerPose>(() =>
+    hiddenSceneLayerPose(),
+  );
+  const [outgoingPose, setOutgoingPose] = useState<SceneLayerPose>(() =>
+    restSceneLayerPose(),
+  );
+  /** 当前转场动画时长（写入 CSS transition） */
+  const [poseTransitionMs, setPoseTransitionMs] = useState(0);
 
   /** 过渡中禁止点击交互点 */
   const [transitioning, setTransitioning] = useState(false);
 
   const bootstrappedRef = useRef(false);
-  const displaySceneRef = useRef(displayScene);
+  const currentRef = useRef(current);
 
-  displaySceneRef.current = displayScene;
-
-  const imageUrl = useMemo(() => {
-    const raw = displayScene?.baseImage ?? "";
-
-    return resolveAssetUrl(raw, ctx.asset?.resolve?.bind(ctx.asset));
-  }, [displayScene?.baseImage, ctx.asset]);
+  currentRef.current = current;
 
   /**
    * @param uri - 资源 URI
@@ -208,29 +371,39 @@ export function SceneView({
     [ctx.asset],
   );
 
-  useEffect(() => {
-    setImageNatural({ width: 0, height: 0 });
-  }, [imageUrl]);
+  /**
+   * @param painted - 待绘制场景
+   * @returns 底图 URL
+   */
+  const sceneImageUrl = useCallback(
+    (painted: PaintedScene): string =>
+      resolveAssetUrl(
+        painted.scene.baseImage ?? "",
+        ctx.asset?.resolve?.bind(ctx.asset),
+      ),
+    [ctx.asset],
+  );
 
-  const layout = useMemo(
-    () =>
-      buildSceneLayout(
-        hostSize.width,
-        hostSize.height,
+  /**
+   * @param painted - 待绘制场景
+   * @returns 布局快照
+   */
+  const layoutFor = useCallback(
+    (painted: PaintedScene) => {
+      const hw = hostSize?.width ?? 0;
+      const hh = hostSize?.height ?? 0;
+
+      return buildSceneLayout(
+        hw > 0 ? hw : 1,
+        hh > 0 ? hh : 1,
         designWidth,
         designHeight,
-        imageNatural.width,
-        imageNatural.height,
+        painted.natural.width,
+        painted.natural.height,
         1,
-      ),
-    [
-      hostSize.width,
-      hostSize.height,
-      designWidth,
-      designHeight,
-      imageNatural.width,
-      imageNatural.height,
-    ],
+      );
+    },
+    [hostSize, designWidth, designHeight],
   );
 
   /**
@@ -258,7 +431,9 @@ export function SceneView({
       }
 
       setHostSize((prev) =>
-        prev.width === w && prev.height === h ? prev : { width: w, height: h },
+        prev !== null && prev.width === w && prev.height === h
+          ? prev
+          : { width: w, height: h },
       );
     };
 
@@ -278,125 +453,373 @@ export function SceneView({
     const rect = host.getBoundingClientRect();
 
     applySize(rect.width, rect.height);
+    // 首帧布局未完成时再补测一次
+    const raf = window.requestAnimationFrame(() => {
+      const r = host.getBoundingClientRect();
 
-    return () => ro.disconnect();
+      applySize(r.width, r.height);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
 
+  const transitionGenRef = useRef(0);
+
   /**
-   * 场景 id 变化时跑分层过渡；首次挂载直接显示、不淡出。
+   * 场景 id 变化：预加载后整层交叉淡入淡出。
+   * 宿主未测到前不开始；取消时用 generation 避免旧异步把新转场打回透明。
    */
   useEffect(() => {
-    const from = displaySceneRef.current;
+    if (hostSize === null) {
+      return;
+    }
+
+    const gen = ++transitionGenRef.current;
+    const isCancelled = (): boolean => gen !== transitionGenRef.current;
+
+    const from = currentRef.current?.scene ?? null;
     const to = scene;
+    const fromPainted = currentRef.current;
 
-    // 首次 effect：仅标记已引导；初始 useState 已用 scene，无需再播过渡
-    if (!bootstrappedRef.current) {
-      bootstrappedRef.current = true;
-
-      if (sameSceneId(from, to)) {
-        if (to !== null) {
-          setDisplayScene(to);
-        }
-
+    /**
+     * 保证当前层可见（修复取消竞态卡在全透明 →「场景没了」）。
+     */
+    const ensureVisible = (): void => {
+      if (isCancelled()) {
         return;
       }
 
-      // 极端：首帧 props 已与 initial state 不同，仍走完整过渡
-    }
+      setPoseTransitionMs(0);
+      setCurrentPose(restSceneLayerPose());
+      setOutgoing(null);
+      setOutgoingPose(restSceneLayerPose());
+      setTransitioning(false);
+    };
 
-    if (sameSceneId(from, to)) {
-      // 同 id 时同步最新定义（热更新属性），不打断过渡
-      if (to !== null) {
-        setDisplayScene(to);
-      }
+    if (!bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+
+      setTransitioning(true);
+      setPoseTransitionMs(0);
+      setCurrentPose(hiddenSceneLayerPose());
+      setOutgoing(null);
+
+      void (async () => {
+        if (to === null) {
+          if (!isCancelled()) {
+            setCurrent(null);
+            setTransitioning(false);
+          }
+
+          return;
+        }
+
+        const natural = await preloadSceneBundle(to, resolveUrl);
+        const dur = resolveSceneTransitionMs(to);
+        const delay = resolveSceneTransitionDelayMs(to);
+
+        if (isCancelled()) {
+          return;
+        }
+
+        setCurrent({ scene: to, natural });
+        setCurrentPose(hiddenSceneLayerPose());
+        await waitPaint(isCancelled);
+
+        if (isCancelled()) {
+          return;
+        }
+
+        if (delay > 0) {
+          await waitMs(delay, isCancelled);
+        }
+
+        if (isCancelled()) {
+          return;
+        }
+
+        setPoseTransitionMs(dur);
+        setCurrentPose(restSceneLayerPose());
+        await waitMs(dur, isCancelled);
+        ensureVisible();
+      })();
 
       return;
     }
 
-    let cancelled = false;
+    if (sameSceneId(from, to)) {
+      if (to !== null) {
+        setCurrent((prev) =>
+          prev === null
+            ? { scene: to, natural: { width: 0, height: 0 } }
+            : { ...prev, scene: to },
+        );
+      }
 
-    /**
-     * @returns 是否已取消
-     */
-    const isCancelled = (): boolean => cancelled;
+      ensureVisible();
+
+      return;
+    }
 
     setTransitioning(true);
 
     void (async () => {
-      // —— 离开：交互点先消失 ——
-      if (from !== null) {
-        setHotspotOpacity(0);
-        await waitMs(HOTSPOT_FADE_MS, isCancelled);
-
-        if (cancelled) {
-          return;
-        }
-
-        // —— 离开：底图再消失 ——
-        setBaseOpacity(0);
-        await waitMs(BASE_FADE_MS, isCancelled);
-
-        if (cancelled) {
-          return;
-        }
-      }
-
-      // —— 切换绘制目标 ——
-      setDisplayScene(to);
-      setHotspotOpacity(0);
-      setBaseOpacity(0);
-
-      // 等一帧让底图 URL / 布局落地
-      await waitMs(16, isCancelled);
-
-      if (cancelled) {
-        return;
-      }
-
       if (to === null) {
+        const dur = fromPainted
+          ? resolveSceneTransitionMs(fromPainted.scene)
+          : DEFAULT_SCENE_TRANSITION_MS;
+
+        setPoseTransitionMs(dur);
+        setCurrentPose(hiddenSceneLayerPose());
+        await waitMs(dur, isCancelled);
+
+        if (isCancelled()) {
+          return;
+        }
+
+        setCurrent(null);
+        setOutgoing(null);
         setTransitioning(false);
 
         return;
       }
 
-      // —— 进入：底图先出现 ——
-      setBaseOpacity(1);
-      await waitMs(BASE_FADE_MS, isCancelled);
+      const mode = normalizeSceneTransitionMode(to.transitionMode);
+      const dur = resolveSceneTransitionMs(to);
+      const delay = resolveSceneTransitionDelayMs(to);
+      const nextNatural = await preloadSceneBundle(to, resolveUrl);
 
-      if (cancelled) {
+      if (isCancelled()) {
         return;
       }
 
-      // —— 进入：交互点再出现 ——
-      setHotspotOpacity(1);
-      await waitMs(HOTSPOT_FADE_MS, isCancelled);
+      if (fromPainted === null) {
+        setCurrent({ scene: to, natural: nextNatural });
+        setPoseTransitionMs(0);
+        setCurrentPose(hiddenSceneLayerPose());
+        setOutgoing(null);
+        await waitPaint(isCancelled);
 
-      if (cancelled) {
+        if (isCancelled()) {
+          return;
+        }
+
+        if (delay > 0) {
+          await waitMs(delay, isCancelled);
+        }
+
+        if (isCancelled()) {
+          return;
+        }
+
+        setPoseTransitionMs(dur);
+        setCurrentPose(restSceneLayerPose());
+        await waitMs(dur, isCancelled);
+        ensureVisible();
+
         return;
       }
 
-      setTransitioning(false);
+      // —— 挂好双层：旧层全显，新层按模式就位（transition=0，避免起始位姿被插值闪一下） ——
+      setPoseTransitionMs(0);
+      setOutgoing(fromPainted);
+      setOutgoingPose(restSceneLayerPose());
+      setCurrent({ scene: to, natural: nextNatural });
+
+      if (mode === "cover") {
+        setCurrentPose(coverEnterStartPose(to.motion?.enter?.preset));
+      } else {
+        setCurrentPose(hiddenSceneLayerPose());
+      }
+
+      await waitPoseCommit(rootRef.current, isCancelled);
+
+      if (isCancelled()) {
+        return;
+      }
+
+      if (delay > 0) {
+        await waitMs(delay, isCancelled);
+      }
+
+      if (isCancelled()) {
+        return;
+      }
+
+      setPoseTransitionMs(dur);
+
+      if (mode === "fade") {
+        // 淡入淡出=同时溶换，避免「旧已淡出、新未淡入」中间露透明底闪一下
+        setOutgoingPose(hiddenSceneLayerPose());
+        setCurrentPose(restSceneLayerPose());
+        await waitMs(dur, isCancelled);
+      } else {
+        // 覆盖：旧场景保持全显，新场景叠上覆入
+        setCurrentPose(restSceneLayerPose());
+        await waitMs(dur, isCancelled);
+      }
+
+      if (isCancelled()) {
+        return;
+      }
+
+      setOutgoing(null);
+      ensureVisible();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scene.id + hostReady
+  }, [scene === null ? null : scene.id, hostSize === null ? null : "ready"]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [scene === null ? null : scene.id]);
+  /**
+   * @param painted - 层所属场景
+   * @returns 该层应绘制的可见交互点
+   */
+  const hotspotsFor = useCallback(
+    (painted: PaintedScene): HotspotElement[] =>
+      painted.scene.hotspots.filter((hs) => isHotspotVisible(hs, progress)),
+    [progress],
+  );
 
-  const visibleHotspots = useMemo(() => {
-    if (displayScene === null) {
-      return [];
+  /**
+   * @param painted - 层数据
+   * @param pose - 外层位姿（opacity / 位移 / scale）
+   * @param interactive - true=当前层（可点+toast）；false=离开层（只绘外观）
+   * @returns 层 React 节点
+   */
+  const renderPaintedLayer = (
+    painted: PaintedScene,
+    pose: SceneLayerPose,
+    interactive: boolean,
+  ): React.ReactElement => {
+    const layout = layoutFor(painted);
+    const imageUrl = sceneImageUrl(painted);
+    const layerHotspots = hotspotsFor(painted);
+    const ms = poseTransitionMs;
+    const transform = `translate(${pose.txPct}%, ${pose.tyPct}%) scale(${pose.scale})`;
+
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          opacity: pose.opacity,
+          transform,
+          transformOrigin: "center center",
+          transition:
+            ms > 0
+              ? `opacity ${ms}ms ${POSE_EASING}, transform ${ms}ms ${POSE_EASING}`
+              : undefined,
+          pointerEvents: interactive && !transitioning ? "auto" : "none",
+          willChange: transitioning ? "opacity, transform" : undefined,
+        }}
+      >
+        <SceneBaseLayer
+          layout={layout}
+          imageUrl={imageUrl}
+          frameBackground="transparent"
+          editorChrome={false}
+          baseImageOpacity={1}
+          baseImageTransitionMs={0}
+          layerOpacity={1}
+          layerOpacityTransitionMs={0}
+          onImageNaturalSize={(w, h) => {
+            if (!interactive || transitioning) {
+              return;
+            }
+
+            setCurrent((prev) => {
+              if (prev === null || prev.scene.id !== painted.scene.id) {
+                return prev;
+              }
+
+              if (prev.natural.width === w && prev.natural.height === h) {
+                return prev;
+              }
+
+              return { ...prev, natural: { width: w, height: h } };
+            });
+          }}
+        >
+          <div
+            data-testid={
+              interactive
+                ? "runtime-hotspot-layer"
+                : "runtime-hotspot-layer-outgoing"
+            }
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+            }}
+          >
+            {layerHotspots.map((hs) => (
+              <HotspotView
+                key={hs.id}
+                hotspot={hs}
+                contentRect={layout.contentRect}
+                resolveUrl={resolveUrl}
+                onActivate={
+                  interactive && !transitioning
+                    ? onHotspotActivate
+                    : () => {
+                        /* 离开层 / 转场中不可点 */
+                      }
+                }
+                globalHoverShadow={globalHoverShadow}
+                globalHotspotLabel={globalHotspotLabel}
+                hoverEffectsEnabled={interactive && !transitioning}
+              />
+            ))}
+          </div>
+
+          {interactive ? (
+            <ToastLayer
+              queue={toastQueue}
+              onAdvance={onToastAdvance}
+              hotspots={painted.scene.hotspots}
+              contentRect={layout.contentRect}
+              resolveText={resolveToastText}
+            />
+          ) : null}
+        </SceneBaseLayer>
+      </div>
+    );
+  };
+
+  /**
+   * 按 scene.id 稳定 key 绘制层：旧场景从 current→outgoing 时复用 DOM，
+   * 避免底图重挂载造成闪白。
+   */
+  const displayLayers = useMemo(() => {
+    const layers: Array<{
+      painted: PaintedScene;
+      pose: SceneLayerPose;
+      zIndex: number;
+      interactive: boolean;
+    }> = [];
+
+    if (outgoing !== null) {
+      layers.push({
+        painted: outgoing,
+        pose: outgoingPose,
+        zIndex: 1,
+        interactive: false,
+      });
     }
 
-    return displayScene.hotspots.filter((hs) =>
-      isHotspotVisible(hs, progress),
-    );
-  }, [displayScene, progress]);
+    if (current !== null) {
+      layers.push({
+        painted: current,
+        pose: currentPose,
+        zIndex: 2,
+        interactive: true,
+      });
+    }
 
-  const letterbox =
-    displayScene !== null
-      ? resolveLetterboxColor(displayScene)
-      : tokens.bgSunken;
+    return layers;
+  }, [current, currentPose, outgoing, outgoingPose]);
 
   return (
     <div
@@ -408,76 +831,30 @@ export function SceneView({
         height: "100%",
         position: "relative",
         overflow: "hidden",
-        background: letterbox,
+        background: "transparent",
       }}
     >
-      {displayScene === null ? (
+      {displayLayers.map((layer) => (
         <div
-          data-testid="runtime-scene-view-empty"
+          key={layer.painted.scene.id}
+          data-testid={
+            layer.interactive
+              ? "runtime-scene-layer-current"
+              : "runtime-scene-layer-outgoing"
+          }
           style={{
             position: "absolute",
             inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: tokens.textMuted,
-            fontSize: 13,
-            pointerEvents: "none",
+            zIndex: layer.zIndex,
           }}
         >
-          暂无场景，请先在编辑器中创建
+          {renderPaintedLayer(
+            layer.painted,
+            layer.pose,
+            layer.interactive,
+          )}
         </div>
-      ) : (
-        <SceneBaseLayer
-          layout={layout}
-          imageUrl={imageUrl}
-          frameBackground={letterbox}
-          baseImageOpacity={baseOpacity}
-          baseImageTransitionMs={BASE_FADE_MS}
-          onImageNaturalSize={(w, h) => {
-            setImageNatural({ width: w, height: h });
-          }}
-          onImageError={() => {
-            setImageNatural({ width: 0, height: 0 });
-          }}
-        >
-          <div
-            data-testid="runtime-hotspot-layer"
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              opacity: hotspotOpacity,
-              transition: `opacity ${HOTSPOT_FADE_MS}ms ease`,
-            }}
-          >
-            {visibleHotspots.map((hs) => (
-              <HotspotView
-                key={hs.id}
-                hotspot={hs}
-                contentRect={layout.contentRect}
-                resolveUrl={resolveUrl}
-                onActivate={
-                  transitioning || hotspotOpacity < 0.99
-                    ? () => {
-                        /* 过渡中忽略点击 */
-                      }
-                    : onHotspotActivate
-                }
-                globalHoverShadow={globalHoverShadow}
-              />
-            ))}
-          </div>
-
-          <ToastLayer
-            queue={toastQueue}
-            onAdvance={onToastAdvance}
-            hotspots={displayScene.hotspots}
-            contentRect={layout.contentRect}
-            resolveText={resolveToastText}
-          />
-        </SceneBaseLayer>
-      )}
+      ))}
     </div>
   );
 }

@@ -25,18 +25,23 @@ import {
   writeSceneUiConfig,
 } from "../../store/scene-ui-settings";
 import { notifyUiHistoryTick } from "../../store/ui-edit-history-bridge";
+import { useDesignSize } from "../../store/use-design-size";
 import { FONT_SIZE_DEFAULT, useTheme } from "../../theme/theme-provider";
 
 /**
  * 从场景 UI 预设中读取 sceneReturn 段。
  *
  * @param ctx - 扩展上下文
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
  * @returns 规范化后的 `SceneReturnButtonConfig`
  */
 function loadSceneReturn(
   ctx: ReturnType<typeof useExtensionContext>,
+  designW: number,
+  designH: number,
 ): SceneReturnButtonConfig {
-  return readSceneUiConfig(ctx).sceneReturn;
+  return readSceneUiConfig(ctx, designW, designH).sceneReturn;
 }
 
 /**
@@ -46,12 +51,16 @@ function loadSceneReturn(
  *
  * @param ctx - 扩展上下文
  * @param next - 新的返回按钮配置
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
  */
 function persistSceneReturn(
   ctx: ReturnType<typeof useExtensionContext>,
   next: SceneReturnButtonConfig,
+  designW: number,
+  designH: number,
 ): void {
-  const ui = readSceneUiConfig(ctx);
+  const ui = readSceneUiConfig(ctx, designW, designH);
 
   writeSceneUiConfig(ctx, { ...ui, sceneReturn: next });
   notifyUiHistoryTick();
@@ -70,17 +79,18 @@ function persistSceneReturn(
 export function SceneReturnEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const { size: designSize } = useDesignSize();
 
   const [config, setConfig] = useState<SceneReturnButtonConfig>(() =>
-    loadSceneReturn(ctx),
+    loadSceneReturn(ctx, designSize.width, designSize.height),
   );
 
   /**
-   * 上下文切换后重新加载配置。
+   * 上下文 / 设计分辨率切换后重新加载配置。
    */
   useEffect(() => {
-    setConfig(loadSceneReturn(ctx));
-  }, [ctx]);
+    setConfig(loadSceneReturn(ctx, designSize.width, designSize.height));
+  }, [ctx, designSize.height, designSize.width]);
 
   const formValue = useMemo(
     () => config as unknown as Record<string, unknown>,
@@ -94,23 +104,30 @@ export function SceneReturnEditorPanel(): React.ReactElement {
    */
   const handleChange = useCallback(
     (next: Record<string, unknown>): void => {
-      const parsed = normalizeSceneReturnButtonConfig(next);
+      const parsed = normalizeSceneReturnButtonConfig(
+        next,
+        designSize.width,
+        designSize.height,
+      );
 
       setConfig(parsed);
-      persistSceneReturn(ctx, parsed);
+      persistSceneReturn(ctx, parsed, designSize.width, designSize.height);
     },
-    [ctx],
+    [ctx, designSize.height, designSize.width],
   );
 
   /**
    * 全部重置为默认返回按钮配置。
    */
   const handleResetAll = useCallback((): void => {
-    const next = defaultSceneReturnButtonConfig();
+    const next = defaultSceneReturnButtonConfig(
+      designSize.width,
+      designSize.height,
+    );
 
     setConfig(next);
-    persistSceneReturn(ctx, next);
-  }, [ctx]);
+    persistSceneReturn(ctx, next, designSize.width, designSize.height);
+  }, [ctx, designSize.height, designSize.width]);
 
   /**
    * 静态预览按钮样式：合并矩形、盒样式、文本样式与可选背景图。

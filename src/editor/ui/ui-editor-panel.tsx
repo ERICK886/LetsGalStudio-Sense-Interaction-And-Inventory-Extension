@@ -91,6 +91,7 @@ import { BackpackVisualCanvas } from "./backpack-visual-canvas";
 import { HudVisualCanvas } from "./hud-visual-canvas";
 import { ItemToastEditorPanel } from "./item-toast-editor-panel";
 import { HotspotHoverEditorPanel } from "./hotspot-hover-editor-panel";
+import { HotspotLabelEditorPanel } from "./hotspot-label-editor-panel";
 import { OverlayPalette } from "./overlay-palette";
 import { SceneReturnEditorPanel } from "./scene-return-editor-panel";
 
@@ -98,7 +99,11 @@ import { SceneReturnEditorPanel } from "./scene-return-editor-panel";
 type UiSubSection = "hud" | "backpack" | "sceneUi";
 
 /** 「场景 UI」分区内的二级子页 */
-type SceneUiTab = "itemToast" | "hotspotHover" | "sceneReturn";
+type SceneUiTab =
+  | "itemToast"
+  | "hotspotHover"
+  | "hotspotLabel"
+  | "sceneReturn";
 
 /** 可对齐的背包功能节点 */
 const BAG_ALIGNABLE: readonly BackpackNodeId[] = [
@@ -110,27 +115,41 @@ const BAG_ALIGNABLE: readonly BackpackNodeId[] = [
  * 从 settings 读取并解析 HUD 配置。
  *
  * @param ctx - 上下文
- * @returns InventoryHudConfig
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
+ * @returns InventoryHudConfig（已按设计分辨率适配）
  */
-function loadHud(ctx: ReturnType<typeof useExtensionContext>): InventoryHudConfig {
+function loadHud(
+  ctx: ReturnType<typeof useExtensionContext>,
+  designW: number,
+  designH: number,
+): InventoryHudConfig {
   const raw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
 
   return parseInventoryHudJson(
     typeof raw === "string" ? raw : String(raw ?? ""),
+    designW,
+    designH,
   );
 }
 
 /**
  * @param ctx - 上下文
- * @returns BackpackScreenConfig
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
+ * @returns BackpackScreenConfig（已按设计分辨率适配）
  */
 function loadBackpackScreen(
   ctx: ReturnType<typeof useExtensionContext>,
+  designW: number,
+  designH: number,
 ): BackpackScreenConfig {
   const raw = readHudSetting(ctx, BACKPACK_SCREEN_JSON_KEY);
 
   return parseBackpackScreenJson(
     typeof raw === "string" ? raw : String(raw ?? ""),
+    designW,
+    designH,
   );
 }
 
@@ -324,9 +343,11 @@ export function UiEditorPanel(): React.ReactElement {
 
   const [sub, setSub] = useState<UiSubSection>("hud");
   const [sceneUiTab, setSceneUiTab] = useState<SceneUiTab>("itemToast");
-  const [hud, setHud] = useState<InventoryHudConfig>(() => loadHud(ctx));
+  const [hud, setHud] = useState<InventoryHudConfig>(() =>
+    loadHud(ctx, designSize.width, designSize.height),
+  );
   const [bag, setBag] = useState<BackpackScreenConfig>(() =>
-    loadBackpackScreen(ctx),
+    loadBackpackScreen(ctx, designSize.width, designSize.height),
   );
 
   const [selectedHudIds, setSelectedHudIds] = useState<string[]>([]);
@@ -343,9 +364,11 @@ export function UiEditorPanel(): React.ReactElement {
   subRef.current = sub;
 
   useEffect(() => {
-    setHud(loadHud(ctx));
-    setBag(loadBackpackScreen(ctx));
-  }, [ctx]);
+    setHud(loadHud(ctx, designSize.width, designSize.height));
+    setBag(
+      loadBackpackScreen(ctx, designSize.width, designSize.height),
+    );
+  }, [ctx, designSize.height, designSize.width]);
 
   useEffect(() => {
     if (!hudSeededRef.current) {
@@ -388,6 +411,51 @@ export function UiEditorPanel(): React.ReactElement {
     },
     [ctx],
   );
+
+  /**
+   * 存盘仍是更大画幅（如 1920）而当前设计更小时，把适配结果写回，
+   * 避免编辑器/预览长期依赖运行时临时缩放。
+   */
+  useEffect(() => {
+    const bagRaw = readHudSetting(ctx, BACKPACK_SCREEN_JSON_KEY);
+    const bagText =
+      typeof bagRaw === "string" ? bagRaw : String(bagRaw ?? "");
+    const bagStored = parseBackpackScreenJson(bagText);
+    const bagAdapted = parseBackpackScreenJson(
+      bagText,
+      designSize.width,
+      designSize.height,
+    );
+
+    if (
+      stringifyBackpackScreen(bagStored) !==
+      stringifyBackpackScreen(bagAdapted)
+    ) {
+      skipBagHistoryRef.current = true;
+      writeBagOnly(bagAdapted);
+    }
+
+    const hudRaw = readHudSetting(ctx, INVENTORY_HUD_JSON_KEY);
+    const hudText =
+      typeof hudRaw === "string" ? hudRaw : String(hudRaw ?? "");
+    const hudStored = parseInventoryHudJson(hudText);
+    const hudAdapted = parseInventoryHudJson(
+      hudText,
+      designSize.width,
+      designSize.height,
+    );
+
+    if (stringifyInventoryHud(hudStored) !== stringifyInventoryHud(hudAdapted)) {
+      skipHudHistoryRef.current = true;
+      writeHudOnly(hudAdapted);
+    }
+  }, [
+    ctx,
+    designSize.height,
+    designSize.width,
+    writeBagOnly,
+    writeHudOnly,
+  ]);
 
   const persistHud = useCallback(
     (next: InventoryHudConfig): void => {
@@ -705,14 +773,19 @@ export function UiEditorPanel(): React.ReactElement {
     }
 
     persistHud(
-      resetInventoryHudNode(hud, primaryHudId as HudNodeId),
+      resetInventoryHudNode(
+        hud,
+        primaryHudId as HudNodeId,
+        designSize.width,
+        designSize.height,
+      ),
     );
-  }, [hud, persistHud, primaryHudId]);
+  }, [designSize.height, designSize.width, hud, persistHud, primaryHudId]);
 
   const handleResetHudAll = useCallback((): void => {
-    persistHud(defaultInventoryHud());
+    persistHud(defaultInventoryHud(designSize.width, designSize.height));
     setSelectedHudIds([]);
-  }, [persistHud]);
+  }, [designSize.height, designSize.width, persistHud]);
 
   const handleResetBagNode = useCallback((): void => {
     if (primaryBagId === null) {
@@ -989,6 +1062,7 @@ export function UiEditorPanel(): React.ReactElement {
             >
               {sceneUiTabBtn("itemToast", "获得提示", "bell")}
               {sceneUiTabBtn("hotspotHover", "交互点悬停", "hand-pointer")}
+              {sceneUiTabBtn("hotspotLabel", "交互点提示", "comment")}
               {sceneUiTabBtn("sceneReturn", "返回场景", "arrow-left")}
             </div>
             <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
@@ -996,6 +1070,8 @@ export function UiEditorPanel(): React.ReactElement {
                 <ItemToastEditorPanel />
               ) : sceneUiTab === "hotspotHover" ? (
                 <HotspotHoverEditorPanel />
+              ) : sceneUiTab === "hotspotLabel" ? (
+                <HotspotLabelEditorPanel />
               ) : (
                 <SceneReturnEditorPanel />
               )}
@@ -1119,7 +1195,13 @@ export function UiEditorPanel(): React.ReactElement {
               schema={hudSchema}
               value={hudFormValue}
               onChange={(next) => {
-                persistHud(parseInventoryHudJson(JSON.stringify(next)));
+                persistHud(
+                  parseInventoryHudJson(
+                    JSON.stringify(next),
+                    designSize.width,
+                    designSize.height,
+                  ),
+                );
               }}
             />
           )

@@ -7,6 +7,10 @@
  * 获得物品 Toast 的默认值、JSON 规范化、动作级覆盖合并与锚点几何计算。
  */
 
+import {
+  DEFAULT_DESIGN_HEIGHT,
+  DEFAULT_DESIGN_WIDTH,
+} from "./design-resolution";
 import type {
   ItemToastConfig,
   ToastPlacement,
@@ -14,6 +18,12 @@ import type {
   UiTextStyle,
 } from "./types";
 import { normalizeUiBoxStyle, normalizeUiTextStyle } from "./ui-style";
+
+/** 默认布局参照宽 */
+const DEFAULT_REF_W = DEFAULT_DESIGN_WIDTH;
+
+/** 默认布局参照高 */
+const DEFAULT_REF_H = DEFAULT_DESIGN_HEIGHT;
 
 /** 合法的 Toast 方位枚举，用于 normalize / resolve 校验 */
 const PLACEMENTS: ToastPlacement[] = [
@@ -49,9 +59,59 @@ export interface ResolvedItemToastAppearance {
 }
 
 /**
- * 返回获得物品 Toast 的默认配置（对齐旧版 HUD 观感）。
+ * 将 Toast 尺寸字段从一套设计分辨率缩放到另一套。
  *
- * @returns 默认 `ItemToastConfig`（version 1，placement above，gap 48）
+ * @param cfg - 源配置
+ * @param fromW - 源设计宽
+ * @param fromH - 源设计高
+ * @param toW - 目标设计宽
+ * @param toH - 目标设计高
+ * @returns 新配置
+ */
+export function scaleItemToastConfig(
+  cfg: ItemToastConfig,
+  fromW: number,
+  fromH: number,
+  toW: number,
+  toH: number,
+): ItemToastConfig {
+  const fw = Math.max(1, fromW);
+  const fh = Math.max(1, fromH);
+  const tw = Math.max(1, toW);
+  const th = Math.max(1, toH);
+
+  if (fw === tw && fh === th) {
+    return cfg;
+  }
+
+  const sx = tw / fw;
+  const sy = th / fh;
+  const s = Math.min(sx, sy);
+  const style = { ...cfg.style };
+
+  if (typeof style.borderRadius === "number") {
+    style.borderRadius = Math.max(0, Math.round(style.borderRadius * s));
+  }
+
+  if (typeof style.fontSize === "number") {
+    style.fontSize = Math.max(1, Math.round(style.fontSize * s));
+  }
+
+  return {
+    ...cfg,
+    offsetX: Math.round(cfg.offsetX * sx),
+    offsetY: Math.round(cfg.offsetY * sy),
+    gap: Math.max(0, Math.round(cfg.gap * s)),
+    style,
+  };
+}
+
+/**
+ * 返回获得物品 Toast 的默认配置（对齐旧版 HUD 观感；其它设计尺寸等比缩放）。
+ *
+ * @param refW - 参考设计宽
+ * @param refH - 参考设计高
+ * @returns 默认 `ItemToastConfig`（version 1，placement above，gap 48@1920）
  *
  * @example
  * ```ts
@@ -59,8 +119,11 @@ export interface ResolvedItemToastAppearance {
  * // cfg.placement === "above", cfg.gap === 48
  * ```
  */
-export function defaultItemToastConfig(): ItemToastConfig {
-  return {
+export function defaultItemToastConfig(
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
+): ItemToastConfig {
+  const base: ItemToastConfig = {
     version: 1,
     placement: "above",
     offsetX: 0,
@@ -75,6 +138,12 @@ export function defaultItemToastConfig(): ItemToastConfig {
       fontWeight: 600,
     },
   };
+
+  if (refW === DEFAULT_REF_W && refH === DEFAULT_REF_H) {
+    return base;
+  }
+
+  return scaleItemToastConfig(base, DEFAULT_REF_W, DEFAULT_REF_H, refW, refH);
 }
 
 /**
@@ -87,6 +156,8 @@ export function defaultItemToastConfig(): ItemToastConfig {
  * - `style` 经 `normalizeUiBoxStyle` / `normalizeUiTextStyle` 相对默认 style 合并
  *
  * @param raw - 原始 JSON 解析结果或部分字段
+ * @param refW - 参考设计宽（影响缺省字段）
+ * @param refH - 参考设计高
  * @returns 规范化后的配置（version 恒为 1）
  *
  * @example
@@ -95,11 +166,15 @@ export function defaultItemToastConfig(): ItemToastConfig {
  * normalizeItemToastConfig(null); // 等同 defaultItemToastConfig()
  * ```
  */
-export function normalizeItemToastConfig(raw: unknown): ItemToastConfig {
-  const defaults = defaultItemToastConfig();
+export function normalizeItemToastConfig(
+  raw: unknown,
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
+): ItemToastConfig {
+  const defaults = defaultItemToastConfig(refW, refH);
 
   if (raw === null || raw === undefined || typeof raw !== "object") {
-    return defaultItemToastConfig();
+    return defaultItemToastConfig(refW, refH);
   }
 
   const obj = raw as Record<string, unknown>;
@@ -163,15 +238,20 @@ export function normalizeItemToastConfig(raw: unknown): ItemToastConfig {
  */
 export function parseItemToastJson(
   json: string | undefined | null,
+  refW?: number,
+  refH?: number,
 ): ItemToastConfig {
+  const dw = refW ?? DEFAULT_REF_W;
+  const dh = refH ?? DEFAULT_REF_H;
+
   if (json === undefined || json === null || json.trim() === "") {
-    return defaultItemToastConfig();
+    return defaultItemToastConfig(dw, dh);
   }
 
   try {
-    return normalizeItemToastConfig(JSON.parse(json));
+    return normalizeItemToastConfig(JSON.parse(json), dw, dh);
   } catch {
-    return defaultItemToastConfig();
+    return defaultItemToastConfig(dw, dh);
   }
 }
 

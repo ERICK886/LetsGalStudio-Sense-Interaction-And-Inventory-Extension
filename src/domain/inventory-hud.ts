@@ -7,7 +7,14 @@
  * 物品栏 HUD 外观默认值、v1→v2 迁移与 JSON 规范化。
  * 「打开背包」已迁为 chrome overlay 按钮组件（role: openBag）。
  */
-import { resolveHudLayout } from "./hud-layout";
+import {
+  DEFAULT_DESIGN_HEIGHT,
+  DEFAULT_DESIGN_WIDTH,
+} from "./design-resolution";
+import {
+  computeHudAxisAlignedBounds,
+  resolveHudLayout,
+} from "./hud-layout";
 import type {
   InventoryHudConfig,
   UiBoxStyle,
@@ -25,6 +32,7 @@ import {
 } from "./layer-order";
 import {
   cloneUiOverlayElement,
+  cloneUiOverlays,
   normalizeUiOverlays,
 } from "./ui-overlay";
 import {
@@ -32,6 +40,12 @@ import {
   normalizeUiRect,
   normalizeUiTextStyle,
 } from "./ui-style";
+
+/** 默认布局参照宽（与全局设计分辨率默认一致） */
+const DEFAULT_REF_W = DEFAULT_DESIGN_WIDTH;
+
+/** 默认布局参照高 */
+const DEFAULT_REF_H = DEFAULT_DESIGN_HEIGHT;
 
 /** HUD 侧栏固定功能节点（可拖排序）；打开背包已迁为 overlay */
 export const HUD_FIXED_LAYER_IDS = ["quickbarRoot"] as const;
@@ -363,8 +377,198 @@ export function ensureHudChromeOverlays(
 }
 
 /**
- * 返回 v2 约定的物品栏 HUD 默认配置。
+ * 缩放可选矩形。
  *
+ * @param rect - 源矩形
+ * @param sx - X 比例
+ * @param sy - Y 比例
+ * @returns 新矩形；无源时 undefined
+ */
+function scaleOptionalUiRect(
+  rect: UiRect | undefined,
+  sx: number,
+  sy: number,
+): UiRect | undefined {
+  if (!rect) {
+    return undefined;
+  }
+
+  const next: UiRect = {
+    x: Math.round(rect.x * sx),
+    y: Math.round(rect.y * sy),
+  };
+
+  if (typeof rect.w === "number") {
+    next.w = Math.max(1, Math.round(rect.w * sx));
+  }
+
+  if (typeof rect.h === "number") {
+    next.h = Math.max(1, Math.round(rect.h * sy));
+  }
+
+  return next;
+}
+
+/**
+ * 缩放样式中的尺寸字段（圆角、字号、边宽等）。
+ *
+ * @param style - 源样式
+ * @param s - 均匀比例（通常 min(sx,sy)）
+ * @returns 新样式
+ */
+function scaleStyleMetrics<T extends UiBoxStyle | (UiBoxStyle & UiTextStyle)>(
+  style: T,
+  s: number,
+): T {
+  const next = { ...style } as T & {
+    borderRadius?: number;
+    borderWidth?: number;
+    fontSize?: number;
+  };
+
+  if (typeof next.borderRadius === "number") {
+    next.borderRadius = Math.max(0, Math.round(next.borderRadius * s));
+  }
+
+  if (typeof next.borderWidth === "number") {
+    next.borderWidth = Math.max(0, Math.round(next.borderWidth * s));
+  }
+
+  if (typeof next.fontSize === "number") {
+    next.fontSize = Math.max(1, Math.round(next.fontSize * s));
+  }
+
+  return next;
+}
+
+/**
+ * 将 HUD 布局从一套设计分辨率等比缩放到另一套。
+ *
+ * @param cfg - 源配置
+ * @param fromW - 源设计宽
+ * @param fromH - 源设计高
+ * @param toW - 目标设计宽
+ * @param toH - 目标设计高
+ * @returns 新配置（不修改入参）
+ */
+export function scaleInventoryHudLayout(
+  cfg: InventoryHudConfig,
+  fromW: number,
+  fromH: number,
+  toW: number,
+  toH: number,
+): InventoryHudConfig {
+  const fw = Math.max(1, fromW);
+  const fh = Math.max(1, fromH);
+  const tw = Math.max(1, toW);
+  const th = Math.max(1, toH);
+
+  if (fw === tw && fh === th) {
+    return cfg;
+  }
+
+  const sx = tw / fw;
+  const sy = th / fh;
+  const s = Math.min(sx, sy);
+  const root = cloneQuickbarRoot(cfg.nodes.quickbarRoot);
+  const openBag = cloneOpenBagButton(cfg.nodes.openBagButton);
+
+  root.rect = {
+    x: Math.round(root.rect.x * sx),
+    y: Math.round(root.rect.y * sy),
+  };
+  root.slotSize = Math.max(1, Math.round(root.slotSize * s));
+  root.gap = Math.max(0, Math.round(root.gap * s));
+  root.slotStyle = scaleStyleMetrics({ ...root.slotStyle }, s);
+  root.badgeStyle = scaleStyleMetrics({ ...root.badgeStyle }, s);
+  openBag.rect = scaleOptionalUiRect(openBag.rect, sx, sy);
+  openBag.style = scaleStyleMetrics({ ...openBag.style }, s);
+
+  const overlays = cloneUiOverlays(cfg.overlays ?? []).map((el) => ({
+    ...el,
+    rect: {
+      x: Math.round(el.rect.x * sx),
+      y: Math.round(el.rect.y * sy),
+      w: Math.max(1, Math.round(el.rect.w * sx)),
+      h: Math.max(1, Math.round(el.rect.h * sy)),
+    },
+    style: scaleStyleMetrics({ ...el.style }, s),
+  }));
+
+  return {
+    ...cfg,
+    nodes: {
+      quickbarRoot: root,
+      openBagButton: openBag,
+    },
+    overlays,
+    layerOrder: [...(cfg.layerOrder ?? [])],
+  };
+}
+
+/**
+ * 统计 HUD 在设计坐标中的右/下边界。
+ *
+ * @param cfg - HUD 配置
+ * @returns right / bottom
+ */
+function measureInventoryHudExtent(cfg: InventoryHudConfig): {
+  right: number;
+  bottom: number;
+} {
+  const layout = resolveHudLayout(cfg);
+  const bounds = computeHudAxisAlignedBounds(layout, 0);
+  let right = bounds.x + bounds.w;
+  let bottom = bounds.y + bounds.h;
+
+  for (const el of cfg.overlays ?? []) {
+    right = Math.max(right, el.rect.x + el.rect.w);
+    bottom = Math.max(bottom, el.rect.y + el.rect.h);
+  }
+
+  return { right, bottom };
+}
+
+/**
+ * 若 HUD 明显超出当前设计画幅（如打开背包钮仍在 1080 预设的 y=776），
+ * 则从推断源分辨率缩放到目标设计尺寸。
+ *
+ * @param cfg - 当前配置
+ * @param designW - 当前设计宽
+ * @param designH - 当前设计高
+ * @returns 适配后的配置；无需缩放时返回原引用
+ */
+export function adaptInventoryHudToDesign(
+  cfg: InventoryHudConfig,
+  designW: number,
+  designH: number,
+): InventoryHudConfig {
+  const dw = Math.max(1, designW);
+  const dh = Math.max(1, designH);
+  const { right, bottom } = measureInventoryHudExtent(cfg);
+  const slack = 8;
+
+  if (right <= dw + slack && bottom <= dh + slack) {
+    return cfg;
+  }
+
+  /**
+   * HUD 默认只占画幅一角；只要外接边落在 1920×1080 参照内，
+   * 即按该参照缩放（打开背包默认 y=776 在 720 高画布上必触发）。
+   */
+  const fromW =
+    right <= DEFAULT_REF_W + slack ? DEFAULT_REF_W : Math.max(right, dw);
+  const fromH =
+    bottom <= DEFAULT_REF_H + slack ? DEFAULT_REF_H : Math.max(bottom, dh);
+
+  return scaleInventoryHudLayout(cfg, fromW, fromH, dw, dh);
+}
+
+/**
+ * 返回 v2 约定的物品栏 HUD 默认配置（基准 1920×1080；其它设计尺寸等比缩放）。
+ *
+ * @param refW - 参考设计宽度，默认 1920
+ * @param refH - 参考设计高度，默认 1080
  * @returns 默认 InventoryHudConfig（version: 2）
  *
  * @example
@@ -374,7 +578,10 @@ export function ensureHudChromeOverlays(
  * // hud.nodes.quickbarRoot.rect === { x: 37, y: 198 }
  * ```
  */
-export function defaultInventoryHud(): InventoryHudConfig {
+export function defaultInventoryHud(
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
+): InventoryHudConfig {
   const nodes: InventoryHudConfig["nodes"] = {
     quickbarRoot: {
       rect: { x: DEFAULT_LEFT, y: DEFAULT_TOP },
@@ -392,7 +599,7 @@ export function defaultInventoryHud(): InventoryHudConfig {
   };
   const overlays = buildHudChromeOverlays(nodes);
 
-  return {
+  const base: InventoryHudConfig = {
     version: 2,
     accent: DEFAULT_ACCENT,
     customCss: "",
@@ -400,6 +607,12 @@ export function defaultInventoryHud(): InventoryHudConfig {
     layerOrder: ["quickbarRoot", `overlay:${HUD_CHROME_OVERLAY_IDS.openBag}`],
     nodes,
   };
+
+  if (refW === DEFAULT_REF_W && refH === DEFAULT_REF_H) {
+    return base;
+  }
+
+  return scaleInventoryHudLayout(base, DEFAULT_REF_W, DEFAULT_REF_H, refW, refH);
 }
 
 /**
@@ -468,7 +681,9 @@ function migrateV1ToV2(
  * - 否则视为 v1：读 `left/top/slotSize/gap/openBagLabel/customCss/accent` 填入默认 nodes
  *
  * @param raw - 原始对象或 undefined
- * @returns 规范化后的 HUD 配置；非法根回退 defaultInventoryHud()
+ * @param refW - 参考设计宽度，默认 1920
+ * @param refH - 参考设计高度，默认 1080
+ * @returns 规范化后的 HUD 配置；非法根回退 defaultInventoryHud(refW, refH)
  *
  * @example
  * ```ts
@@ -476,11 +691,15 @@ function migrateV1ToV2(
  * // → version 2，nodes.quickbarRoot.rect = { x: 40, y: 80 }
  * ```
  */
-export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
-  const defaults = defaultInventoryHud();
+export function normalizeInventoryHud(
+  raw: unknown,
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
+): InventoryHudConfig {
+  const defaults = defaultInventoryHud(refW, refH);
 
   if (raw === null || raw === undefined || typeof raw !== "object") {
-    return defaultInventoryHud();
+    return defaultInventoryHud(refW, refH);
   }
 
   const obj = raw as Record<string, unknown>;
@@ -502,25 +721,29 @@ export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
       nodes,
     );
 
-    return {
-      version: 2,
-      accent:
-        typeof obj.accent === "string" && obj.accent.trim().length > 0
-          ? obj.accent.trim()
-          : defaults.accent,
-      customCss:
-        typeof obj.customCss === "string" ? obj.customCss : defaults.customCss,
-      overlays,
-      layerOrder: normalizeLayerOrder(
-        obj.layerOrder,
-        HUD_FIXED_LAYER_IDS,
+    return adaptInventoryHudToDesign(
+      {
+        version: 2,
+        accent:
+          typeof obj.accent === "string" && obj.accent.trim().length > 0
+            ? obj.accent.trim()
+            : defaults.accent,
+        customCss:
+          typeof obj.customCss === "string" ? obj.customCss : defaults.customCss,
         overlays,
-      ),
-      nodes,
-    };
+        layerOrder: normalizeLayerOrder(
+          obj.layerOrder,
+          HUD_FIXED_LAYER_IDS,
+          overlays,
+        ),
+        nodes,
+      },
+      refW,
+      refH,
+    );
   }
 
-  return migrateV1ToV2(obj, defaults);
+  return adaptInventoryHudToDesign(migrateV1ToV2(obj, defaults), refW, refH);
 }
 
 /**
@@ -528,6 +751,8 @@ export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
  *
  * @param cfg - 当前 HUD 配置
  * @param nodeId - 要重置的节点 id
+ * @param refW - 参考设计宽度，默认 1920
+ * @param refH - 参考设计高度，默认 1080
  * @returns 新配置（不修改入参）
  *
  * @example
@@ -539,8 +764,10 @@ export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
 export function resetInventoryHudNode(
   cfg: InventoryHudConfig,
   nodeId: "quickbarRoot" | "openBagButton",
+  refW: number = DEFAULT_REF_W,
+  refH: number = DEFAULT_REF_H,
 ): InventoryHudConfig {
-  const defaults = defaultInventoryHud();
+  const defaults = defaultInventoryHud(refW, refH);
 
   if (nodeId === "quickbarRoot") {
     return {

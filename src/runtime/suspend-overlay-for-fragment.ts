@@ -27,7 +27,7 @@ import {
   sceneInteractionUiPathCandidates,
 } from "../shared/module-ids";
 import { logDebug, logInfo, logWarn } from "../shared/logger";
-import { getTightBackpackHudShowOptions } from "../store/hud-ui-show";
+import { BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS } from "../store/hud-ui-show";
 import { SCENE_PASSTHROUGH_SHOW_OPTIONS } from "../store/passthrough-show-options";
 import { isPlayerSessionPending } from "./player-session";
 import {
@@ -665,8 +665,8 @@ export async function callFragmentYieldingOverlay(
           await safeShow(
             ctx,
             hudPath,
-            { compactHost: true },
-            getTightBackpackHudShowOptions(ctx),
+            { compactHost: false },
+            { ...BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS },
           );
         });
       }

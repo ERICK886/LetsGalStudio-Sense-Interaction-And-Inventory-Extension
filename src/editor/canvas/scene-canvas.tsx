@@ -2,12 +2,10 @@
  * scene-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.3
+ * 版本: 0.2.0
  *
  * 编辑器中部场景画布：DOM 底图 + hotspot overlay（设计分辨率 letterbox）。
- * 0.1.1：宿主节点在空态也保持挂载，ResizeObserver 才能测到真实中栏尺寸并居中。
- * 0.1.2：宿主与设计画幅底色跟随场景 letterbox（支持自定义透明）。
- * 0.1.3：方向键对选中交互点做设计像素级微调（Shift=10px）。
+ * 0.2.0：透明铺底；不再跟随场景 letterbox 色；仅保留编辑器描边 chrome。
  */
 
 import React, {
@@ -18,10 +16,6 @@ import React, {
   useState,
 } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
-import {
-  LETTERBOX_COLOR_BLACK,
-  resolveLetterboxColor,
-} from "../../domain/letterbox";
 import type { SceneDefinition } from "../../domain/types";
 import { clamp01 } from "../../shared/coords";
 import { resolveAssetUrl } from "../../shared/resolve-asset-url";
@@ -346,13 +340,6 @@ export function SceneCanvas({
     [],
   );
 
-  /**
-   * 画布宿主与设计画幅共用 letterbox；自定义透明时透出中栏 bgSunken，
-   * 便于作者确认 Alpha 生效（运行时再透出引擎层）。
-   */
-  const letterbox =
-    scene !== null ? resolveLetterboxColor(scene) : LETTERBOX_COLOR_BLACK;
-
   return (
     <div
       ref={rootRef}
@@ -362,32 +349,17 @@ export function SceneCanvas({
         position: "absolute",
         inset: 0,
         overflow: "hidden",
-        background: letterbox,
+        background: "transparent",
         cursor:
           scene !== null && placementActive ? "crosshair" : "default",
       }}
     >
-      {scene === null ? (
-        <div
-          data-testid="scene-canvas-empty"
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "rgba(200,200,210,0.55)",
-            fontSize: 13,
-            pointerEvents: "none",
-          }}
-        >
-          请选择或新建场景
-        </div>
-      ) : (
+      {scene === null ? null : (
         <SceneBaseLayer
           layout={layout}
           imageUrl={imageUrl}
-          frameBackground={letterbox}
+          frameBackground="transparent"
+          editorChrome
           onImageNaturalSize={(w, h) => {
             setImageNatural({ width: w, height: h });
           }}

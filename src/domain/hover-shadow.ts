@@ -2,20 +2,36 @@
  * hover-shadow.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.2.0
  *
- * 交互点悬停阴影的默认值、JSON 规范化与 CSS filter 拼装。
- * 支持光晕（glow）与底影（base）双层独立开关；总开关优先。
- * 交互点实例可选 useGlobal 跟随 SceneUiConfig.hotspotHover。
+ * 交互点悬停效果的默认值、JSON 规范化与 CSS 拼装。
+ * 支持光晕/底影双层、过渡、缩放、亮度/饱和度/对比度与光标。
  */
 
-import type { HotspotHoverShadow, HoverShadowLayer } from "./types";
+import type {
+  HotspotHoverCursor,
+  HotspotHoverShadow,
+  HoverShadowLayer,
+} from "./types";
 
 /** 光晕层默认色（场景 UI 预设） */
 const DEFAULT_GLOW_COLOR = "#DCDAD3";
 
 /** 底影层默认色 */
 const DEFAULT_BASE_COLOR = "#000000";
+
+/** 默认过渡毫秒 */
+const DEFAULT_TRANSITION_MS = 120;
+
+/** 合法光标枚举 */
+const HOVER_CURSORS: readonly HotspotHoverCursor[] = [
+  "pointer",
+  "default",
+  "grab",
+  "crosshair",
+  "help",
+  "zoom-in",
+];
 
 /**
  * 将数值限制在 [min, max]；非有限数回退为 min。
@@ -36,15 +52,8 @@ function clamp(n: number, min: number, max: number): number {
 /**
  * 解析 CSS 十六进制颜色为 RGB 分量。
  *
- * 支持 `#RGB` 与 `#RRGGBB` 格式；非法输入返回 null。
- *
  * @param color - 待解析的颜色字符串
  * @returns RGB 分量对象，或 null（非法）
- *
- * @example
- * parseCssHexToRgb("#FFECA0"); // { r: 255, g: 236, b: 160 }
- * parseCssHexToRgb("#FA0");    // { r: 255, g: 170, b: 0 }
- * parseCssHexToRgb("red");     // null
  */
 function parseCssHexToRgb(
   color: string,
@@ -88,7 +97,8 @@ function normalizeHexToUpper(color: string): string {
     return color;
   }
 
-  const toHex = (n: number): string => n.toString(16).padStart(2, "0").toUpperCase();
+  const toHex = (n: number): string =>
+    n.toString(16).padStart(2, "0").toUpperCase();
 
   return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
 }
@@ -98,10 +108,6 @@ function normalizeHexToUpper(color: string): string {
  *
  * @param kind - 层类型：`"glow"` 光晕 或 `"base"` 底影
  * @returns 该层完整默认配置
- *
- * @example
- * defaultHoverShadowLayer("glow").color; // "#DCDAD3"
- * defaultHoverShadowLayer("base").offsetY; // 2
  */
 export function defaultHoverShadowLayer(
   kind: "glow" | "base",
@@ -130,14 +136,9 @@ export function defaultHoverShadowLayer(
 }
 
 /**
- * 返回交互点悬停阴影的完整默认配置（总开关开 + 双层默认）。
+ * 返回交互点悬停效果的完整默认配置。
  *
  * @returns 默认 HotspotHoverShadow
- *
- * @example
- * const shadow = defaultHotspotHoverShadow();
- * buildHoverShadowFilter(shadow);
- * // "drop-shadow(0 0 10px rgba(220, 218, 211, 0.85)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45))"
  */
 export function defaultHotspotHoverShadow(): HotspotHoverShadow {
   return {
@@ -145,15 +146,19 @@ export function defaultHotspotHoverShadow(): HotspotHoverShadow {
     enabled: true,
     glow: defaultHoverShadowLayer("glow"),
     base: defaultHoverShadowLayer("base"),
+    transitionMs: DEFAULT_TRANSITION_MS,
+    hoverScale: 1,
+    brightness: 1,
+    saturate: 1,
+    contrast: 1,
+    cursor: "pointer",
   };
 }
 
 /**
- * 规范化单层颜色字段。
- *
- * @param value - 原始 color 值
- * @param fallback - 解析失败时的默认色
- * @returns 合法 `#RRGGBB` 大写或 fallback
+ * @param value - 原始 color
+ * @param fallback - 失败回退
+ * @returns `#RRGGBB` 或 fallback
  */
 function normalizeLayerColor(value: unknown, fallback: string): string {
   if (typeof value !== "string") {
@@ -170,11 +175,9 @@ function normalizeLayerColor(value: unknown, fallback: string): string {
 }
 
 /**
- * 规范化 opacity（0–1）；非有限数回退默认。
- *
  * @param value - 原始 opacity
- * @param fallback - 非法时的默认值
- * @returns clamp 后的 opacity
+ * @param fallback - 非法回退
+ * @returns 0–1
  */
 function normalizeOpacity(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -185,11 +188,9 @@ function normalizeOpacity(value: unknown, fallback: number): number {
 }
 
 /**
- * 规范化 intensity（0–2）；非有限数回退默认。
- *
  * @param value - 原始 intensity
- * @param fallback - 非法时的默认值
- * @returns clamp 后的 intensity
+ * @param fallback - 非法回退
+ * @returns 0–2
  */
 function normalizeIntensity(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -200,11 +201,9 @@ function normalizeIntensity(value: unknown, fallback: number): number {
 }
 
 /**
- * 规范化 blur（>= 0）；非有限数回退默认。
- *
  * @param value - 原始 blur
- * @param fallback - 非法时的默认值
- * @returns 非负 blur
+ * @param fallback - 非法回退
+ * @returns ≥ 0
  */
 function normalizeBlur(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -215,10 +214,8 @@ function normalizeBlur(value: unknown, fallback: number): number {
 }
 
 /**
- * 规范化偏移量；非有限数回退默认。
- *
  * @param value - 原始 offset
- * @param fallback - 非法时的默认值
+ * @param fallback - 非法回退
  * @returns 有限偏移
  */
 function normalizeOffset(value: unknown, fallback: number): number {
@@ -230,10 +227,62 @@ function normalizeOffset(value: unknown, fallback: number): number {
 }
 
 /**
+ * @param value - 原始过渡毫秒
+ * @param fallback - 非法回退
+ * @returns 0–2000 整数
+ */
+function normalizeTransitionMs(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.round(clamp(value, 0, 2000));
+}
+
+/**
+ * @param value - 原始缩放/滤镜倍率
+ * @param fallback - 非法回退
+ * @param min - 下限
+ * @param max - 上限
+ * @returns clamp 后的倍率
+ */
+function normalizeFactor(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return clamp(value, min, max);
+}
+
+/**
+ * @param value - 原始光标
+ * @param fallback - 非法回退
+ * @returns 合法光标
+ */
+function normalizeCursor(
+  value: unknown,
+  fallback: HotspotHoverCursor,
+): HotspotHoverCursor {
+  if (
+    typeof value === "string" &&
+    (HOVER_CURSORS as readonly string[]).includes(value)
+  ) {
+    return value as HotspotHoverCursor;
+  }
+
+  return fallback;
+}
+
+/**
  * 将任意 JSON 输入规范化为单层 HoverShadowLayer。
  *
  * @param raw - 原始层对象或 undefined
- * @param kind - 层类型，用于缺省字段回退
+ * @param kind - 层类型
  * @returns 规范化后的单层配置
  */
 function normalizeHoverShadowLayer(
@@ -263,27 +312,14 @@ function normalizeHoverShadowLayer(
 /**
  * 将任意 JSON 输入规范化为 HotspotHoverShadow。
  *
- * - 入参缺失或非对象 → 完整默认
- * - 仅有 `{ enabled }` 的旧数据 → 保留总开关，glow/base 填默认层
- * - 部分层字段缺失 → 按字段回退该层默认并 clamp
- * - 实例路径始终写出具体布尔 `useGlobal`（`obj.useGlobal !== false`）；全局预设经 strip 剥离该字段
- *
  * @param raw - 原始 hoverShadow 对象或任意值
- * @returns 规范化后的悬停阴影配置
- *
- * @example
- * normalizeHotspotHoverShadow(undefined);
- * // 完整默认，总开关 true
- *
- * normalizeHotspotHoverShadow({ enabled: false });
- * // enabled false，glow/base 仍为完整默认层
- *
- * normalizeHotspotHoverShadow({ enabled: true });
- * // 与旧库 { enabled: true } 等价于双层硬编码默认
+ * @returns 规范化后的悬停配置
  */
 export function normalizeHotspotHoverShadow(raw: unknown): HotspotHoverShadow {
+  const defaults = defaultHotspotHoverShadow();
+
   if (raw === null || raw === undefined || typeof raw !== "object") {
-    return defaultHotspotHoverShadow();
+    return defaults;
   }
 
   const obj = raw as Record<string, unknown>;
@@ -292,9 +328,22 @@ export function normalizeHotspotHoverShadow(raw: unknown): HotspotHoverShadow {
     enabled: obj.enabled === undefined ? true : Boolean(obj.enabled),
     glow: normalizeHoverShadowLayer(obj.glow, "glow"),
     base: normalizeHoverShadowLayer(obj.base, "base"),
+    transitionMs: normalizeTransitionMs(
+      obj.transitionMs,
+      defaults.transitionMs ?? DEFAULT_TRANSITION_MS,
+    ),
+    hoverScale: normalizeFactor(obj.hoverScale, defaults.hoverScale ?? 1, 0.5, 2),
+    brightness: normalizeFactor(
+      obj.brightness,
+      defaults.brightness ?? 1,
+      0,
+      3,
+    ),
+    saturate: normalizeFactor(obj.saturate, defaults.saturate ?? 1, 0, 3),
+    contrast: normalizeFactor(obj.contrast, defaults.contrast ?? 1, 0, 3),
+    cursor: normalizeCursor(obj.cursor, defaults.cursor ?? "pointer"),
   };
 
-  // 实例 normalize 始终给出具体布尔，供表单 Boolean(raw) 与运行时 !== false 判定一致
   shadow.useGlobal = obj.useGlobal !== false;
 
   return shadow;
@@ -324,24 +373,17 @@ function layerToDropShadow(layer: HoverShadowLayer): string | null {
 }
 
 /**
- * 根据 HotspotHoverShadow 拼装 CSS filter 字符串。
+ * 根据 HotspotHoverShadow 拼装 CSS filter 字符串（阴影 + 可选色调滤镜）。
  *
- * 总开关关、或两层均关/无效时返回 undefined。
- *
- * @param shadow - 规范化后的悬停阴影配置
- * @returns 非空 filter 字符串；无有效层时 undefined
- *
- * @example
- * buildHoverShadowFilter(defaultHotspotHoverShadow());
- * // 双层 drop-shadow，对齐旧 DEFAULT_HOVER_DROP_SHADOW
- *
- * buildHoverShadowFilter({ ...defaultHotspotHoverShadow(), enabled: false });
- * // undefined
+ * @param shadow - 规范化后的悬停配置
+ * @param active - 是否处于悬停激活态
+ * @returns 非空 filter；无有效效果时 undefined
  */
 export function buildHoverShadowFilter(
   shadow: HotspotHoverShadow,
+  active = true,
 ): string | undefined {
-  if (!shadow.enabled) {
+  if (!shadow.enabled || !active) {
     return undefined;
   }
 
@@ -357,9 +399,90 @@ export function buildHoverShadowFilter(
     parts.push(base);
   }
 
+  const brightness = shadow.brightness ?? 1;
+  const saturate = shadow.saturate ?? 1;
+  const contrast = shadow.contrast ?? 1;
+
+  if (Math.abs(brightness - 1) > 0.001) {
+    parts.push(`brightness(${brightness})`);
+  }
+
+  if (Math.abs(saturate - 1) > 0.001) {
+    parts.push(`saturate(${saturate})`);
+  }
+
+  if (Math.abs(contrast - 1) > 0.001) {
+    parts.push(`contrast(${contrast})`);
+  }
+
   if (parts.length === 0) {
     return undefined;
   }
 
   return parts.join(" ");
 }
+
+/**
+ * 运行时悬停样式（filter / transform / transition / cursor）。
+ */
+export interface HoverRuntimeStyle {
+  filter?: string;
+  transform?: string;
+  transition: string;
+  cursor?: HotspotHoverCursor;
+}
+
+/**
+ * 根据悬停配置生成运行时样式片段。
+ *
+ * 注意：不对 filter / transform 做 CSS transition。
+ * Blink/WebKit 把 `filter: none → drop-shadow(...)` 插值时，常被看成「从小放大」；
+ * 转场显现叠加上去会更明显。悬停缩放改为瞬时切换。
+ *
+ * @param shadow - 已 resolve / normalize 的配置
+ * @param active - 当前是否悬停在可交互区域
+ * @returns 可合并进 HotspotView style 的字段
+ *
+ * @example
+ * ```ts
+ * const s = buildHoverRuntimeStyle(resolved, interactiveHover);
+ * // style={{ ...s, filter: s.filter }}
+ * ```
+ */
+export function buildHoverRuntimeStyle(
+  shadow: HotspotHoverShadow,
+  active: boolean,
+): HoverRuntimeStyle {
+  const scale = normalizeFactor(shadow.hoverScale, 1, 0.5, 2);
+  const effectActive = Boolean(shadow.enabled) && active;
+  const filter = buildHoverShadowFilter(shadow, effectActive);
+  const scaleDelta = Math.abs(scale - 1) > 0.001;
+
+  const result: HoverRuntimeStyle = {
+    transition: "none",
+    cursor: shadow.cursor ?? "pointer",
+  };
+
+  if (filter !== undefined) {
+    result.filter = filter;
+  }
+
+  if (effectActive && scaleDelta) {
+    result.transform = `scale(${scale})`;
+  }
+
+  return result;
+}
+
+/** 供 schema 下拉使用的光标选项 */
+export const HOTSPOT_HOVER_CURSOR_OPTIONS: ReadonlyArray<{
+  value: HotspotHoverCursor;
+  label: string;
+}> = [
+  { value: "pointer", label: "手型（pointer）" },
+  { value: "default", label: "默认箭头" },
+  { value: "grab", label: "抓取（grab）" },
+  { value: "crosshair", label: "十字准星" },
+  { value: "help", label: "帮助" },
+  { value: "zoom-in", label: "放大" },
+];
