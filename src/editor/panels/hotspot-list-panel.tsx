@@ -12,6 +12,7 @@ import { defaultHotspotHoverShadow } from "../../domain/hover-shadow";
 import { createId } from "../../domain/id";
 import { defaultElementMotion } from "../../domain/motion";
 import type { HotspotElement, SceneDefinition } from "../../domain/types";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -113,6 +114,9 @@ function toolButtonStyle(
     fontWeight: active ? 600 : 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -233,7 +237,9 @@ export function HotspotListPanel({
             cursor: scene === null ? "not-allowed" : "pointer",
           }}
         >
-          {placementActive ? "点击画布…" : "新建"}
+          <IconLabel icon={placementActive ? "crosshairs" : "plus"}>
+            {placementActive ? "点击画布…" : "新建"}
+          </IconLabel>
         </button>
       </div>
 
@@ -304,6 +310,7 @@ export function HotspotListPanel({
                     boxSizing: "border-box",
                   }}
                 >
+                  <IconLabel icon="location-dot" iconSize={11} />
                   <span
                     style={{
                       flex: 1,
@@ -326,7 +333,7 @@ export function HotspotListPanel({
                     flexShrink: 0,
                   }}
                 >
-                  删
+                  <IconLabel icon="trash" />
                 </button>
               </div>
             );

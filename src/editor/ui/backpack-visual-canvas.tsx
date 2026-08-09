@@ -2,14 +2,14 @@
  * backpack-visual-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.6.0
+ * 版本: 0.7.0
  *
  * 全屏背包自由布局画布：
- * - 左侧 NodeList 选节点（支持 Shift 多选）
- * - 设计分辨率 letterbox 舞台上按 resolveBackpackLayout 绝对定位各节点
- * - backdrop 可选中但禁止拖拽 / resize
- * - 其余带 rect 的节点：拖拽改 x/y，有 w/h 可 resize（仅单选时可 resize）
- * - craftButton：预览块锚定 detailPanel 底边 + offsetY，竖直拖拽改 offsetY
+ * - 左侧 NodeList：固定节点 + overlays；图层可拖拽排序（调 zIndex）
+ * - 设计分辨率 letterbox 舞台上按 resolveBackpackLayout 绝对定位功能节点
+ * - chrome（backdrop / panel / title / close / craft 等）已迁为 overlays，由 UiOverlayLayer 预览
+ * - itemGrid / detailPanel：拖拽改 x/y，单选时可 resize
+ * - overlays：自由图层选中 / 拖拽 / resize
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,47 +17,49 @@ import {
   resolveBackpackLayout,
   type ResolvedBackpackLayout,
 } from "../../domain/backpack-layout";
-import {
-  applyUiBoxStyle,
-  applyUiTextStyle,
-} from "../../domain/ui-style";
+import { applyUiBoxStyle, applyUiTextStyle } from "../../domain/ui-style";
 import type {
   BackpackNodeId,
   BackpackScreenConfig,
   UiRect,
 } from "../../domain/types";
+import { buildDefaultBackpackLayerOrder } from "../../domain/backpack-screen-config";
+import {
+  layerZIndex,
+  sortItemsByLayerOrder,
+  syncOverlaysZIndexFromLayerOrder,
+} from "../../domain/layer-order";
+import {
+  overlaySelectionId,
+  parseOverlaySelectionId,
+  UI_OVERLAY_KIND_ICONS,
+  UI_OVERLAY_KIND_LABELS,
+} from "../../domain/ui-overlay";
+import { UiOverlayLayer } from "../../runtime/ui-overlay-layer";
 import { fitDesignToHost } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
 import {
   applyDrag,
   applyResize,
+  arrowNudgeDelta,
+  isEditableKeyboardTarget,
+  nudgeOrigin,
   type ResizeHandle,
 } from "./free-layout-selection";
 import { NodeList, type NodeListItem } from "./node-list";
 import { SelectionOverlay } from "./selection-overlay";
 
-/** 背包画布侧栏固定节点条目 */
+/** 背包画布侧栏固定功能节点（chrome 已迁为 overlays 组件） */
 const BAG_NODE_ITEMS: readonly NodeListItem[] = [
-  { id: "backdrop", label: "遮罩" },
-  { id: "panelChrome", label: "主面板" },
-  { id: "titleBlock", label: "标题区" },
-  { id: "closeButton", label: "关闭按钮" },
-  { id: "itemGrid", label: "物品网格" },
-  { id: "detailPanel", label: "详情面板" },
-  { id: "craftButton", label: "合成按钮" },
+  { id: "itemGrid", label: "物品网格", icon: "table-cells" },
+  { id: "detailPanel", label: "详情面板", icon: "rectangle-list" },
 ];
 
-/** 可拖拽 / resize 的带舞台 rect 节点（不含 backdrop / craftButton） */
+/** 可拖拽 / resize 的功能节点 */
 const DRAGGABLE_RECT_NODES: readonly BackpackNodeId[] = [
-  "panelChrome",
-  "titleBlock",
-  "closeButton",
   "itemGrid",
   "detailPanel",
 ];
-
-/** 合成按钮预览默认高度（设计像素） */
-const CRAFT_PREVIEW_H = 44;
 
 /**
  * BackpackVisualCanvas 属性。
@@ -73,28 +75,38 @@ export interface BackpackVisualCanvasProps {
   config: BackpackScreenConfig;
 
   /**
-   * 当前选中节点 id 列表（多选）；无选中时为空数组。
+   * 当前选中 id 列表（多选）；角色节点或 `overlay:<id>`。
    */
-  selectedNodeIds: readonly BackpackNodeId[];
+  selectedNodeIds: readonly string[];
 
   /**
    * 选中节点变化。
    *
-   * @param id - 节点 id，或 null 表示清空选中
+   * @param id - 节点 / 图层 id，或 null 表示清空选中
    * @param shiftKey - 是否按住 Shift（切换多选）；清空时忽略
    */
-  onSelectNode: (id: BackpackNodeId | null, shiftKey?: boolean) => void;
+  onSelectNode: (id: string | null, shiftKey?: boolean) => void;
 
   /**
-   * 拖拽 / resize / offsetY 变化时回写完整背包配置。
+   * 拖拽 / resize 变化时回写完整背包配置。
    *
    * @param next - 新配置
    */
   onConfigChange: (next: BackpackScreenConfig) => void;
+
+  /**
+   * 连续动作开始（pointerdown）：撤销栈记录动作前状态为当前栈顶。
+   */
+  onActionStart?: () => void;
+
+  /**
+   * 连续动作结束（pointerup）：与 onConfigChange 配合，整段拖拽只占一步撤销。
+   */
+  onActionEnd?: () => void;
 }
 
 /**
- * 指针会话：拖拽节点 rect、竖直改 craftButton.offsetY、或八向 resize。
+ * 指针会话：拖拽 / resize 功能节点 rect，或 overlay 拖拽 / resize。
  */
 type PointerSession =
   | {
@@ -106,14 +118,25 @@ type PointerSession =
       scale: number;
     }
   | {
-      kind: "craft-offset";
+      kind: "overlay-drag";
+      overlayId: string;
+      startX: number;
       startY: number;
-      originOffsetY: number;
+      origin: { x: number; y: number };
       scale: number;
     }
   | {
       kind: "resize";
       nodeId: BackpackNodeId;
+      handle: ResizeHandle;
+      startX: number;
+      startY: number;
+      origin: Required<UiRect>;
+      scale: number;
+    }
+  | {
+      kind: "overlay-resize";
+      overlayId: string;
       handle: ResizeHandle;
       startX: number;
       startY: number;
@@ -135,7 +158,7 @@ function isDraggableRectNode(id: BackpackNodeId): boolean {
  * 从解析布局读取某 rect 节点的几何。
  *
  * @param layout - resolveBackpackLayout 结果
- * @param nodeId - 带 rect 的节点（不含 backdrop / craftButton）
+ * @param nodeId - 带 rect 的节点
  * @returns Required rect；非法 id 时返回 null
  */
 function layoutRectFor(
@@ -143,12 +166,6 @@ function layoutRectFor(
   nodeId: BackpackNodeId,
 ): Required<UiRect> | null {
   switch (nodeId) {
-    case "panelChrome":
-      return layout.panelChrome.rect;
-    case "titleBlock":
-      return layout.titleBlock.rect;
-    case "closeButton":
-      return layout.closeButton.rect;
     case "itemGrid":
       return layout.itemGrid.rect;
     case "detailPanel":
@@ -156,32 +173,6 @@ function layoutRectFor(
     default:
       return null;
   }
-}
-
-/**
- * 合成按钮预览矩形：贴在 detailPanel 底边内侧，再叠加 offsetY。
- *
- * y = detail.y + detail.h - pad - height + offsetY
- * （offsetY>0 下移，<0 上移；与 schema「相对详情底边额外 Y 偏移」一致）
- *
- * @param layout - 解析布局
- * @returns 设计像素预览框
- *
- * @example
- * ```ts
- * const r = craftPreviewRect(layout);
- * // r.w ≈ detail.w - 2*padding
- * ```
- */
-function craftPreviewRect(layout: ResolvedBackpackLayout): Required<UiRect> {
-  const detail = layout.detailPanel.rect;
-  const pad = Math.max(8, layout.detailPanel.padding);
-  const w = Math.max(48, detail.w - pad * 2);
-  const h = CRAFT_PREVIEW_H;
-  const x = detail.x + pad;
-  const y = detail.y + detail.h - pad - h + layout.craftButton.offsetY;
-
-  return { x, y, w, h };
 }
 
 /**
@@ -241,30 +232,6 @@ function patchNodeRect(
   };
 
   switch (nodeId) {
-    case "panelChrome":
-      return {
-        ...config,
-        nodes: {
-          ...config.nodes,
-          panelChrome: { ...config.nodes.panelChrome, rect: rounded },
-        },
-      };
-    case "titleBlock":
-      return {
-        ...config,
-        nodes: {
-          ...config.nodes,
-          titleBlock: { ...config.nodes.titleBlock, rect: rounded },
-        },
-      };
-    case "closeButton":
-      return {
-        ...config,
-        nodes: {
-          ...config.nodes,
-          closeButton: { ...config.nodes.closeButton, rect: rounded },
-        },
-      };
     case "itemGrid":
       return {
         ...config,
@@ -308,15 +275,6 @@ function configRectFor(
   let raw: UiRect | undefined;
 
   switch (nodeId) {
-    case "panelChrome":
-      raw = config.nodes.panelChrome.rect;
-      break;
-    case "titleBlock":
-      raw = config.nodes.titleBlock.rect;
-      break;
-    case "closeButton":
-      raw = config.nodes.closeButton.rect;
-      break;
     case "itemGrid":
       raw = config.nodes.itemGrid.rect;
       break;
@@ -353,7 +311,7 @@ function configRectFor(
  *   designWidth={1920}
  *   designHeight={1080}
  *   config={bag}
- *   selectedNodeIds={["panelChrome"]}
+ *   selectedNodeIds={["itemGrid"]}
  *   onSelectNode={(id, shiftKey) => ...}
  *   onConfigChange={persistBag}
  * />
@@ -368,17 +326,37 @@ export function BackpackVisualCanvas({
   selectedNodeIds,
   onSelectNode,
   onConfigChange,
+  onActionStart,
+  onActionEnd,
 }: BackpackVisualCanvasProps): React.ReactElement {
   const { tokens } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [hostSize, setHostSize] = useState({ w: 0, h: 0 });
+  /**
+   * 拖拽 / resize 期间的本地草稿：避免每帧 persist（history 深拷贝 + settings）
+   * 导致元件跟不上指针。
+   */
+  const [dragDraft, setDragDraft] = useState<BackpackScreenConfig | null>(null);
   const sessionRef = useRef<PointerSession | null>(null);
+  const dragDirtyRef = useRef(false);
+  const actionOpenRef = useRef(false);
 
   /** 指针会话中读取最新配置，避免闭包过期 */
   const configRef = useRef(config);
   const layoutRef = useRef<ResolvedBackpackLayout | null>(null);
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const onConfigChangeRef = useRef(onConfigChange);
+  const onActionStartRef = useRef(onActionStart);
+  const onActionEndRef = useRef(onActionEnd);
 
-  configRef.current = config;
+  onConfigChangeRef.current = onConfigChange;
+  onActionStartRef.current = onActionStart;
+  onActionEndRef.current = onActionEnd;
+  selectedNodeIdsRef.current = selectedNodeIds;
+
+  const displayConfig = dragDraft ?? config;
+
+  configRef.current = displayConfig;
 
   useEffect(() => {
     const el = hostRef.current;
@@ -388,16 +366,27 @@ export function BackpackVisualCanvas({
     }
 
     const measure = (): void => {
-      const rect = el.getBoundingClientRect();
-
       setHostSize({
-        w: Math.max(0, rect.width),
-        h: Math.max(0, rect.height),
+        w: Math.max(0, el.clientWidth),
+        h: Math.max(0, el.clientHeight),
       });
     };
 
     measure();
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+
+      if (entry) {
+        setHostSize({
+          w: Math.max(0, entry.contentRect.width),
+          h: Math.max(0, entry.contentRect.height),
+        });
+
+        return;
+      }
+
+      measure();
+    });
 
     ro.observe(el);
 
@@ -405,12 +394,105 @@ export function BackpackVisualCanvas({
   }, []);
 
   /**
-   * Esc 清空选中。
+   * Esc 清空选中；方向键微调选中元素（1px，Shift=10px）。
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         onSelectNode(null);
+
+        return;
+      }
+
+      const delta = arrowNudgeDelta(event.key, event.shiftKey);
+
+      if (!delta) {
+        return;
+      }
+
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (sessionRef.current) {
+        return;
+      }
+
+      const ids = selectedNodeIdsRef.current;
+
+      if (ids.length === 0) {
+        return;
+      }
+
+      const layout = layoutRef.current;
+
+      if (!layout) {
+        return;
+      }
+
+      event.preventDefault();
+
+      let next = configRef.current;
+      let changed = false;
+
+      for (const nodeId of ids) {
+        const overlayId = parseOverlaySelectionId(nodeId);
+
+        if (overlayId !== null) {
+          const overlays = next.overlays ?? [];
+          const idx = overlays.findIndex((o) => o.id === overlayId);
+
+          if (idx < 0) {
+            continue;
+          }
+
+          const prev = overlays[idx]!;
+          const origin = nudgeOrigin(prev.rect, delta.dx, delta.dy);
+
+          if (origin.x === prev.rect.x && origin.y === prev.rect.y) {
+            continue;
+          }
+
+          const nextOverlays = overlays.slice();
+          nextOverlays[idx] = {
+            ...prev,
+            rect: { ...prev.rect, x: origin.x, y: origin.y },
+          };
+          next = { ...next, overlays: nextOverlays };
+          changed = true;
+          continue;
+        }
+
+        if (!isDraggableRectNode(nodeId as BackpackNodeId)) {
+          continue;
+        }
+
+        const rect = configRectFor(next, layout, nodeId as BackpackNodeId);
+
+        if (!rect) {
+          continue;
+        }
+
+        const origin = nudgeOrigin(rect, delta.dx, delta.dy);
+
+        if (origin.x === rect.x && origin.y === rect.y) {
+          continue;
+        }
+
+        const patched = patchNodeRect(next, nodeId as BackpackNodeId, {
+          ...rect,
+          x: origin.x,
+          y: origin.y,
+        });
+
+        if (patched !== next) {
+          next = patched;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        onConfigChangeRef.current(next);
       }
     };
 
@@ -436,9 +518,12 @@ export function BackpackVisualCanvas({
   const frameH = designHeight * scale;
 
   /**
-   * 共享布局：与运行时 resolveBackpackLayout 一致。
+   * 共享布局：与运行时 resolveBackpackLayout 一致（含拖拽草稿）。
    */
-  const layout = useMemo(() => resolveBackpackLayout(config), [config]);
+  const layout = useMemo(
+    () => resolveBackpackLayout(displayConfig),
+    [displayConfig],
+  );
 
   layoutRef.current = layout;
 
@@ -450,39 +535,108 @@ export function BackpackVisualCanvas({
       ? layout.accent.trim()
       : tokens.accent;
 
-  const craftRect = useMemo(() => craftPreviewRect(layout), [layout]);
+  const layerOrder = useMemo(
+    () =>
+      displayConfig.layerOrder ??
+      buildDefaultBackpackLayerOrder(displayConfig.overlays),
+    [displayConfig.layerOrder, displayConfig.overlays],
+  );
 
-  /**
-   * 解析某背包节点的选中叠层矩形。
-   *
-   * @param nodeId - 节点 id
-   * @returns 设计像素矩形；未知 id 时返回 null
-   */
-  const selectionRectFor = useCallback(
-    (nodeId: BackpackNodeId): Required<UiRect> | null => {
-      if (nodeId === "backdrop") {
-        return { x: 0, y: 0, w: designWidth, h: designHeight };
-      }
+  const overlayItems: NodeListItem[] = useMemo(
+    () =>
+      (displayConfig.overlays ?? []).map((el) => ({
+        id: overlaySelectionId(el.id),
+        label: `${UI_OVERLAY_KIND_LABELS[el.kind]} · ${el.name}`,
+        icon: el.props.icon || UI_OVERLAY_KIND_ICONS[el.kind],
+      })),
+    [displayConfig.overlays],
+  );
 
-      if (nodeId === "craftButton") {
-        return craftRect;
-      }
+  const nodeListItems = useMemo(
+    () =>
+      sortItemsByLayerOrder(
+        [...BAG_NODE_ITEMS, ...overlayItems],
+        layerOrder,
+      ),
+    [layerOrder, overlayItems],
+  );
 
-      return layoutRectFor(layout, nodeId);
+  const handleReorderNodes = useCallback(
+    (orderedIds: readonly string[]): void => {
+      onConfigChange({
+        ...config,
+        layerOrder: [...orderedIds],
+        overlays: syncOverlaysZIndexFromLayerOrder(
+          config.overlays ?? [],
+          orderedIds,
+        ),
+      });
     },
-    [layout, craftRect, designWidth, designHeight],
+    [config, onConfigChange],
   );
 
   /**
-   * 仅当恰好单选且该节点可拖拽/resize（非 backdrop / craftButton）时允许 resize。
+   * 解析某背包节点 / 图层的选中叠层矩形。
+   *
+   * @param nodeId - 节点 id 或 `overlay:<id>`
+   * @returns 设计像素矩形；未知 id 时返回 null
+   */
+  const selectionRectFor = useCallback(
+    (nodeId: string): Required<UiRect> | null => {
+      const overlayId = parseOverlaySelectionId(nodeId);
+
+      if (overlayId !== null) {
+        const el = (displayConfig.overlays ?? []).find(
+          (o) => o.id === overlayId,
+        );
+
+        return el ? { ...el.rect } : null;
+      }
+
+      return layoutRectFor(layout, nodeId as BackpackNodeId);
+    },
+    [displayConfig.overlays, layout],
+  );
+
+  /**
+   * 单选且可 resize：itemGrid / detailPanel。
    */
   const soleResizableId =
-    selectedNodeIds.length === 1 && isDraggableRectNode(selectedNodeIds[0]!)
-      ? selectedNodeIds[0]!
+    selectedNodeIds.length === 1 &&
+    isDraggableRectNode(selectedNodeIds[0] as BackpackNodeId)
+      ? (selectedNodeIds[0] as BackpackNodeId)
+      : null;
+
+  const soleOverlayId =
+    selectedNodeIds.length === 1
+      ? parseOverlaySelectionId(selectedNodeIds[0]!)
       : null;
 
   /**
-   * 窗口级 pointermove / pointerup：会话期间应用 applyDrag / applyResize / offsetY。
+   * 拖拽中写本地草稿（不同步父级 persist）。
+   *
+   * @param next - 草稿配置
+   */
+  const applyConfigLive = useCallback((next: BackpackScreenConfig): void => {
+    configRef.current = next;
+    dragDirtyRef.current = true;
+    setDragDraft(next);
+  }, []);
+
+  /**
+   * 开启连续动作（幂等）。
+   */
+  const ensureActionStarted = useCallback((): void => {
+    if (actionOpenRef.current) {
+      return;
+    }
+
+    actionOpenRef.current = true;
+    onActionStartRef.current?.();
+  }, []);
+
+  /**
+   * 窗口级 pointermove / pointerup：会话期间应用 applyDrag / applyResize。
    */
   useEffect(() => {
     const onPointerMove = (event: PointerEvent): void => {
@@ -495,34 +649,72 @@ export function BackpackVisualCanvas({
 
       const currentConfig = configRef.current;
 
-      if (session.kind === "craft-offset") {
-        const dy = (event.clientY - session.startY) / session.scale;
-        const nextOffsetY = Math.max(
-          -400,
-          Math.min(400, Math.round(session.originOffsetY + dy)),
-        );
-        const prev = currentConfig.nodes.craftButton.offsetY ?? 0;
+      const dx = (event.clientX - session.startX) / session.scale;
+      const dy = (event.clientY - session.startY) / session.scale;
 
-        if (nextOffsetY === prev) {
+      if (session.kind === "overlay-drag") {
+        const nextPos = applyDrag(session.origin, dx, dy, {
+          shiftKey: event.shiftKey,
+          snapX: [0, designWidth],
+          snapY: [0, designHeight],
+        });
+        const nextX = Math.max(0, Math.round(nextPos.x));
+        const nextY = Math.max(0, Math.round(nextPos.y));
+        const overlays = currentConfig.overlays ?? [];
+        const idx = overlays.findIndex((o) => o.id === session.overlayId);
+
+        if (idx < 0) {
           return;
         }
 
-        onConfigChange({
-          ...currentConfig,
-          nodes: {
-            ...currentConfig.nodes,
-            craftButton: {
-              ...currentConfig.nodes.craftButton,
-              offsetY: nextOffsetY,
-            },
-          },
-        });
+        const prev = overlays[idx]!;
+
+        if (nextX === prev.rect.x && nextY === prev.rect.y) {
+          return;
+        }
+
+        const nextOverlays = overlays.slice();
+        nextOverlays[idx] = {
+          ...prev,
+          rect: { ...prev.rect, x: nextX, y: nextY },
+        };
+        applyConfigLive({ ...currentConfig, overlays: nextOverlays });
 
         return;
       }
 
-      const dx = (event.clientX - session.startX) / session.scale;
-      const dy = (event.clientY - session.startY) / session.scale;
+      if (session.kind === "overlay-resize") {
+        const nextRect = applyResize(session.origin, session.handle, dx, dy);
+        const rounded: Required<UiRect> = {
+          x: Math.max(0, Math.round(nextRect.x)),
+          y: Math.max(0, Math.round(nextRect.y)),
+          w: Math.max(8, Math.round(nextRect.w)),
+          h: Math.max(8, Math.round(nextRect.h)),
+        };
+        const overlays = currentConfig.overlays ?? [];
+        const idx = overlays.findIndex((o) => o.id === session.overlayId);
+
+        if (idx < 0) {
+          return;
+        }
+
+        const prev = overlays[idx]!;
+
+        if (
+          prev.rect.x === rounded.x &&
+          prev.rect.y === rounded.y &&
+          prev.rect.w === rounded.w &&
+          prev.rect.h === rounded.h
+        ) {
+          return;
+        }
+
+        const nextOverlays = overlays.slice();
+        nextOverlays[idx] = { ...prev, rect: rounded };
+        applyConfigLive({ ...currentConfig, overlays: nextOverlays });
+
+        return;
+      }
 
       if (session.kind === "drag") {
         const snaps = snapTargetsFor(
@@ -553,7 +745,7 @@ export function BackpackVisualCanvas({
           return;
         }
 
-        onConfigChange(
+        applyConfigLive(
           patchNodeRect(currentConfig, session.nodeId, {
             x: nextX,
             y: nextY,
@@ -565,7 +757,10 @@ export function BackpackVisualCanvas({
         return;
       }
 
-      // resize
+      if (session.kind !== "resize") {
+        return;
+      }
+
       const nextRect = applyResize(session.origin, session.handle, dx, dy);
       const rounded: Required<UiRect> = {
         x: Math.round(nextRect.x),
@@ -573,6 +768,7 @@ export function BackpackVisualCanvas({
         w: Math.round(nextRect.w),
         h: Math.round(nextRect.h),
       };
+
       const prev = configRectFor(
         currentConfig,
         currentLayout,
@@ -589,11 +785,29 @@ export function BackpackVisualCanvas({
         return;
       }
 
-      onConfigChange(patchNodeRect(currentConfig, session.nodeId, rounded));
+      applyConfigLive(patchNodeRect(currentConfig, session.nodeId, rounded));
     };
 
     const onPointerUp = (): void => {
+      const hadSession = sessionRef.current !== null;
+
       sessionRef.current = null;
+
+      if (!hadSession) {
+        return;
+      }
+
+      if (dragDirtyRef.current) {
+        dragDirtyRef.current = false;
+        onConfigChangeRef.current(configRef.current);
+      }
+
+      setDragDraft(null);
+
+      if (actionOpenRef.current) {
+        actionOpenRef.current = false;
+        onActionEndRef.current?.();
+      }
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -605,20 +819,7 @@ export function BackpackVisualCanvas({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [designWidth, designHeight, onConfigChange]);
-
-  /**
-   * 选中 backdrop（不开启拖拽会话）。
-   *
-   * @param event - 指针事件
-   */
-  const onBackdropPointerDown = useCallback(
-    (event: React.PointerEvent): void => {
-      event.stopPropagation();
-      onSelectNode("backdrop", event.shiftKey);
-    },
-    [onSelectNode],
-  );
+  }, [applyConfigLive, designWidth, designHeight]);
 
   /**
    * 开始拖拽带 rect 的节点。
@@ -637,6 +838,10 @@ export function BackpackVisualCanvas({
         return;
       }
 
+      (event.currentTarget as HTMLElement).setPointerCapture?.(
+        event.pointerId,
+      );
+      ensureActionStarted();
       onSelectNode(nodeId, event.shiftKey);
       sessionRef.current = {
         kind: "drag",
@@ -647,27 +852,7 @@ export function BackpackVisualCanvas({
         scale,
       };
     },
-    [layout, onSelectNode, scale],
-  );
-
-  /**
-   * 开始竖直拖拽合成按钮（改 offsetY）。
-   *
-   * @param event - 指针事件
-   */
-  const beginDragCraftOffset = useCallback(
-    (event: React.PointerEvent): void => {
-      event.stopPropagation();
-      event.preventDefault();
-      onSelectNode("craftButton", event.shiftKey);
-      sessionRef.current = {
-        kind: "craft-offset",
-        startY: event.clientY,
-        originOffsetY: layout.craftButton.offsetY,
-        scale,
-      };
-    },
-    [layout.craftButton.offsetY, onSelectNode, scale],
+    [ensureActionStarted, layout, onSelectNode, scale],
   );
 
   /**
@@ -689,6 +874,7 @@ export function BackpackVisualCanvas({
       }
 
       (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      ensureActionStarted();
 
       sessionRef.current = {
         kind: "resize",
@@ -700,7 +886,7 @@ export function BackpackVisualCanvas({
         scale,
       };
     },
-    [layout, scale, soleResizableId],
+    [ensureActionStarted, layout, scale, soleResizableId],
   );
 
   /**
@@ -710,29 +896,27 @@ export function BackpackVisualCanvas({
     onSelectNode(null);
   }, [onSelectNode]);
 
-  const backdropCss = applyUiBoxStyle(layout.backdrop.style);
-  const panelCss = applyUiBoxStyle(layout.panelChrome.style);
   const gridCss = applyUiBoxStyle(layout.itemGrid.style);
+  const gridCellCss = applyUiBoxStyle(layout.itemGrid.cellStyle);
+  const gridSelectedCss = applyUiBoxStyle(layout.itemGrid.selectedStyle);
+  const gridCellLabelCss = applyUiTextStyle(layout.itemGrid.cellLabelStyle);
   const detailCss = applyUiBoxStyle(layout.detailPanel.style);
-  const closeBoxCss = applyUiBoxStyle(layout.closeButton.style);
-  const closeTextCss = applyUiTextStyle(layout.closeButton.style);
-  const craftBoxCss = applyUiBoxStyle(layout.craftButton.style);
-  const craftTextCss = applyUiTextStyle(layout.craftButton.style);
-  const eyebrowCss = applyUiTextStyle(layout.titleBlock.eyebrow);
-  const titleCss = applyUiTextStyle(layout.titleBlock.title);
-  const modeLinkCss = applyUiTextStyle(layout.titleBlock.modeLink);
+  const detailHeroCss = applyUiBoxStyle(layout.detailPanel.heroStyle);
+  const detailTitleCss = applyUiTextStyle(layout.detailPanel.titleStyle);
+  const detailMetaCss = applyUiTextStyle(layout.detailPanel.metaStyle);
+  const detailDescriptionCss = applyUiTextStyle(
+    layout.detailPanel.descriptionStyle,
+  );
+  const detailIngredientsLabelCss = applyUiTextStyle(
+    layout.detailPanel.ingredientsLabelStyle,
+  );
+  const detailIngredientsCss = applyUiTextStyle(
+    layout.detailPanel.ingredientsStyle,
+  );
+  const ingredientsHeading =
+    layout.detailPanel.ingredientsLabelStyle.label?.trim() || "原料";
+  const iconMaxSize = Math.max(24, layout.itemGrid.iconMaxSize);
 
-  const titleEyebrow =
-    layout.titleBlock.eyebrow.label?.trim() || "INVENTORY";
-  const titleLabel = layout.titleBlock.title.label?.trim() || "道具";
-  const modeLinkLabel =
-    layout.titleBlock.modeLink.label?.trim() || "打开合成";
-  const closeLabel = layout.closeButton.style.label?.trim() || "×";
-  const craftLabel = layout.craftButton.style.label?.trim() || "合成";
-
-  const panel = layout.panelChrome.rect;
-  const title = layout.titleBlock.rect;
-  const close = layout.closeButton.rect;
   const grid = layout.itemGrid.rect;
   const detail = layout.detailPanel.rect;
   const gridCellMin = layout.itemGrid.cellMin;
@@ -744,8 +928,10 @@ export function BackpackVisualCanvas({
       data-testid="backpack-visual-canvas"
       style={{
         display: "flex",
+        flex: 1,
         width: "100%",
         height: "100%",
+        minWidth: 0,
         minHeight: 0,
         overflow: "hidden",
         background: tokens.bgSunken,
@@ -759,11 +945,10 @@ export function BackpackVisualCanvas({
         }}
       >
         <NodeList
-          items={BAG_NODE_ITEMS}
+          items={nodeListItems}
           selectedIds={selectedNodeIds}
-          onSelect={(id, { shiftKey }) =>
-            onSelectNode(id as BackpackNodeId, shiftKey)
-          }
+          onSelect={(id, { shiftKey }) => onSelectNode(id, shiftKey)}
+          onReorder={handleReorderNodes}
         />
       </div>
 
@@ -776,19 +961,18 @@ export function BackpackVisualCanvas({
           minHeight: 0,
           position: "relative",
           overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          background: tokens.bgSunken,
         }}
       >
         {hostSize.w > 0 && hostSize.h > 0 ? (
           <div
             data-testid="backpack-visual-frame"
             style={{
+              position: "absolute",
+              left: world.offsetX,
+              top: world.offsetY,
               width: frameW,
               height: frameH,
-              position: "relative",
-              flexShrink: 0,
               boxShadow: "0 0 0 1px rgba(255,255,255,0.12)",
               overflow: "hidden",
             }}
@@ -810,123 +994,49 @@ export function BackpackVisualCanvas({
                   '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
               }}
             >
-              {/* backdrop：可选中，忽略 drag/resize */}
               <div
-                data-testid="backpack-visual-backdrop"
-                onPointerDown={onBackdropPointerDown}
                 style={{
                   position: "absolute",
-                  inset: 0,
-                  cursor: "pointer",
-                  touchAction: "none",
-                  userSelect: "none",
-                  background: "rgba(0, 0, 0, 0.55)",
-                  ...backdropCss,
-                }}
-              />
-
-              {/* panelChrome */}
-              <div
-                data-testid="backpack-visual-panel"
-                onPointerDown={(event) => beginDragRect("panelChrome", event)}
-                style={{
-                  position: "absolute",
-                  left: panel.x,
-                  top: panel.y,
-                  width: panel.w,
-                  height: panel.h,
-                  boxSizing: "border-box",
-                  borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(14, 18, 24, 0.92)",
-                  cursor: "grab",
-                  touchAction: "none",
-                  userSelect: "none",
-                  overflow: "hidden",
-                  ...panelCss,
-                }}
-              />
-
-              {/* titleBlock */}
-              <div
-                data-testid="backpack-visual-title"
-                onPointerDown={(event) => beginDragRect("titleBlock", event)}
-                style={{
-                  position: "absolute",
-                  left: title.x,
-                  top: title.y,
-                  width: title.w,
-                  height: title.h,
-                  boxSizing: "border-box",
-                  cursor: "grab",
-                  touchAction: "none",
-                  userSelect: "none",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  gap: 4,
-                  pointerEvents: "auto",
+                  left: 16,
+                  top: 16,
+                  fontSize: 12,
+                  color: "rgba(255,255,255,0.35)",
+                  letterSpacing: "0.12em",
+                  pointerEvents: "none",
+                  zIndex: 9999,
                 }}
               >
-                <div
-                  style={{
-                    color: accent,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: "0.22em",
-                    ...eyebrowCss,
-                  }}
-                >
-                  {titleEyebrow}
-                </div>
-                <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 750,
-                    letterSpacing: "0.04em",
-                    ...titleCss,
-                  }}
-                >
-                  {titleLabel}
-                </div>
-                <div
-                  style={{
-                    marginTop: 2,
-                    fontSize: 13,
-                    color: "rgba(220,230,235,0.65)",
-                    ...modeLinkCss,
-                  }}
-                >
-                  {modeLinkLabel}
-                </div>
+                背包 · 方向键微调 · Shift+10px · Shift+多选 · Esc 取消
               </div>
+              <UiOverlayLayer
+                overlays={displayConfig.overlays ?? []}
+                editorMode
+                onOverlayPointerDown={(overlayId, event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  (event.currentTarget as HTMLElement).setPointerCapture?.(
+                    event.pointerId,
+                  );
+                  ensureActionStarted();
+                  onSelectNode(overlaySelectionId(overlayId), event.shiftKey);
+                  const el = (displayConfig.overlays ?? []).find(
+                    (o) => o.id === overlayId,
+                  );
 
-              {/* closeButton */}
-              <div
-                data-testid="backpack-visual-close"
-                onPointerDown={(event) => beginDragRect("closeButton", event)}
-                style={{
-                  position: "absolute",
-                  left: close.x,
-                  top: close.y,
-                  width: close.w,
-                  height: close.h,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                  cursor: "grab",
-                  touchAction: "none",
-                  userSelect: "none",
-                  ...closeBoxCss,
-                  ...closeTextCss,
+                  if (!el) {
+                    return;
+                  }
+
+                  sessionRef.current = {
+                    kind: "overlay-drag",
+                    overlayId,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    origin: { x: el.rect.x, y: el.rect.y },
+                    scale,
+                  };
                 }}
-              >
-                {closeLabel}
-              </div>
+              />
 
               {/* itemGrid */}
               <div
@@ -938,6 +1048,7 @@ export function BackpackVisualCanvas({
                   top: grid.y,
                   width: grid.w,
                   height: grid.h,
+                  zIndex: layerZIndex(layerOrder, "itemGrid", 10),
                   boxSizing: "border-box",
                   padding: 16,
                   display: "grid",
@@ -953,22 +1064,72 @@ export function BackpackVisualCanvas({
                   ...gridCss,
                 }}
               >
-                {Array.from({ length: 8 }, (_, i) => (
-                  <div
-                    key={`cell-${i}`}
-                    style={{
-                      aspectRatio: "1 / 1",
-                      borderRadius: 12,
-                      border:
-                        i === 0
-                          ? `1px solid ${accent}`
-                          : "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        i === 0 ? `${accent}22` : "rgba(255,255,255,0.03)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                ))}
+                {Array.from({ length: 8 }, (_, i) => {
+                  const selected = i === 0;
+                  const cellBox = selected
+                    ? layout.itemGrid.selectedStyle
+                    : layout.itemGrid.cellStyle;
+                  const borderColor =
+                    cellBox.borderColor?.trim() ||
+                    (selected ? accent : "rgba(255,255,255,0.08)");
+                  const background =
+                    cellBox.background?.trim() ||
+                    (selected ? `${accent}22` : "rgba(255,255,255,0.03)");
+
+                  return (
+                    <div
+                      key={`cell-${i}`}
+                      style={{
+                        aspectRatio: "1 / 1",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "stretch",
+                        justifyContent: "flex-end",
+                        padding: 10,
+                        borderRadius: cellBox.borderRadius ?? 12,
+                        border: `${cellBox.borderWidth ?? 1}px solid ${borderColor}`,
+                        background,
+                        pointerEvents: "none",
+                        overflow: "hidden",
+                        ...(selected ? gridSelectedCss : gridCellCss),
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          minHeight: 0,
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          style={{
+                            width: iconMaxSize,
+                            height: iconMaxSize,
+                            borderRadius: "50%",
+                            background:
+                              "radial-gradient(circle at 35% 30%, #e8e0d0 0%, #6a7a88 100%)",
+                            opacity: 0.7,
+                            flexShrink: 0,
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          lineHeight: 1.25,
+                          textAlign: "center",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          ...gridCellLabelCss,
+                        }}
+                      >
+                        {selected ? "物品" : ""}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* detailPanel */}
@@ -981,6 +1142,7 @@ export function BackpackVisualCanvas({
                   top: detail.y,
                   width: detail.w,
                   height: detail.h,
+                  zIndex: layerZIndex(layerOrder, "detailPanel", 10),
                   boxSizing: "border-box",
                   padding: detailPad,
                   display: "flex",
@@ -997,67 +1159,52 @@ export function BackpackVisualCanvas({
                   style={{
                     height: heroHeight,
                     maxHeight: "34%",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: `linear-gradient(145deg, ${accent}33 0%, #0d1a28 55%, #0a1220 100%)`,
                     pointerEvents: "none",
                     flexShrink: 0,
+                    ...detailHeroCss,
                   }}
                 />
                 <div
                   style={{
-                    fontSize: 24,
-                    fontWeight: 750,
                     pointerEvents: "none",
+                    ...detailTitleCss,
                   }}
                 >
                   物品名称
                 </div>
                 <div
                   style={{
-                    color: accent,
-                    fontSize: 14,
                     pointerEvents: "none",
+                    ...detailMetaCss,
                   }}
                 >
                   持有 ×1
                 </div>
                 <div
                   style={{
-                    color: "rgba(220,230,235,0.7)",
-                    fontSize: 14,
                     pointerEvents: "none",
+                    ...detailDescriptionCss,
                   }}
                 >
                   详情预览区
                 </div>
-              </div>
-
-              {/* craftButton 预览：detail 底边 + offsetY，竖直拖改 offsetY */}
-              <div
-                data-testid="backpack-visual-craft"
-                onPointerDown={beginDragCraftOffset}
-                style={{
-                  position: "absolute",
-                  left: craftRect.x,
-                  top: craftRect.y,
-                  width: craftRect.w,
-                  height: craftRect.h,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 10,
-                  border: `1px solid ${accent}`,
-                  background: `${accent}33`,
-                  cursor: "ns-resize",
-                  touchAction: "none",
-                  userSelect: "none",
-                  ...craftBoxCss,
-                  ...craftTextCss,
-                }}
-              >
-                {craftLabel}
+                <div
+                  style={{
+                    pointerEvents: "none",
+                    lineHeight: 1.6,
+                    ...detailIngredientsCss,
+                  }}
+                >
+                  <div
+                    style={{
+                      marginBottom: 4,
+                      ...detailIngredientsLabelCss,
+                    }}
+                  >
+                    {ingredientsHeading}
+                  </div>
+                  原料预览 ×1
+                </div>
               </div>
 
               {selectedNodeIds.map((nodeId) => {
@@ -1067,14 +1214,47 @@ export function BackpackVisualCanvas({
                   return null;
                 }
 
+                const isOverlay = parseOverlaySelectionId(nodeId) !== null;
+
                 return (
                   <SelectionOverlay
                     key={`sel-${nodeId}`}
                     rect={rect}
                     scale={scale}
-                    resizable={soleResizableId === nodeId}
+                    resizable={
+                      soleResizableId === nodeId ||
+                      (soleOverlayId !== null && isOverlay)
+                    }
                     accentColor={accent}
-                    onResizeStart={onResizeStart}
+                    onResizeStart={(handle, event) => {
+                      if (soleOverlayId !== null && isOverlay) {
+                        const el = (displayConfig.overlays ?? []).find(
+                          (o) => o.id === soleOverlayId,
+                        );
+
+                        if (!el) {
+                          return;
+                        }
+
+                        (event.target as HTMLElement).setPointerCapture?.(
+                          event.pointerId,
+                        );
+                        ensureActionStarted();
+                        sessionRef.current = {
+                          kind: "overlay-resize",
+                          overlayId: soleOverlayId,
+                          handle,
+                          startX: event.clientX,
+                          startY: event.clientY,
+                          origin: { ...el.rect },
+                          scale,
+                        };
+
+                        return;
+                      }
+
+                      onResizeStart(handle, event);
+                    }}
                   />
                 );
               })}

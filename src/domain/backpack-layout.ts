@@ -11,9 +11,11 @@ import { defaultBackpackScreen } from "./backpack-screen-config";
 import type {
   BackpackScreenConfig,
   UiBoxStyle,
+  UiButtonSkin,
   UiRect,
   UiTextStyle,
 } from "./types";
+import { cloneUiButtonSkin } from "./ui-button-skin";
 
 /**
  * 解析后的全屏背包布局（设计像素坐标，rect 必含 w/h）。
@@ -37,14 +39,22 @@ export interface ResolvedBackpackLayout {
   };
 
   /** 关闭按钮 */
-  closeButton: { rect: Required<UiRect>; style: UiBoxStyle & UiTextStyle };
+  closeButton: {
+    rect: Required<UiRect>;
+    style: UiBoxStyle & UiTextStyle;
+  } & UiButtonSkin;
 
   /** 物品网格 */
   itemGrid: {
     rect: Required<UiRect>;
     cellMin: number;
     style: UiBoxStyle;
+    cellStyle: UiBoxStyle;
     selectedStyle: UiBoxStyle;
+    cellLabelStyle: UiTextStyle;
+    iconMaxSize: number;
+    emptyStyle: UiTextStyle;
+    emptyCraftStyle: UiTextStyle;
   };
 
   /** 详情面板 */
@@ -53,10 +63,23 @@ export interface ResolvedBackpackLayout {
     heroHeight: number;
     padding: number;
     style: UiBoxStyle;
+    heroStyle: UiBoxStyle;
+    titleStyle: UiTextStyle;
+    metaStyle: UiTextStyle;
+    descriptionStyle: UiTextStyle;
+    emptyStyle: UiTextStyle;
+    emptyCraftStyle: UiTextStyle;
+    ingredientsLabelStyle: UiTextStyle;
+    ingredientsStyle: UiTextStyle;
   };
 
-  /** 合成按钮（相对详情底边偏移） */
-  craftButton: { offsetY: number; style: UiBoxStyle & UiTextStyle };
+  /** 合成按钮（相对详情底边偏移；可选独立宽高） */
+  craftButton: {
+    offsetY: number;
+    w?: number;
+    h?: number;
+    style: UiBoxStyle & UiTextStyle;
+  } & UiButtonSkin;
 }
 
 /**
@@ -187,13 +210,31 @@ export function resolveBackpackLayout(
     closeButton: {
       rect: requireRect(cfg.nodes.closeButton.rect, closeFallback),
       style: cloneBoxAndText(cfg.nodes.closeButton.style),
+      ...cloneUiButtonSkin(cfg.nodes.closeButton),
     },
     itemGrid: {
       rect: requireRect(cfg.nodes.itemGrid.rect, gridFallback),
       cellMin: cfg.nodes.itemGrid.cellMin,
       style: cloneBox(cfg.nodes.itemGrid.style),
+      cellStyle: cloneBox(
+        cfg.nodes.itemGrid.cellStyle ?? d.itemGrid.cellStyle ?? {},
+      ),
       selectedStyle: cloneBox(
         cfg.nodes.itemGrid.selectedStyle ?? d.itemGrid.selectedStyle ?? {},
+      ),
+      cellLabelStyle: cloneText(
+        cfg.nodes.itemGrid.cellLabelStyle ?? d.itemGrid.cellLabelStyle,
+      ),
+      iconMaxSize:
+        typeof cfg.nodes.itemGrid.iconMaxSize === "number" &&
+        cfg.nodes.itemGrid.iconMaxSize > 0
+          ? cfg.nodes.itemGrid.iconMaxSize
+          : (d.itemGrid.iconMaxSize ?? 48),
+      emptyStyle: cloneText(
+        cfg.nodes.itemGrid.emptyStyle ?? d.itemGrid.emptyStyle,
+      ),
+      emptyCraftStyle: cloneText(
+        cfg.nodes.itemGrid.emptyCraftStyle ?? d.itemGrid.emptyCraftStyle,
       ),
     },
     detailPanel: {
@@ -201,10 +242,41 @@ export function resolveBackpackLayout(
       heroHeight: cfg.nodes.detailPanel.heroHeight,
       padding: cfg.nodes.detailPanel.padding,
       style: cloneBox(cfg.nodes.detailPanel.style),
+      heroStyle: cloneBox(
+        cfg.nodes.detailPanel.heroStyle ?? d.detailPanel.heroStyle ?? {},
+      ),
+      titleStyle: cloneText(
+        cfg.nodes.detailPanel.titleStyle ?? d.detailPanel.titleStyle,
+      ),
+      metaStyle: cloneText(
+        cfg.nodes.detailPanel.metaStyle ?? d.detailPanel.metaStyle,
+      ),
+      descriptionStyle: cloneText(
+        cfg.nodes.detailPanel.descriptionStyle ??
+          d.detailPanel.descriptionStyle,
+      ),
+      emptyStyle: cloneText(
+        cfg.nodes.detailPanel.emptyStyle ?? d.detailPanel.emptyStyle,
+      ),
+      emptyCraftStyle: cloneText(
+        cfg.nodes.detailPanel.emptyCraftStyle ??
+          d.detailPanel.emptyCraftStyle,
+      ),
+      ingredientsLabelStyle: cloneText(
+        cfg.nodes.detailPanel.ingredientsLabelStyle ??
+          d.detailPanel.ingredientsLabelStyle,
+      ),
+      ingredientsStyle: cloneText(
+        cfg.nodes.detailPanel.ingredientsStyle ??
+          d.detailPanel.ingredientsStyle,
+      ),
     },
     craftButton: {
       offsetY: cfg.nodes.craftButton.offsetY ?? d.craftButton.offsetY ?? 0,
+      w: cfg.nodes.craftButton.w,
+      h: cfg.nodes.craftButton.h,
       style: cloneBoxAndText(cfg.nodes.craftButton.style),
+      ...cloneUiButtonSkin(cfg.nodes.craftButton),
     },
   };
 }

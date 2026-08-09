@@ -11,6 +11,7 @@
 import type { FieldSchema } from "./types";
 import {
   boxStyleFields,
+  buttonSkinFields,
   rectFields,
   textStyleFields,
 } from "./ui-style-fields";
@@ -41,8 +42,7 @@ export function inventoryHudGlobalFields(): FieldSchema[] {
           kind: "color",
           label: "强调色",
           placeholder: "#64e0d0",
-          description:
-            "选中高亮、数量角标与未单独指定的边框色（色板 + HEX）",
+          description: "选中高亮、数量角标与未单独指定的边框色",
         },
         {
           key: "customCss",
@@ -149,13 +149,15 @@ export function inventoryHudNodeFields(nodeId: HudNodeId): FieldSchema[] {
             { value: "belowRoot", label: "跟随快捷栏下方" },
             { value: "absolute", label: "绝对定位" },
           ],
-          description: "absolute 时可独立设置 x/y/w/h",
+          description:
+            "absolute：独立 x/y/w/h；belowRoot：位置跟随快捷栏，w/h 可覆盖默认尺寸",
         },
         {
           kind: "section",
           id: "hud-open-bag-rect",
-          title: "绝对定位区域",
-          description: "layout 为 absolute 时生效",
+          title: "位置与尺寸",
+          description:
+            "absolute 时 x/y/w/h 全生效；belowRoot 时仅 w/h 覆盖默认宽高（x/y 忽略）",
           children: [
             {
               kind: "grid",
@@ -176,6 +178,13 @@ export function inventoryHudNodeFields(nodeId: HudNodeId): FieldSchema[] {
             ...boxStyleFields("nodes.openBagButton.style"),
             ...textStyleFields("nodes.openBagButton.style", { withLabel: true }),
           ],
+        },
+        {
+          kind: "section",
+          id: "hud-open-bag-skin",
+          title: "按钮图片（三态）",
+          description: "可选；按下→悬停→常态依次回退",
+          children: buttonSkinFields("nodes.openBagButton"),
         },
       ];
 

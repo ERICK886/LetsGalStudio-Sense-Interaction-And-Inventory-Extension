@@ -2,7 +2,7 @@
  * editor-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 场景交互编辑器主壳：顶栏 + 左中右三栏。
  * - 场景分区：场景/交互点列表、画布、Schema 属性
@@ -10,6 +10,7 @@
  * - 配方分区：配方列表、公式预览、配方属性（v0.2 Task 5）
  * - Ctrl/Cmd+Z / Ctrl+Y / Ctrl+Shift+Z 按当前分区撤销重做
  * - 中栏 scene-canvas-host：保证画布 letterbox 居中
+ * - 「运行预览」携带左侧当前选中场景 id
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -61,6 +62,7 @@ import { RecipeListPanel } from "./panels/recipe-list-panel";
 import { RecipePreviewPanel } from "./panels/recipe-preview-panel";
 import { RecipePropertyPanel } from "./panels/recipe-property-panel";
 import { SceneListPanel } from "./panels/scene-list-panel";
+import { IconLabel } from "../shared/fa-icon";
 import { DesignResolutionMenu } from "./ui/design-resolution-menu";
 import { UiEditorPanel } from "./ui/ui-editor-panel";
 
@@ -85,8 +87,12 @@ export interface EditorShellProps {
    * 切换编辑 / 运行预览（由 EditorApp 在本程序内切换 EditorShell ↔ PreviewShell）。
    *
    * @param enabled - false → 运行预览；true → 回到编辑
+   * @param options.sceneId - 进预览时传入左侧选中场景 id（可空）
    */
-  onSetEditMode: (enabled: boolean) => void;
+  onSetEditMode: (
+    enabled: boolean,
+    options?: { sceneId?: string | null },
+  ) => void;
 }
 
 /**
@@ -127,6 +133,9 @@ function topBarButtonStyle(
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.45 : 1,
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -1013,7 +1022,7 @@ export function EditorShell({
               variant: editorSection === "scenes" ? "active" : "default",
             })}
           >
-            场景
+            <IconLabel icon="image">场景</IconLabel>
           </button>
           <button
             type="button"
@@ -1025,7 +1034,7 @@ export function EditorShell({
               variant: editorSection === "items" ? "active" : "default",
             })}
           >
-            物品库
+            <IconLabel icon="box-open">物品库</IconLabel>
           </button>
           <button
             type="button"
@@ -1037,7 +1046,7 @@ export function EditorShell({
               variant: editorSection === "recipes" ? "active" : "default",
             })}
           >
-            配方
+            <IconLabel icon="flask">配方</IconLabel>
           </button>
           <button
             type="button"
@@ -1049,7 +1058,7 @@ export function EditorShell({
               variant: editorSection === "ui" ? "active" : "default",
             })}
           >
-            UI
+            <IconLabel icon="layer-group">UI</IconLabel>
           </button>
         </div>
 
@@ -1065,7 +1074,7 @@ export function EditorShell({
               onClick={handleExportScenes}
               style={topBarButtonStyle(tokens)}
             >
-              导出场景 JSON
+              <IconLabel icon="file-export">导出场景 JSON</IconLabel>
             </button>
             <button
               type="button"
@@ -1073,7 +1082,7 @@ export function EditorShell({
               onClick={handlePickScenesImport}
               style={topBarButtonStyle(tokens)}
             >
-              导入场景 JSON
+              <IconLabel icon="file-import">导入场景 JSON</IconLabel>
             </button>
           </>
         ) : null}
@@ -1086,7 +1095,7 @@ export function EditorShell({
               onClick={handleExportItems}
               style={topBarButtonStyle(tokens)}
             >
-              导出物品 JSON
+              <IconLabel icon="file-export">导出物品 JSON</IconLabel>
             </button>
             <button
               type="button"
@@ -1094,7 +1103,7 @@ export function EditorShell({
               onClick={handlePickItemsImport}
               style={topBarButtonStyle(tokens)}
             >
-              导入物品 JSON
+              <IconLabel icon="file-import">导入物品 JSON</IconLabel>
             </button>
           </>
         ) : null}
@@ -1107,7 +1116,7 @@ export function EditorShell({
               onClick={handleExportRecipes}
               style={topBarButtonStyle(tokens)}
             >
-              导出配方 JSON
+              <IconLabel icon="file-export">导出配方 JSON</IconLabel>
             </button>
             <button
               type="button"
@@ -1115,7 +1124,7 @@ export function EditorShell({
               onClick={handlePickRecipesImport}
               style={topBarButtonStyle(tokens)}
             >
-              导入配方 JSON
+              <IconLabel icon="file-import">导入配方 JSON</IconLabel>
             </button>
           </>
         ) : null}
@@ -1130,7 +1139,7 @@ export function EditorShell({
           }}
           style={topBarButtonStyle(tokens, { disabled: !canUndo })}
         >
-          撤销
+          <IconLabel icon="rotate-left">撤销</IconLabel>
         </button>
         <button
           type="button"
@@ -1142,16 +1151,18 @@ export function EditorShell({
           }}
           style={topBarButtonStyle(tokens, { disabled: !canRedo })}
         >
-          重做
+          <IconLabel icon="rotate-right">重做</IconLabel>
         </button>
 
         <button
           type="button"
           data-testid="editor-mode-toggle"
-          onClick={() => onSetEditMode(false)}
+          onClick={() =>
+            onSetEditMode(false, { sceneId: selectedSceneId })
+          }
           style={topBarButtonStyle(tokens, { variant: "primary" })}
         >
-          运行预览
+          <IconLabel icon="play">运行预览</IconLabel>
         </button>
 
         <div style={{ flex: 1 }} />

@@ -154,7 +154,7 @@ export function InventoryQuickbar({
    * 共享布局解析：与 backpack-shell / 编辑器画布同源，避免定位漂移。
    */
   const layout = useMemo(() => resolveHudLayout(hud), [hud]);
-  const openBagLabel = layout.openBagStyle.label || "打开背包";
+  const openBagLabel = layout.openBagStyle.label?.trim() ?? "";
 
   /**
    * HUD 强调色：作者配置优先，空串回退主题 accent。

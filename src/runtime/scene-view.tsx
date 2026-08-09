@@ -2,10 +2,12 @@
  * scene-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.2.1
  *
  * 运行时场景视图：底图 + 可见交互点 + toast 层（设计分辨率 letterbox）。
  * 0.1.1：空态与有场景共用同一 host，避免尺寸观测失效导致画面贴边。
+ * 0.2.0：切换场景分层过渡——离开：交互点 → 底图；进入：底图 → 交互点。
+ * 0.2.1：letterbox 解析改用 domain/letterbox.resolveLetterboxColor（支持透明）。
  */
 
 import React, {
@@ -16,6 +18,7 @@ import React, {
   useState,
 } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
+import { resolveLetterboxColor } from "../domain/letterbox";
 import { isHotspotVisible } from "../domain/progress";
 import type {
   HotspotElement,
@@ -30,6 +33,12 @@ import { buildSceneLayout } from "../shared/scene-layout";
 import { useTheme } from "../theme/theme-provider";
 import { HotspotView } from "./hotspot-view";
 import { ToastLayer } from "./toast-layer";
+
+/** 交互点淡入/淡出时长（毫秒）— 方案 A */
+const HOTSPOT_FADE_MS = 150;
+
+/** 底图淡入/淡出时长（毫秒）— 方案 A */
+const BASE_FADE_MS = 200;
 
 /**
  * SceneView 组件属性。
@@ -83,27 +92,54 @@ export interface SceneViewProps {
 }
 
 /**
- * 根据 letterbox 字段解析画幅底色。
+ * 可取消的延时。
  *
- * @param scene - 场景定义
- * @returns CSS 颜色
+ * @param ms - 毫秒
+ * @param isCancelled - 返回 true 时提前结束（不抛错）
+ * @returns Promise&lt;void&gt;
  */
-function resolveLetterboxColor(scene: SceneDefinition): string {
-  const mode = scene.letterboxMode ?? "black";
+function waitMs(
+  ms: number,
+  isCancelled: () => boolean,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const id = window.setTimeout(() => {
+      resolve();
+    }, ms);
 
-  if (mode === "white") {
-    return "#FFFFFF";
-  }
-
-  if (mode === "custom" && scene.letterboxColor) {
-    return scene.letterboxColor;
-  }
-
-  return "#141418";
+    if (isCancelled()) {
+      window.clearTimeout(id);
+      resolve();
+    }
+  });
 }
 
 /**
- * 运行时场景视图：渲染底图、可见 hotspot、toast。
+ * 比较两个场景是否视为「同一展示目标」（仅比 id；皆 null 视为相同）。
+ *
+ * @param a - 场景 A
+ * @param b - 场景 B
+ * @returns 是否同一 id
+ */
+function sameSceneId(
+  a: SceneDefinition | null,
+  b: SceneDefinition | null,
+): boolean {
+  if (a === null && b === null) {
+    return true;
+  }
+
+  if (a === null || b === null) {
+    return false;
+  }
+
+  return a.id === b.id;
+}
+
+/**
+ * 运行时场景视图：渲染底图、可见 hotspot、toast；切换时分层淡入淡出。
+ *
+ * 离开：交互点 150ms → 底图 200ms；进入：底图 200ms → 交互点 150ms。
  *
  * @param props - SceneViewProps
  * @returns 场景舞台
@@ -138,11 +174,29 @@ export function SceneView({
   const [hostSize, setHostSize] = useState({ width: 800, height: 600 });
   const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
 
+  /**
+   * 当前实际绘制的场景（过渡中仍为旧场景，直到淡出完成再切换）。
+   */
+  const [displayScene, setDisplayScene] = useState<SceneDefinition | null>(
+    scene,
+  );
+
+  const [baseOpacity, setBaseOpacity] = useState(1);
+  const [hotspotOpacity, setHotspotOpacity] = useState(1);
+
+  /** 过渡中禁止点击交互点 */
+  const [transitioning, setTransitioning] = useState(false);
+
+  const bootstrappedRef = useRef(false);
+  const displaySceneRef = useRef(displayScene);
+
+  displaySceneRef.current = displayScene;
+
   const imageUrl = useMemo(() => {
-    const raw = scene?.baseImage ?? "";
+    const raw = displayScene?.baseImage ?? "";
 
     return resolveAssetUrl(raw, ctx.asset?.resolve?.bind(ctx.asset));
-  }, [scene?.baseImage, ctx.asset]);
+  }, [displayScene?.baseImage, ctx.asset]);
 
   /**
    * @param uri - 资源 URI
@@ -181,9 +235,6 @@ export function SceneView({
 
   /**
    * 测量运行时宿主尺寸。
-   *
-   * 外层 host 在空态/有场景时保持同一节点，避免 null→scene 切换后
-   * ResizeObserver 仍挂在已卸载 DOM 上、letterbox 无法按真实视口居中。
    *
    * @returns 清理函数
    */
@@ -231,21 +282,127 @@ export function SceneView({
     return () => ro.disconnect();
   }, []);
 
+  /**
+   * 场景 id 变化时跑分层过渡；首次挂载直接显示、不淡出。
+   */
+  useEffect(() => {
+    const from = displaySceneRef.current;
+    const to = scene;
+
+    // 首次 effect：仅标记已引导；初始 useState 已用 scene，无需再播过渡
+    if (!bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+
+      if (sameSceneId(from, to)) {
+        if (to !== null) {
+          setDisplayScene(to);
+        }
+
+        return;
+      }
+
+      // 极端：首帧 props 已与 initial state 不同，仍走完整过渡
+    }
+
+    if (sameSceneId(from, to)) {
+      // 同 id 时同步最新定义（热更新属性），不打断过渡
+      if (to !== null) {
+        setDisplayScene(to);
+      }
+
+      return;
+    }
+
+    let cancelled = false;
+
+    /**
+     * @returns 是否已取消
+     */
+    const isCancelled = (): boolean => cancelled;
+
+    setTransitioning(true);
+
+    void (async () => {
+      // —— 离开：交互点先消失 ——
+      if (from !== null) {
+        setHotspotOpacity(0);
+        await waitMs(HOTSPOT_FADE_MS, isCancelled);
+
+        if (cancelled) {
+          return;
+        }
+
+        // —— 离开：底图再消失 ——
+        setBaseOpacity(0);
+        await waitMs(BASE_FADE_MS, isCancelled);
+
+        if (cancelled) {
+          return;
+        }
+      }
+
+      // —— 切换绘制目标 ——
+      setDisplayScene(to);
+      setHotspotOpacity(0);
+      setBaseOpacity(0);
+
+      // 等一帧让底图 URL / 布局落地
+      await waitMs(16, isCancelled);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (to === null) {
+        setTransitioning(false);
+
+        return;
+      }
+
+      // —— 进入：底图先出现 ——
+      setBaseOpacity(1);
+      await waitMs(BASE_FADE_MS, isCancelled);
+
+      if (cancelled) {
+        return;
+      }
+
+      // —— 进入：交互点再出现 ——
+      setHotspotOpacity(1);
+      await waitMs(HOTSPOT_FADE_MS, isCancelled);
+
+      if (cancelled) {
+        return;
+      }
+
+      setTransitioning(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scene === null ? null : scene.id]);
+
   const visibleHotspots = useMemo(() => {
-    if (scene === null) {
+    if (displayScene === null) {
       return [];
     }
 
-    return scene.hotspots.filter((hs) => isHotspotVisible(hs, progress));
-  }, [scene, progress]);
+    return displayScene.hotspots.filter((hs) =>
+      isHotspotVisible(hs, progress),
+    );
+  }, [displayScene, progress]);
 
   const letterbox =
-    scene !== null ? resolveLetterboxColor(scene) : tokens.bgSunken;
+    displayScene !== null
+      ? resolveLetterboxColor(displayScene)
+      : tokens.bgSunken;
 
   return (
     <div
       ref={rootRef}
       data-testid="runtime-scene-view"
+      data-scene-transitioning={transitioning ? "true" : "false"}
       style={{
         width: "100%",
         height: "100%",
@@ -254,7 +411,7 @@ export function SceneView({
         background: letterbox,
       }}
     >
-      {scene === null ? (
+      {displayScene === null ? (
         <div
           data-testid="runtime-scene-view-empty"
           style={{
@@ -275,6 +432,8 @@ export function SceneView({
           layout={layout}
           imageUrl={imageUrl}
           frameBackground={letterbox}
+          baseImageOpacity={baseOpacity}
+          baseImageTransitionMs={BASE_FADE_MS}
           onImageNaturalSize={(w, h) => {
             setImageNatural({ width: w, height: h });
           }}
@@ -288,6 +447,8 @@ export function SceneView({
               position: "absolute",
               inset: 0,
               pointerEvents: "none",
+              opacity: hotspotOpacity,
+              transition: `opacity ${HOTSPOT_FADE_MS}ms ease`,
             }}
           >
             {visibleHotspots.map((hs) => (
@@ -296,7 +457,13 @@ export function SceneView({
                 hotspot={hs}
                 contentRect={layout.contentRect}
                 resolveUrl={resolveUrl}
-                onActivate={onHotspotActivate}
+                onActivate={
+                  transitioning || hotspotOpacity < 0.99
+                    ? () => {
+                        /* 过渡中忽略点击 */
+                      }
+                    : onHotspotActivate
+                }
                 globalHoverShadow={globalHoverShadow}
               />
             ))}
@@ -305,7 +472,7 @@ export function SceneView({
           <ToastLayer
             queue={toastQueue}
             onAdvance={onToastAdvance}
-            hotspots={scene.hotspots}
+            hotspots={displayScene.hotspots}
             contentRect={layout.contentRect}
             resolveText={resolveToastText}
           />

@@ -2,12 +2,13 @@
  * align-toolbar.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
  * 多选显式对齐工具条（左/右/顶/底/水平居中/垂直居中）。
  */
 
 import React from "react";
+import { FaIcon } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   useTheme,
@@ -30,13 +31,13 @@ export interface AlignToolbarProps {
   selectedCount: number;
 }
 
-const MODES: Array<{ mode: AlignMode; label: string }> = [
-  { mode: "left", label: "左对齐" },
-  { mode: "right", label: "右对齐" },
-  { mode: "top", label: "顶对齐" },
-  { mode: "bottom", label: "底对齐" },
-  { mode: "centerX", label: "水平居中" },
-  { mode: "centerY", label: "垂直居中" },
+const MODES: Array<{ mode: AlignMode; label: string; icon: string }> = [
+  { mode: "left", label: "左对齐", icon: "align-left" },
+  { mode: "right", label: "右对齐", icon: "align-right" },
+  { mode: "top", label: "顶对齐", icon: "arrow-up" },
+  { mode: "bottom", label: "底对齐", icon: "arrow-down" },
+  { mode: "centerX", label: "水平居中", icon: "arrows-left-right" },
+  { mode: "centerY", label: "垂直居中", icon: "arrows-up-down" },
 ];
 
 /**
@@ -58,6 +59,9 @@ function btnStyle(
     fontFamily: "inherit",
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.45 : 1,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -104,16 +108,18 @@ export function AlignToolbar({
           gap: 6,
         }}
       >
-        {MODES.map(({ mode, label }) => (
+        {MODES.map(({ mode, label, icon }) => (
           <button
             key={mode}
             type="button"
             data-testid={`align-${mode}`}
             disabled={disabled}
             onClick={() => onAlign(mode)}
+            title={label}
             style={btnStyle(tokens, disabled)}
           >
-            {label}
+            <FaIcon name={icon} css={{ fontSize: 12 }} />
+            <span>{label}</span>
           </button>
         ))}
       </div>

@@ -2,10 +2,11 @@
  * recipe-property-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.1
  *
  * 配方编辑器右栏：名称 / 描述 + 原料 / 产物行编辑（select 物品 + count）。
  * 不依赖独立 recipe-schema；列表 UI 直接写在本面板。
+ * count 使用 DeferredNumberInput，失焦后再 normalizeCount。
  */
 
 import React, { useCallback } from "react";
@@ -14,6 +15,8 @@ import type {
   RecipeDefinition,
   RecipeItemAmount,
 } from "../../domain/types";
+import { DeferredNumberInput } from "../../schema/deferred-number-input";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -101,6 +104,9 @@ function smallButtonStyle(
     fontWeight: 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -329,7 +335,7 @@ export function RecipePropertyPanel({
             onClick={() => addLine(key)}
             style={smallButtonStyle(tokens)}
           >
-            添加
+            <IconLabel icon="plus">添加</IconLabel>
           </button>
         </div>
 
@@ -381,15 +387,16 @@ export function RecipePropertyPanel({
                   </option>
                 ))}
               </select>
-              <input
-                data-testid={`${testIdPrefix}-count-${index}`}
-                type="number"
+              <DeferredNumberInput
+                testId={`${testIdPrefix}-count-${index}`}
+                value={line.count}
                 min={1}
                 step={1}
-                value={line.count}
-                onChange={(e) =>
+                fallback={1}
+                ariaLabel={`${title}第 ${index + 1} 行数量`}
+                onCommit={(n) =>
                   updateLine(key, index, {
-                    count: Number(e.target.value),
+                    count: n ?? 1,
                   })
                 }
                 style={{
@@ -405,7 +412,7 @@ export function RecipePropertyPanel({
                 onClick={() => removeLine(key, index)}
                 style={smallButtonStyle(tokens, { danger: true })}
               >
-                删
+                <IconLabel icon="trash" />
               </button>
             </div>
           ))

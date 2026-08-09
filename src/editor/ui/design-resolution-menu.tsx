@@ -2,9 +2,10 @@
  * design-resolution-menu.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 编辑器顶栏：设计分辨率下拉（预设 + 自定义弹窗）。
+ * 自定义宽高草稿不挂 HTML min/max，保存时再 normalizeDesignSize。
  */
 
 import React, { useEffect, useId, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import {
   normalizeDesignSize,
   type DesignSize,
 } from "../../domain/design-resolution";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   useTheme,
@@ -124,8 +126,8 @@ export function DesignResolutionMenu({
         onClick={() => setOpen((v) => !v)}
         style={buttonStyle}
       >
-        {formatDesignSizeLabel(size)}
-        <span style={{ opacity: 0.7, fontSize: 10 }}>▼</span>
+        <IconLabel icon="display">{formatDesignSizeLabel(size)}</IconLabel>
+        <IconLabel icon="chevron-down" iconSize={10} />
       </button>
 
       {open ? (
@@ -208,7 +210,7 @@ export function DesignResolutionMenu({
               fontWeight: 600,
             }}
           >
-            自定义…
+            <IconLabel icon="sliders">自定义…</IconLabel>
           </button>
         </div>
       ) : null}
@@ -257,8 +259,6 @@ export function DesignResolutionMenu({
                 <input
                   data-testid="design-resolution-custom-width"
                   type="number"
-                  min={DESIGN_SIZE_MIN}
-                  max={DESIGN_SIZE_MAX}
                   value={draftW}
                   onChange={(e) => setDraftW(e.target.value)}
                   style={{
@@ -280,8 +280,6 @@ export function DesignResolutionMenu({
                 <input
                   data-testid="design-resolution-custom-height"
                   type="number"
-                  min={DESIGN_SIZE_MIN}
-                  max={DESIGN_SIZE_MAX}
                   value={draftH}
                   onChange={(e) => setDraftH(e.target.value)}
                   style={{

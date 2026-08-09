@@ -1,14 +1,32 @@
 /**
  * node-list.tsx
  * 作者: 池水三两升
- * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 日期: 2026-08-09
+ * 版本: 0.4.0
  *
- * 自由布局编辑器节点侧栏：展示固定角色节点列表。
- * 单击替换选中；Shift+单击切换多选。
+ * 自由布局编辑器节点侧栏：
+ * - 单击替换选中；Shift+单击切换多选
+ * - 使用 @dnd-kit 拖拽排序（固定节点与图层均可拖）
  */
 
-import React from "react";
+import React, { useMemo, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { FaIcon } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -20,11 +38,14 @@ import type { ThemeTokens } from "../../theme/tokens";
  * 节点列表单项。
  */
 export interface NodeListItem {
-  /** 节点 id（如 quickbarRoot、panelChrome） */
+  /** 节点 id（如 quickbarRoot、overlay:xxx） */
   id: string;
 
   /** 侧栏展示文案 */
   label: string;
+
+  /** 可选 Font Awesome 图标名（不含 fa-） */
+  icon?: string;
 }
 
 /**
@@ -44,7 +65,6 @@ export interface NodeListProps {
 
   /**
    * 当前选中节点 id 列表（多选）。
-   * 为兼容旧调用，也可只传一项。
    */
   selectedIds: readonly string[];
 
@@ -55,18 +75,25 @@ export interface NodeListProps {
    * @param modifiers - 修饰键（Shift = 切换）
    */
   onSelect: (id: string, modifiers: NodeSelectModifiers) => void;
+
+  /**
+   * 拖拽排序完成：传入重排后的完整 id 列表。
+   * 未传则不启用拖拽。
+   *
+   * @param orderedIds - 新顺序
+   */
+  onReorder?: (orderedIds: readonly string[]) => void;
 }
 
 /**
- * 列表行样式。
- *
- * @param tokens - 主题 token
+ * @param tokens - 主题
  * @param selected - 是否选中
- * @returns CSSProperties
+ * @param dragging - 是否正在拖
  */
 function rowStyle(
   tokens: ThemeTokens,
   selected: boolean,
+  dragging: boolean,
 ): React.CSSProperties {
   return {
     display: "flex",
@@ -77,40 +104,189 @@ function rowStyle(
     border: `1px solid ${selected ? tokens.accent : "transparent"}`,
     background: selected ? `${tokens.accent}18` : "transparent",
     color: tokens.textPrimary,
-    cursor: "pointer",
+    cursor: "grab",
     fontSize: FONT_SIZE_DEFAULT,
     textAlign: "left",
     width: "100%",
     boxSizing: "border-box",
+    opacity: dragging ? 0.55 : 1,
+    userSelect: "none",
+    touchAction: "none",
   };
 }
 
 /**
- * 节点列表侧栏。
+ * 可排序行。
+ */
+function SortableRow({
+  item,
+  selected,
+  canReorder,
+  onSelect,
+}: {
+  item: NodeListItem;
+  selected: boolean;
+  canReorder: boolean;
+  onSelect: (id: string, modifiers: NodeSelectModifiers) => void;
+}): React.ReactElement {
+  const { tokens } = useTheme();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id, disabled: !canReorder });
+
+  const style: React.CSSProperties = {
+    ...rowStyle(tokens, selected, isDragging),
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 2 : undefined,
+    position: "relative",
+  };
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      data-testid={`node-list-item-${item.id}`}
+      aria-selected={selected}
+      style={style}
+      onClick={(event) => {
+        if (isDragging) {
+          return;
+        }
+
+        onSelect(item.id, { shiftKey: event.shiftKey });
+      }}
+      {...(canReorder ? { ...attributes, ...listeners } : {})}
+    >
+      {canReorder ? (
+        <FaIcon
+          name="grip-vertical"
+          css={{
+            fontSize: 11,
+            width: 12,
+            color: tokens.textMuted,
+            flexShrink: 0,
+            opacity: 0.75,
+          }}
+        />
+      ) : (
+        <span style={{ width: 12, flexShrink: 0, display: "inline-block" }} />
+      )}
+      {item.icon ? (
+        <FaIcon
+          name={item.icon}
+          css={{
+            fontSize: 12,
+            width: 14,
+            color: selected ? tokens.accent : tokens.textMuted,
+            flexShrink: 0,
+          }}
+        />
+      ) : null}
+      <span
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {item.label}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * 节点列表侧栏（@dnd-kit 排序）。
  *
  * @param props - NodeListProps
  * @returns 节点列表 UI
- *
- * @example
- * ```tsx
- * <NodeList
- *   items={[{ id: "quickbarRoot", label: "快捷栏" }]}
- *   selectedIds={["quickbarRoot"]}
- *   onSelect={(id, { shiftKey }) => ...}
- * />
- * ```
  */
 export function NodeList({
   items,
   selectedIds,
   onSelect,
+  onReorder,
 }: NodeListProps): React.ReactElement {
   const { tokens } = useTheme();
   const selectedSet = new Set(selectedIds);
+  const canReorder = typeof onReorder === "function";
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const ids = useMemo(() => items.map((item) => item.id), [items]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
+
+  const handleDragStart = (event: DragStartEvent): void => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent): void => {
+    setActiveId(null);
+
+    if (!onReorder) {
+      return;
+    }
+
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+
+    if (from < 0 || to < 0) {
+      return;
+    }
+
+    onReorder(arrayMove(ids, from, to));
+  };
+
+  const handleDragCancel = (): void => {
+    setActiveId(null);
+  };
+
+  const listBody =
+    items.length === 0 ? (
+      <div
+        data-testid="node-list-empty"
+        style={{
+          padding: 16,
+          color: tokens.textMuted,
+          fontSize: FONT_SIZE_DEFAULT,
+          textAlign: "center",
+        }}
+      >
+        暂无节点
+      </div>
+    ) : (
+      items.map((item) => (
+        <SortableRow
+          key={item.id}
+          item={item}
+          selected={selectedSet.has(item.id)}
+          canReorder={canReorder}
+          onSelect={onSelect}
+        />
+      ))
+    );
 
   return (
     <div
       data-testid="node-list"
+      data-dragging={activeId ? "true" : "false"}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -139,9 +315,10 @@ export function NodeList({
           fontSize: 11,
           color: tokens.textMuted,
           flexShrink: 0,
+          lineHeight: 1.4,
         }}
       >
-        Shift+单击多选
+        {canReorder ? "拖拽排序叠放；Shift+单击多选" : "Shift+单击多选"}
       </div>
 
       <div
@@ -155,46 +332,20 @@ export function NodeList({
           gap: 4,
         }}
       >
-        {items.length === 0 ? (
-          <div
-            data-testid="node-list-empty"
-            style={{
-              padding: 16,
-              color: tokens.textMuted,
-              fontSize: FONT_SIZE_DEFAULT,
-              textAlign: "center",
-            }}
+        {canReorder ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
-            暂无节点
-          </div>
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              {listBody}
+            </SortableContext>
+          </DndContext>
         ) : (
-          items.map((item) => {
-            const selected = selectedSet.has(item.id);
-
-            return (
-              <button
-                key={item.id}
-                type="button"
-                data-testid={`node-list-item-${item.id}`}
-                aria-selected={selected}
-                onClick={(e) => {
-                  onSelect(item.id, { shiftKey: e.shiftKey });
-                }}
-                style={rowStyle(tokens, selected)}
-              >
-                <span
-                  style={{
-                    flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })
+          listBody
         )}
       </div>
     </div>

@@ -2,10 +2,12 @@
  * form-renderer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.1.3
  *
  * Schema 驱动受控属性表单渲染器（精简版）。
  * 支持 string / number / boolean / enum / asset / color 叶子，以及 section / grid 布局。
+ * color 字段走自定义 ColorPicker，非原生 input[type=color]。
+ * number：聚焦期间用草稿字符串，失焦后再按 min/max 钳制提交，避免输入「300」时「3」被钳回 min。
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -17,7 +19,7 @@ import {
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
-import { normalizeHexColor, toColorInputValue } from "./color-utils";
+import { ColorPicker } from "./color-picker";
 import {
   getNestedValue,
   isLayoutField,
@@ -192,6 +194,129 @@ function renderStringField<T extends Record<string, unknown>>(
 }
 
 /**
+ * 将草稿文本解析为有限数，并按字段 min/max 钳制。
+ *
+ * @param draft - 输入框草稿（可为空、中间态）
+ * @param field - number 字段 schema（读取 min/max）
+ * @param fallback - 草稿非法时的回退值
+ * @returns 钳制后的有限数
+ *
+ * @example
+ * ```ts
+ * clampNumberFieldValue("3", { min: 120, max: 420 }, 280); // 聚焦中不调用；失焦时 → 120
+ * clampNumberFieldValue("300", { min: 120, max: 420 }, 280); // → 300
+ * ```
+ *
+ * @remarks
+ * 本函数不抛异常；非法草稿回退 `fallback` 再钳制。
+ */
+export function clampNumberFieldValue(
+  draft: string,
+  field: Pick<NumberFieldSchema, "min" | "max">,
+  fallback: number,
+): number {
+  const trimmed = draft.trim();
+  let next =
+    trimmed.length === 0 ? fallback : Number(trimmed);
+
+  if (!Number.isFinite(next)) {
+    next = fallback;
+  }
+
+  if (field.min !== undefined && Number.isFinite(field.min)) {
+    next = Math.max(field.min, next);
+  }
+
+  if (field.max !== undefined && Number.isFinite(field.max)) {
+    next = Math.min(field.max, next);
+  }
+
+  return next;
+}
+
+/**
+ * number 字段内部控件：聚焦用草稿，失焦再提交钳制结果。
+ *
+ * @template T - 被编辑对象类型
+ * @param props.field - NumberFieldSchema
+ * @param props.value - 当前对象
+ * @param props.onChange - 变更回调
+ * @param props.tokens - 主题
+ * @returns 控件节点
+ */
+function SchemaNumberField<T extends Record<string, unknown>>(props: {
+  field: NumberFieldSchema;
+  value: T;
+  onChange: FormOnChange<T>;
+  tokens: ThemeTokens;
+}): React.ReactElement {
+  const { field, value, onChange, tokens } = props;
+  const raw = getNestedValue(value, field.key);
+  const committed =
+    typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+  const id = `field-${field.key}`;
+
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(String(committed));
+
+  /**
+   * 外部值变化且未聚焦时，同步草稿（避免画布/重置改值后输入框陈旧）。
+   */
+  useEffect(() => {
+    if (!focused) {
+      setDraft(String(committed));
+    }
+  }, [committed, focused]);
+
+  /**
+   * 失焦或 Enter：解析草稿、钳制并写回父级。
+   */
+  const commitDraft = (): void => {
+    const next = clampNumberFieldValue(draft, field, committed);
+
+    setFocused(false);
+    setDraft(String(next));
+
+    if (next !== committed) {
+      onChange(setNestedValue(value, field.key, next));
+    }
+  };
+
+  return (
+    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
+      <input
+        id={id}
+        type="number"
+        value={focused ? draft : String(committed)}
+        step={field.step ?? 1}
+        style={inputStyle(tokens)}
+        onFocus={() => {
+          setFocused(true);
+          setDraft(String(committed));
+        }}
+        onChange={(e) => {
+          /**
+           * 聚焦期间只改草稿，不立刻 onChange：
+           * 父级 normalize 会按 min 钳制，「3」会被打回 120。
+           */
+          setDraft(e.target.value);
+        }}
+        onBlur={() => {
+          commitDraft();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+        }}
+      />
+      <FieldHint text={field.description} tokens={tokens} />
+    </div>
+  );
+}
+
+/**
  * 渲染 number 字段。
  *
  * @param field - NumberFieldSchema
@@ -206,35 +331,13 @@ function renderNumberField<T extends Record<string, unknown>>(
   onChange: FormOnChange<T>,
   tokens: ThemeTokens,
 ): React.ReactElement {
-  const raw = getNestedValue(value, field.key);
-  const num = typeof raw === "number" && Number.isFinite(raw) ? raw : "";
-  const id = `field-${field.key}`;
-
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
-      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <input
-        id={id}
-        type="number"
-        value={num}
-        min={field.min}
-        max={field.max}
-        step={field.step ?? 1}
-        style={inputStyle(tokens)}
-        onChange={(e) => {
-          const next = e.target.valueAsNumber;
-
-          onChange(
-            setNestedValue(
-              value,
-              field.key,
-              Number.isFinite(next) ? next : 0,
-            ),
-          );
-        }}
-      />
-      <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    <SchemaNumberField
+      field={field}
+      value={value}
+      onChange={onChange}
+      tokens={tokens}
+    />
   );
 }
 
@@ -416,125 +519,7 @@ function renderAssetField<T extends Record<string, unknown>>(
 }
 
 /**
- * 颜色字段控件属性（对齐大地图系统 ColorField）。
- *
- * @template T - 被编辑对象类型
- */
-interface ColorFieldControlProps<T extends Record<string, unknown>> {
-  field: ColorFieldSchema;
-  value: T;
-  onChange: FormOnChange<T>;
-  tokens: ThemeTokens;
-}
-
-/**
- * 颜色叶子控件：原生色板 + HEX 文本旁路。
- * 色板即时写入；文本失焦时经 `normalizeHexColor` 校验，非法不写入。
- *
- * @param props - 字段、领域对象、变更回调与主题
- * @returns 颜色选择器节点
- *
- * @example
- * ```tsx
- * <ColorFieldControl
- *   field={{ kind: "color", key: "accent", label: "强调色" }}
- *   value={cfg}
- *   onChange={setCfg}
- *   tokens={tokens}
- * />
- * ```
- */
-function ColorFieldControl<T extends Record<string, unknown>>({
-  field,
-  value,
-  onChange,
-  tokens,
-}: ColorFieldControlProps<T>): React.ReactElement {
-  const raw = getNestedValue(value, field.key);
-  const stored = typeof raw === "string" ? raw : "";
-  const [hexDraft, setHexDraft] = useState(stored);
-  const id = `field-${field.key}`;
-  const fallback =
-    typeof field.placeholder === "string" && field.placeholder.trim() !== ""
-      ? field.placeholder
-      : "#64e0d0";
-
-  /**
-   * 外部 value 变化时同步草稿（切换选中 / 撤销等）。
-   */
-  useEffect(() => {
-    setHexDraft(stored);
-  }, [stored]);
-
-  /**
-   * 色板即时写入（始终为合法 #RRGGBB）。
-   *
-   * @param next - input[type=color] 的 value
-   */
-  const handleColorPick = (next: string): void => {
-    setHexDraft(next);
-    onChange(setNestedValue(value, field.key, next));
-  };
-
-  /**
-   * HEX 失焦：规范化后写入；非法则回退显示为当前存储值。
-   */
-  const handleHexBlur = (): void => {
-    const normalized = normalizeHexColor(hexDraft);
-
-    if (normalized === null) {
-      setHexDraft(stored);
-      return;
-    }
-
-    setHexDraft(normalized);
-    onChange(setNestedValue(value, field.key, normalized));
-  };
-
-  return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
-      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
-          id={`${id}-swatch`}
-          type="color"
-          aria-label={`${field.label} 色板`}
-          value={toColorInputValue(hexDraft || stored, fallback)}
-          onChange={(e) => handleColorPick(e.target.value)}
-          style={{
-            width: 40,
-            height: 34,
-            padding: 2,
-            borderRadius: 6,
-            border: `1px solid ${tokens.border}`,
-            background: tokens.bgSunken,
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-        />
-        <input
-          id={id}
-          type="text"
-          value={hexDraft}
-          placeholder={field.placeholder ?? "#RRGGBB"}
-          spellCheck={false}
-          style={{ ...inputStyle(tokens), flex: 1 }}
-          onChange={(e) => setHexDraft(e.target.value)}
-          onBlur={handleHexBlur}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              (e.target as HTMLInputElement).blur();
-            }
-          }}
-        />
-      </div>
-      <FieldHint text={field.description} tokens={tokens} />
-    </div>
-  );
-}
-
-/**
- * 渲染 color 字段（委托 ColorFieldControl，对齐大地图系统）。
+ * 渲染 color 字段（自定义 ColorPicker：SV / 色相 / Alpha / HEX·RGB·HSL）。
  *
  * @param field - ColorFieldSchema
  * @param value - 当前对象
@@ -548,13 +533,24 @@ function renderColorField<T extends Record<string, unknown>>(
   onChange: FormOnChange<T>,
   tokens: ThemeTokens,
 ): React.ReactElement {
+  const raw = getNestedValue(value, field.key);
+  const stored = typeof raw === "string" ? raw : "";
+
   return (
-    <ColorFieldControl
-      field={field}
-      value={value}
-      onChange={onChange}
-      tokens={tokens}
-    />
+    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+      <FieldLabel label={field.label} tokens={tokens} htmlFor={`field-${field.key}`} />
+      <ColorPicker
+        value={stored}
+        allowAlpha={field.allowAlpha === true}
+        placeholder={field.placeholder}
+        tokens={tokens}
+        ariaLabel={field.label}
+        onChange={(css) => {
+          onChange(setNestedValue(value, field.key, css));
+        }}
+      />
+      <FieldHint text={field.description} tokens={tokens} />
+    </div>
   );
 }
 

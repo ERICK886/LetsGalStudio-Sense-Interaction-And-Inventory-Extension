@@ -2,10 +2,11 @@
  * types.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * Schema 驱动属性表单的精简字段类型定义。
  * 支持叶子字段（string / number / boolean / enum / asset / color）与布局节点（section / grid）。
+ * ColorFieldSchema 支持 allowAlpha 控制是否允许编辑透明度（Task 1）。
  */
 
 /**
@@ -88,13 +89,19 @@ export interface AssetFieldSchema extends FieldSchemaBase {
 }
 
 /**
- * 颜色字段；值为 `#RRGGBB` 等十六进制字符串。
+ * 颜色字段；值为 `#RRGGBB` 或（allowAlpha 为 true 时）`#RRGGBBAA` 十六进制字符串。
  */
 export interface ColorFieldSchema extends FieldSchemaBase {
   kind: "color";
 
   /** 文本输入框占位符 */
   placeholder?: string;
+
+  /**
+   * 是否允许编辑透明度；默认 false。
+   * true 时 FormRenderer / ColorPicker 可输出带 Alpha 通道的八位 HEX。
+   */
+  allowAlpha?: boolean;
 }
 
 /**
@@ -188,12 +195,19 @@ export function getNestedValue(
   let current: unknown = obj;
 
   for (const segment of segments) {
-    if (
-      current === null ||
-      typeof current !== "object" ||
-      Array.isArray(current)
-    ) {
+    if (current === null || typeof current !== "object") {
       return undefined;
+    }
+
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+        return undefined;
+      }
+
+      current = current[index];
+      continue;
     }
 
     current = (current as Record<string, unknown>)[segment];
@@ -223,30 +237,65 @@ export function setNestedValue<T extends Record<string, unknown>>(
   value: unknown,
 ): T {
   const segments = path.split(".");
-  const root = { ...obj } as Record<string, unknown>;
+  const isIndex = (segment: string): boolean => /^\d+$/.test(segment);
 
-  if (segments.length === 1) {
-    root[segments[0]!] = value;
+  const setAt = (current: unknown, depth: number): unknown => {
+    const key = segments[depth]!;
 
-    return root as T;
-  }
+    if (depth === segments.length - 1) {
+      if (Array.isArray(current)) {
+        const next = current.slice();
+        next[Number(key)] = value;
 
-  let cursor: Record<string, unknown> = root;
+        return next;
+      }
 
-  for (let i = 0; i < segments.length - 1; i++) {
-    const key = segments[i]!;
-    const next = cursor[key];
+      const next = {
+        ...((current !== null && typeof current === "object"
+          ? current
+          : {}) as Record<string, unknown>),
+      };
+      next[key] = value;
 
-    const cloned =
-      next !== null && typeof next === "object" && !Array.isArray(next)
-        ? { ...(next as Record<string, unknown>) }
-        : {};
+      return next;
+    }
 
-    cursor[key] = cloned;
-    cursor = cloned;
-  }
+    const childKey = segments[depth + 1]!;
 
-  cursor[segments[segments.length - 1]!] = value;
+    if (Array.isArray(current)) {
+      const index = Number(key);
+      const child = current[index];
+      const nextChild = setAt(
+        child !== undefined && child !== null
+          ? child
+          : isIndex(childKey)
+            ? []
+            : {},
+        depth + 1,
+      );
+      const next = current.slice();
+      next[index] = nextChild;
 
-  return root as T;
+      return next;
+    }
+
+    const objCur = (
+      current !== null && typeof current === "object"
+        ? current
+        : {}
+    ) as Record<string, unknown>;
+    const child = objCur[key];
+    const nextChild = setAt(
+      child !== undefined && child !== null
+        ? child
+        : isIndex(childKey)
+          ? []
+          : {},
+      depth + 1,
+    );
+
+    return { ...objCur, [key]: nextChild };
+  };
+
+  return setAt({ ...obj }, 0) as T;
 }

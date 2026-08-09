@@ -2,10 +2,11 @@
  * scene-base-layer.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * DOM 底图 + 设计画幅。children（hotspot overlay）渲染在同一 world
  * transform 内，与底图共用缩放/平移。
+ * 0.1.1：支持底图 opacity / transition（场景切换分层淡入淡出）。
  */
 
 import React, { useRef } from "react";
@@ -53,6 +54,21 @@ export interface SceneBaseLayerProps {
    * 缺省 `#141418`。
    */
   frameBackground?: string;
+
+  /**
+   * 底图（及无图占位）不透明度，0–1。
+   * 用于场景切换时「底图先于/后于交互点」淡入淡出；不影响 overlay children。
+   *
+   * @default 1
+   */
+  baseImageOpacity?: number;
+
+  /**
+   * 底图 opacity 过渡时长（毫秒）。
+   *
+   * @default 200
+   */
+  baseImageTransitionMs?: number;
 }
 
 /**
@@ -76,9 +92,17 @@ export function SceneBaseLayer({
   onBlankPointerDown,
   children,
   frameBackground = "#141418",
+  baseImageOpacity = 1,
+  baseImageTransitionMs = 200,
 }: SceneBaseLayerProps): React.ReactElement {
   const worldRef = useRef<HTMLDivElement>(null);
   const { world, designW, designH, contentRect } = layout;
+
+  const clampedOpacity = Math.min(1, Math.max(0, baseImageOpacity));
+  const transitionMs =
+    Number.isFinite(baseImageTransitionMs) && baseImageTransitionMs >= 0
+      ? baseImageTransitionMs
+      : 200;
 
   /**
    * 空白点击 → 设计画幅布局坐标。
@@ -168,6 +192,8 @@ export function SceneBaseLayer({
             height: contentRect.height,
             pointerEvents: "none",
             zIndex: 0,
+            opacity: clampedOpacity,
+            transition: `opacity ${transitionMs}ms ease`,
           }}
         >
           {imageUrl ? (
@@ -199,8 +225,15 @@ export function SceneBaseLayer({
                 width: "100%",
                 height: "100%",
                 boxSizing: "border-box",
-                background: "#1e1e26",
-                border: "1px solid rgba(60, 60, 72, 0.9)",
+                /**
+                 * 与 letterbox 同源，避免无底图时硬编码深色挡住透明底。
+                 */
+                background: frameBackground,
+                border:
+                  frameBackground === "transparent" ||
+                  frameBackground.startsWith("rgba(0, 0, 0, 0")
+                    ? "1px dashed rgba(120, 120, 140, 0.45)"
+                    : "1px solid rgba(60, 60, 72, 0.9)",
               }}
             />
           )}

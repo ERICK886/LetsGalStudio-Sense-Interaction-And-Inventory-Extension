@@ -2,10 +2,11 @@
  * action-list-field.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
  * 交互点动作列表编辑控件：增删改排序 SceneAction[]。
- * giveItem 支持物品、数量、提示文案，以及 Toast 位置/偏移/间距/样式/动画覆盖。
+ * 支持 openScene / giveItem / removeItem / 跳转片段 / continueStory。
+ * giveItem：Toast 外观覆盖；片段动作：从工程 story 选择片段（显示名称）。
  */
 
 import React, { useCallback } from "react";
@@ -18,13 +19,17 @@ import type {
   UiBoxStyle,
   UiTextStyle,
 } from "../domain/types";
+import { IconLabel } from "../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
   useTheme,
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
+import { ColorPicker } from "./color-picker";
+import { DeferredNumberInput } from "./deferred-number-input";
 import { FormRenderer } from "./form-renderer";
+import { FragmentSelectField } from "./fragment-select-field";
 import { motionSection } from "./motion-section";
 
 /**
@@ -56,6 +61,10 @@ const ACTION_TYPE_OPTIONS: ReadonlyArray<{
   { value: "none", label: "无" },
   { value: "openScene", label: "打开场景" },
   { value: "giveItem", label: "给予物品" },
+  { value: "removeItem", label: "扣除物品" },
+  { value: "jumpFragmentReturn", label: "跳转片段（可跳回）" },
+  { value: "jumpFragmentGoto", label: "跳转片段（不可跳回）" },
+  { value: "continueStory", label: "继续剧情" },
 ];
 
 /**
@@ -98,6 +107,22 @@ function createActionOfType(
         toastText: "",
         toastMotion: defaultElementMotion(),
       };
+
+    case "removeItem":
+      return {
+        type: "removeItem",
+        itemId: items[0]?.id ?? "",
+        amount: 1,
+      };
+
+    case "jumpFragmentReturn":
+      return { type: "jumpFragmentReturn", fragmentId: "" };
+
+    case "jumpFragmentGoto":
+      return { type: "jumpFragmentGoto", fragmentId: "" };
+
+    case "continueStory":
+      return { type: "continueStory" };
 
     default: {
       const _exhaustive: never = type;
@@ -228,6 +253,9 @@ function smallButtonStyle(
     fontFamily: "inherit",
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
   };
 }
 
@@ -396,7 +424,7 @@ function ActionCard({
           }}
           onClick={() => onMove(-1)}
         >
-          ↑
+          <IconLabel icon="arrow-up" iconSize={11} />
         </button>
         <button
           type="button"
@@ -408,7 +436,7 @@ function ActionCard({
           }}
           onClick={() => onMove(1)}
         >
-          ↓
+          <IconLabel icon="arrow-down" iconSize={11} />
         </button>
         <button
           type="button"
@@ -416,7 +444,7 @@ function ActionCard({
           style={smallButtonStyle(tokens, { danger: true })}
           onClick={onRemove}
         >
-          删
+          <IconLabel icon="trash" iconSize={11} />
         </button>
       </div>
 
@@ -563,17 +591,17 @@ function ActionCard({
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
-            <input
-              type="number"
+            <DeferredNumberInput
+              value={action.amount}
               min={1}
               step={1}
-              value={action.amount}
+              fallback={1}
               style={controlStyle(tokens)}
-              onChange={(e) => {
-                const n = e.target.valueAsNumber;
+              ariaLabel={`动作 ${index + 1} 数量`}
+              onCommit={(n) => {
                 onReplace({
                   ...action,
-                  amount: Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1,
+                  amount: n !== undefined ? Math.floor(n) : 1,
                 });
               }}
             />
@@ -634,15 +662,20 @@ function ActionCard({
               <span style={{ fontSize: 11, color: tokens.textMuted }}>
                 X 偏移
               </span>
-              <input
-                type="number"
-                step={1}
+              <DeferredNumberInput
                 value={action.toastOffsetX ?? ""}
+                step={1}
+                allowEmpty
                 placeholder="全局"
                 style={controlStyle(tokens)}
-                onChange={(e) => {
+                ariaLabel={`动作 ${index + 1} Toast X 偏移`}
+                onCommit={(n) => {
                   onReplace(
-                    updateToastNumber(action, "toastOffsetX", e.target.value),
+                    updateToastNumber(
+                      action,
+                      "toastOffsetX",
+                      n === undefined ? "" : String(n),
+                    ),
                   );
                 }}
               />
@@ -653,15 +686,20 @@ function ActionCard({
               <span style={{ fontSize: 11, color: tokens.textMuted }}>
                 Y 偏移
               </span>
-              <input
-                type="number"
-                step={1}
+              <DeferredNumberInput
                 value={action.toastOffsetY ?? ""}
+                step={1}
+                allowEmpty
                 placeholder="全局"
                 style={controlStyle(tokens)}
-                onChange={(e) => {
+                ariaLabel={`动作 ${index + 1} Toast Y 偏移`}
+                onCommit={(n) => {
                   onReplace(
-                    updateToastNumber(action, "toastOffsetY", e.target.value),
+                    updateToastNumber(
+                      action,
+                      "toastOffsetY",
+                      n === undefined ? "" : String(n),
+                    ),
                   );
                 }}
               />
@@ -672,16 +710,21 @@ function ActionCard({
               <span style={{ fontSize: 11, color: tokens.textMuted }}>
                 间距
               </span>
-              <input
-                type="number"
+              <DeferredNumberInput
+                value={action.toastGap ?? ""}
                 min={0}
                 step={1}
-                value={action.toastGap ?? ""}
+                allowEmpty
                 placeholder="全局"
                 style={controlStyle(tokens)}
-                onChange={(e) => {
+                ariaLabel={`动作 ${index + 1} Toast 间距`}
+                onCommit={(n) => {
                   onReplace(
-                    updateToastNumber(action, "toastGap", e.target.value),
+                    updateToastNumber(
+                      action,
+                      "toastGap",
+                      n === undefined ? "" : String(n),
+                    ),
                   );
                 }}
               />
@@ -721,14 +764,15 @@ function ActionCard({
                 <span style={{ fontSize: 11, color: tokens.textMuted }}>
                   文字色
                 </span>
-                <input
-                  type="text"
+                <ColorPicker
                   value={action.toastStyle?.color ?? ""}
+                  allowAlpha={false}
                   placeholder="#ffffff"
-                  style={controlStyle(tokens)}
-                  onChange={(e) => {
+                  tokens={tokens}
+                  ariaLabel={`动作 ${index + 1} Toast 文字色`}
+                  onChange={(css) => {
                     onReplace(
-                      updateToastStyle(action, "color", e.target.value || undefined),
+                      updateToastStyle(action, "color", css || undefined),
                     );
                   }}
                 />
@@ -761,22 +805,16 @@ function ActionCard({
                 <span style={{ fontSize: 11, color: tokens.textMuted }}>
                   字号
                 </span>
-                <input
-                  type="number"
+                <DeferredNumberInput
+                  value={action.toastStyle?.fontSize ?? ""}
                   min={8}
                   max={72}
                   step={1}
-                  value={action.toastStyle?.fontSize ?? ""}
+                  allowEmpty
                   style={controlStyle(tokens)}
-                  onChange={(e) => {
-                    const n = e.target.valueAsNumber;
-                    onReplace(
-                      updateToastStyle(
-                        action,
-                        "fontSize",
-                        Number.isFinite(n) ? n : undefined,
-                      ),
-                    );
+                  ariaLabel={`动作 ${index + 1} Toast 字号`}
+                  onCommit={(n) => {
+                    onReplace(updateToastStyle(action, "fontSize", n));
                   }}
                 />
               </label>
@@ -786,22 +824,16 @@ function ActionCard({
                 <span style={{ fontSize: 11, color: tokens.textMuted }}>
                   圆角
                 </span>
-                <input
-                  type="number"
+                <DeferredNumberInput
+                  value={action.toastStyle?.borderRadius ?? ""}
                   min={0}
                   max={48}
                   step={1}
-                  value={action.toastStyle?.borderRadius ?? ""}
+                  allowEmpty
                   style={controlStyle(tokens)}
-                  onChange={(e) => {
-                    const n = e.target.valueAsNumber;
-                    onReplace(
-                      updateToastStyle(
-                        action,
-                        "borderRadius",
-                        Number.isFinite(n) ? n : undefined,
-                      ),
-                    );
+                  ariaLabel={`动作 ${index + 1} Toast 圆角`}
+                  onCommit={(n) => {
+                    onReplace(updateToastStyle(action, "borderRadius", n));
                   }}
                 />
               </label>
@@ -811,22 +843,16 @@ function ActionCard({
                 <span style={{ fontSize: 11, color: tokens.textMuted }}>
                   阴影强度
                 </span>
-                <input
-                  type="number"
+                <DeferredNumberInput
+                  value={action.toastStyle?.shadow ?? ""}
                   min={0}
                   max={1}
                   step={0.05}
-                  value={action.toastStyle?.shadow ?? ""}
+                  allowEmpty
                   style={controlStyle(tokens)}
-                  onChange={(e) => {
-                    const n = e.target.valueAsNumber;
-                    onReplace(
-                      updateToastStyle(
-                        action,
-                        "shadow",
-                        Number.isFinite(n) ? n : undefined,
-                      ),
-                    );
+                  ariaLabel={`动作 ${index + 1} Toast 阴影`}
+                  onCommit={(n) => {
+                    onReplace(updateToastStyle(action, "shadow", n));
                   }}
                 />
               </label>
@@ -857,6 +883,104 @@ function ActionCard({
             />
           </div>
         </>
+      ) : null}
+
+      {action.type === "removeItem" ? (
+        <>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>物品</span>
+            <select
+              aria-label={`动作 ${index + 1} 扣除物品`}
+              data-testid={`action-remove-item-${index}`}
+              value={action.itemId}
+              style={controlStyle(tokens)}
+              onChange={(e) => {
+                onReplace({ ...action, itemId: e.target.value });
+              }}
+            >
+              {items.length === 0 ? (
+                <option value="">（物品库为空）</option>
+              ) : null}
+              {action.itemId &&
+              !items.some((it) => it.id === action.itemId) ? (
+                <option value={action.itemId}>
+                  {action.itemId}（缺失）
+                </option>
+              ) : null}
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>
+                  {it.name || it.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
+            <DeferredNumberInput
+              value={action.amount}
+              min={1}
+              step={1}
+              fallback={1}
+              style={controlStyle(tokens)}
+              ariaLabel={`动作 ${index + 1} 扣除数量`}
+              onCommit={(n) => {
+                onReplace({
+                  ...action,
+                  amount: n !== undefined ? Math.floor(n) : 1,
+                });
+              }}
+            />
+          </label>
+          <span style={{ fontSize: 11, color: tokens.textMuted }}>
+            持有不足时中心提示「物品不足」，并中断后续动作。
+          </span>
+        </>
+      ) : null}
+
+      {action.type === "continueStory" ? (
+        <span style={{ fontSize: 11, color: tokens.textMuted }}>
+          关闭场景交互并解除「打开场景交互」阻塞，剧本从下一节点继续。
+        </span>
+      ) : null}
+
+      {action.type === "jumpFragmentReturn" ||
+      action.type === "jumpFragmentGoto" ? (
+        <FragmentSelectField
+          fragmentId={action.fragmentId}
+          index={index}
+          tokens={tokens}
+          controlStyle={controlStyle(tokens)}
+          onChange={(fragmentId, chapterId) => {
+            const chapter =
+              chapterId !== undefined && chapterId.trim().length > 0
+                ? chapterId
+                : undefined;
+
+            if (action.type === "jumpFragmentReturn") {
+              onReplace(
+                chapter === undefined
+                  ? { type: "jumpFragmentReturn", fragmentId }
+                  : {
+                      type: "jumpFragmentReturn",
+                      fragmentId,
+                      chapterId: chapter,
+                    },
+              );
+
+              return;
+            }
+
+            onReplace(
+              chapter === undefined
+                ? { type: "jumpFragmentGoto", fragmentId }
+                : {
+                    type: "jumpFragmentGoto",
+                    fragmentId,
+                    chapterId: chapter,
+                  },
+            );
+          }}
+        />
       ) : null}
     </div>
   );
@@ -948,7 +1072,9 @@ export function ActionListField({
           style={smallButtonStyle(tokens)}
           onClick={handleAdd}
         >
-          添加
+          <IconLabel icon="plus" iconSize={11}>
+            添加
+          </IconLabel>
         </button>
       </div>
 
@@ -960,7 +1086,7 @@ export function ActionListField({
             color: tokens.textMuted,
           }}
         >
-          暂无动作。点击「添加」配置 openScene / giveItem。
+          暂无动作。点击「添加」配置打开场景 / 给予物品 / 跳转片段。
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -11,6 +11,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { RecipeDefinition, RecipesLibraryFile } from "../../domain/types";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -86,6 +87,9 @@ function toolButtonStyle(
     fontWeight: 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -232,7 +236,7 @@ export function RecipeListPanel({
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
-          新建
+          <IconLabel icon="plus">新建</IconLabel>
         </button>
       </div>
 
@@ -298,6 +302,7 @@ export function RecipeListPanel({
                   onClick={() => onSelectRecipe(recipe.id)}
                   style={rowStyle(tokens, selected)}
                 >
+                  <IconLabel icon="flask" iconSize={11} />
                   <span
                     style={{
                       flex: 1,
@@ -320,7 +325,7 @@ export function RecipeListPanel({
                     flexShrink: 0,
                   }}
                 >
-                  删
+                  <IconLabel icon="trash" />
                 </button>
               </div>
             );

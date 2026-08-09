@@ -2,10 +2,11 @@
  * scene-schema.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 场景定义（SceneDefinition）的属性表单 schema 生成。
  * 含名称、底图、letterbox、动效基础字段。
+ * 自定义底色允许 Alpha（`#RRGGBBAA`），便于半透露出下层引擎 UI。
  */
 
 import type { SceneDefinition } from "../domain/types";
@@ -48,7 +49,13 @@ export function sceneFields(scene: SceneDefinition): FieldSchema[] {
       key: "letterboxColor",
       kind: "color",
       label: "自定义底色",
-      placeholder: "#000000",
+      /**
+       * 允许 Alpha：拾色器输出 `#RRGGBBAA`，运行时作 CSS background，
+       * 可半透露出下层对话框等引擎层。
+       */
+      allowAlpha: true,
+      placeholder: "#000000FF",
+      description: "支持透明度；八位十六进制如 #00000080 为半透明黑",
     });
   }
 

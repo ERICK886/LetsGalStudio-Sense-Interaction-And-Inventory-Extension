@@ -30,6 +30,18 @@ export interface ToastRequest {
   /** 锚定热点 id，用于定位 toast 出现位置 */
   anchorHotspotId: string;
 
+  /**
+   * 为 true 时固定锚定场景内容区中心（忽略 hotspot / placement 相对热区）。
+   * 用于扣除物品失败等全局提示。
+   */
+  screenCenter?: boolean;
+
+  /**
+   * 设计像素锚点（相对 ToastLayer 父级坐标系）。
+   * 有值时优先于 hotspot / screenCenter，用于背包合成按钮等非场景锚点。
+   */
+  anchorPixel?: { x: number; y: number };
+
   /** 进入/退出动效 */
   motion: ElementMotion;
 

@@ -1,7 +1,7 @@
 {
   "id": "ext-27b96b",
-  "name": "场景交互系统",
-  "description": "",
+  "name": "场景交互及物品栏系统",
+  "description": "多场景探索与物品栏：可视化编辑底图与交互点、物品库与合成配方；剧情中打开场景、点击拿物品，支持快捷栏 HUD、全屏背包。",
   "author": "池水三两升",
   "version": "0.2.0",
   "entry": "dist/index.js",

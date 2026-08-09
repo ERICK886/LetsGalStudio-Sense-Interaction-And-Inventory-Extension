@@ -55,12 +55,6 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
    * 玩家游戏只读写下方 saveSchema，不会使用这些字段。
    */
   static settings = settings((s) => ({
-    previewInventoryJson: s
-      .string("预览库存 JSON（测试用）")
-      .default('{"entries":[]}'),
-    previewProgressJson: s
-      .string("预览进度 JSON（测试用）")
-      .default('{"consumed":{}}'),
     previewCurrentSceneId: s
       .string("预览当前场景 ID（测试用）")
       .default(""),

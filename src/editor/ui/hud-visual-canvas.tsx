@@ -6,7 +6,7 @@
  *
  * 快捷栏 HUD 自由布局画布：
  * - 左侧 NodeList 选节点（支持 Shift 多选）
- * - 设计分辨率 letterbox 舞台上渲染 resolveHudLayout 的 8 槽 + 打开背包按钮
+ * - 舞台渲染 8 槽 + overlays（打开背包为 role=openBag 按钮组件）
  * - 槽组包围盒透明 hit 层：点击槽间隙也可选中 / 拖拽 quickbarRoot
  * - 拖拽 / resize（applyDrag / applyResize）+ 多选 SelectionOverlay
  */
@@ -14,30 +14,40 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveHudLayout } from "../../domain/hud-layout";
 import type { ResolvedHudLayout } from "../../domain/hud-layout";
+import { applyUiBoxStyle } from "../../domain/ui-style";
+import { HUD_FIXED_LAYER_IDS } from "../../domain/inventory-hud";
 import {
-  applyUiBoxStyle,
-  applyUiTextStyle,
-} from "../../domain/ui-style";
+  buildDefaultLayerOrder,
+  layerZIndex,
+  sortItemsByLayerOrder,
+  syncOverlaysZIndexFromLayerOrder,
+} from "../../domain/layer-order";
 import type { InventoryHudConfig, UiRect } from "../../domain/types";
+import {
+  overlaySelectionId,
+  parseOverlaySelectionId,
+  UI_OVERLAY_KIND_ICONS,
+  UI_OVERLAY_KIND_LABELS,
+} from "../../domain/ui-overlay";
 import type { HudNodeId } from "../../schema/inventory-hud-schema";
+import { UiOverlayLayer } from "../../runtime/ui-overlay-layer";
 import { fitDesignToHost } from "../../shared/scene-layout";
 import { useTheme } from "../../theme/theme-provider";
 import {
   applyDrag,
   applyResize,
+  arrowNudgeDelta,
+  isEditableKeyboardTarget,
+  nudgeOrigin,
   type ResizeHandle,
 } from "./free-layout-selection";
 import { NodeList, type NodeListItem } from "./node-list";
 import { SelectionOverlay } from "./selection-overlay";
 
-/** HUD 画布侧栏固定节点条目 */
+/** HUD 画布侧栏固定节点条目（打开背包已迁为 overlay 按钮组件） */
 const HUD_NODE_ITEMS: readonly NodeListItem[] = [
-  { id: "quickbarRoot", label: "快捷栏" },
-  { id: "openBagButton", label: "打开背包" },
+  { id: "quickbarRoot", label: "快捷栏", icon: "grip" },
 ];
-
-/** 屏幕像素：打开背包按钮需超过此距离才视为拖拽（点击仅选中，不切换 belowRoot→absolute） */
-const DRAG_ACTIVATION_THRESHOLD_PX = 4;
 
 /**
  * HudVisualCanvas 属性。
@@ -55,15 +65,18 @@ export interface HudVisualCanvasProps {
   /**
    * 当前选中节点 id 列表（多选）；无选中时为空数组。
    */
-  selectedNodeIds: readonly HudNodeId[];
+  /**
+   * 选中 id：角色节点（quickbarRoot / openBagButton）或 `overlay:<id>`。
+   */
+  selectedNodeIds: readonly string[];
 
   /**
    * 选中节点变化。
    *
-   * @param id - 节点 id，或 null 表示清空选中
+   * @param id - 节点 / 图层 id，或 null 表示清空选中
    * @param shiftKey - 是否按住 Shift（切换多选）；清空时忽略
    */
-  onSelectNode: (id: HudNodeId | null, shiftKey?: boolean) => void;
+  onSelectNode: (id: string | null, shiftKey?: boolean) => void;
 
   /**
    * 拖拽 / resize / 布局切换时回写完整 HUD 配置。
@@ -71,6 +84,16 @@ export interface HudVisualCanvasProps {
    * @param next - 新配置
    */
   onHudChange: (next: InventoryHudConfig) => void;
+
+  /**
+   * 连续动作开始（pointerdown）：撤销栈记录动作前状态为当前栈顶。
+   */
+  onActionStart?: () => void;
+
+  /**
+   * 连续动作结束（pointerup）：与 onHudChange 配合，整段拖拽只占一步撤销。
+   */
+  onActionEnd?: () => void;
 }
 
 /**
@@ -86,7 +109,16 @@ type PointerSession =
       scale: number;
     }
   | {
-      kind: "resize";
+      kind: "overlay-drag";
+      overlayId: string;
+      startX: number;
+      startY: number;
+      origin: { x: number; y: number };
+      scale: number;
+    }
+  | {
+      kind: "overlay-resize";
+      overlayId: string;
       handle: ResizeHandle;
       startX: number;
       startY: number;
@@ -137,17 +169,20 @@ function slotsBoundingRect(
  * @returns 设计像素矩形；未知 id 时返回 null
  */
 function selectionRectFor(
-  nodeId: HudNodeId,
+  nodeId: string,
   layout: ResolvedHudLayout,
+  hud: InventoryHudConfig,
 ): Required<UiRect> | null {
-  if (nodeId === "quickbarRoot") {
-    return slotsBoundingRect(layout.slots);
+  const overlayId = parseOverlaySelectionId(nodeId);
+
+  if (overlayId !== null) {
+    const el = (hud.overlays ?? []).find((o) => o.id === overlayId);
+
+    return el ? { ...el.rect } : null;
   }
 
-  if (nodeId === "openBagButton") {
-    const b = layout.openBagButton;
-
-    return { x: b.x, y: b.y, w: b.w, h: b.h };
+  if (nodeId === "quickbarRoot") {
+    return slotsBoundingRect(layout.slots);
   }
 
   return null;
@@ -213,17 +248,37 @@ export function HudVisualCanvas({
   selectedNodeIds,
   onSelectNode,
   onHudChange,
+  onActionStart,
+  onActionEnd,
 }: HudVisualCanvasProps): React.ReactElement {
   const { tokens } = useTheme();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [hostSize, setHostSize] = useState({ w: 0, h: 0 });
+  /**
+   * 拖拽 / resize 期间的本地草稿：避免每帧 persist（history 深拷贝 + settings）
+   * 导致元件跟不上指针。
+   */
+  const [dragDraft, setDragDraft] = useState<InventoryHudConfig | null>(null);
   const sessionRef = useRef<PointerSession | null>(null);
+  const dragDirtyRef = useRef(false);
+  const actionOpenRef = useRef(false);
 
   /** 指针会话中读取最新配置，避免闭包过期 */
   const hudRef = useRef(hud);
   const layoutRef = useRef<ResolvedHudLayout | null>(null);
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const onHudChangeRef = useRef(onHudChange);
+  const onActionStartRef = useRef(onActionStart);
+  const onActionEndRef = useRef(onActionEnd);
 
-  hudRef.current = hud;
+  onHudChangeRef.current = onHudChange;
+  onActionStartRef.current = onActionStart;
+  onActionEndRef.current = onActionEnd;
+  selectedNodeIdsRef.current = selectedNodeIds;
+
+  const displayHud = dragDraft ?? hud;
+
+  hudRef.current = displayHud;
 
   useEffect(() => {
     const el = hostRef.current;
@@ -233,16 +288,27 @@ export function HudVisualCanvas({
     }
 
     const measure = (): void => {
-      const rect = el.getBoundingClientRect();
-
       setHostSize({
-        w: Math.max(0, rect.width),
-        h: Math.max(0, rect.height),
+        w: Math.max(0, el.clientWidth),
+        h: Math.max(0, el.clientHeight),
       });
     };
 
     measure();
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+
+      if (entry) {
+        setHostSize({
+          w: Math.max(0, entry.contentRect.width),
+          h: Math.max(0, entry.contentRect.height),
+        });
+
+        return;
+      }
+
+      measure();
+    });
 
     ro.observe(el);
 
@@ -250,12 +316,99 @@ export function HudVisualCanvas({
   }, []);
 
   /**
-   * Esc 清空选中。
+   * Esc 清空选中；方向键微调选中元素（1px，Shift=10px）。
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         onSelectNode(null);
+
+        return;
+      }
+
+      const delta = arrowNudgeDelta(event.key, event.shiftKey);
+
+      if (!delta) {
+        return;
+      }
+
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      if (sessionRef.current) {
+        return;
+      }
+
+      const ids = selectedNodeIdsRef.current;
+
+      if (ids.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      let next = hudRef.current;
+      let changed = false;
+
+      for (const nodeId of ids) {
+        const overlayId = parseOverlaySelectionId(nodeId);
+
+        if (overlayId !== null) {
+          const overlays = next.overlays ?? [];
+          const idx = overlays.findIndex((o) => o.id === overlayId);
+
+          if (idx < 0) {
+            continue;
+          }
+
+          const prev = overlays[idx]!;
+          const origin = nudgeOrigin(prev.rect, delta.dx, delta.dy);
+
+          if (origin.x === prev.rect.x && origin.y === prev.rect.y) {
+            continue;
+          }
+
+          const nextOverlays = overlays.slice();
+          nextOverlays[idx] = {
+            ...prev,
+            rect: { ...prev.rect, x: origin.x, y: origin.y },
+          };
+          next = { ...next, overlays: nextOverlays };
+          changed = true;
+          continue;
+        }
+
+        if (nodeId !== "quickbarRoot") {
+          continue;
+        }
+
+        const prev = next.nodes.quickbarRoot.rect;
+        const origin = nudgeOrigin(
+          { x: prev.x ?? 0, y: prev.y ?? 0 },
+          delta.dx,
+          delta.dy,
+        );
+
+        if (origin.x === (prev.x ?? 0) && origin.y === (prev.y ?? 0)) {
+          continue;
+        }
+
+        next = {
+          ...next,
+          nodes: {
+            ...next.nodes,
+            quickbarRoot: {
+              ...next.nodes.quickbarRoot,
+              rect: { x: origin.x, y: origin.y },
+            },
+          },
+        };
+        changed = true;
+      }
+
+      if (changed) {
+        onHudChangeRef.current(next);
       }
     };
 
@@ -281,14 +434,51 @@ export function HudVisualCanvas({
   const frameH = designHeight * scale;
 
   /**
-   * 共享布局：与运行时 resolveHudLayout 一致。
+   * 共享布局：与运行时 resolveHudLayout 一致（含拖拽草稿）。
    */
-  const layout = useMemo(() => resolveHudLayout(hud), [hud]);
+  const layout = useMemo(() => resolveHudLayout(displayHud), [displayHud]);
 
   layoutRef.current = layout;
 
-  const openBagLabel = layout.openBagStyle.label || "打开背包";
-  const buttonIsAbsolute = hud.nodes.openBagButton.layout === "absolute";
+  const layerOrder = useMemo(
+    () =>
+      displayHud.layerOrder ??
+      buildDefaultLayerOrder(HUD_FIXED_LAYER_IDS, displayHud.overlays),
+    [displayHud.layerOrder, displayHud.overlays],
+  );
+
+  const overlayItems: NodeListItem[] = useMemo(
+    () =>
+      (displayHud.overlays ?? []).map((el) => ({
+        id: overlaySelectionId(el.id),
+        label: `${UI_OVERLAY_KIND_LABELS[el.kind]} · ${el.name}`,
+        icon: el.props.icon || UI_OVERLAY_KIND_ICONS[el.kind],
+      })),
+    [displayHud.overlays],
+  );
+
+  const nodeListItems = useMemo(
+    () =>
+      sortItemsByLayerOrder(
+        [...HUD_NODE_ITEMS, ...overlayItems],
+        layerOrder,
+      ),
+    [layerOrder, overlayItems],
+  );
+
+  const handleReorderNodes = useCallback(
+    (orderedIds: readonly string[]): void => {
+      onHudChange({
+        ...hud,
+        layerOrder: [...orderedIds],
+        overlays: syncOverlaysZIndexFromLayerOrder(
+          hud.overlays ?? [],
+          orderedIds,
+        ),
+      });
+    },
+    [hud, onHudChange],
+  );
 
   /**
    * 预览强调色：配置优先，空串回退主题 accent。
@@ -307,12 +497,35 @@ export function HudVisualCanvas({
   );
 
   /**
-   * 仅当恰好单选 absolute 打开背包按钮时允许 resize。
+   * 单选打开背包按钮即可 resize（absolute 改完整 rect；belowRoot 仅写 w/h）。
    */
-  const canResizeOpenBag =
-    selectedNodeIds.length === 1 &&
-    selectedNodeIds[0] === "openBagButton" &&
-    buttonIsAbsolute;
+  const soleOverlayId =
+    selectedNodeIds.length === 1
+      ? parseOverlaySelectionId(selectedNodeIds[0]!)
+      : null;
+
+  /**
+   * 拖拽中写本地草稿（不同步父级 persist）。
+   *
+   * @param next - 草稿配置
+   */
+  const applyHudLive = useCallback((next: InventoryHudConfig): void => {
+    hudRef.current = next;
+    dragDirtyRef.current = true;
+    setDragDraft(next);
+  }, []);
+
+  /**
+   * 开启连续动作（幂等）。
+   */
+  const ensureActionStarted = useCallback((): void => {
+    if (actionOpenRef.current) {
+      return;
+    }
+
+    actionOpenRef.current = true;
+    onActionStartRef.current?.();
+  }, []);
 
   /**
    * 窗口级 pointermove / pointerup：在会话期间应用 applyDrag / applyResize。
@@ -330,6 +543,70 @@ export function HudVisualCanvas({
       const dy = (event.clientY - session.startY) / session.scale;
       const currentHud = hudRef.current;
 
+      if (session.kind === "overlay-drag") {
+        const nextPos = applyDrag(session.origin, dx, dy, {
+          shiftKey: event.shiftKey,
+          snapX: [0, designWidth],
+          snapY: [0, designHeight],
+        });
+        const nextX = Math.max(0, Math.round(nextPos.x));
+        const nextY = Math.max(0, Math.round(nextPos.y));
+        const overlays = currentHud.overlays ?? [];
+        const idx = overlays.findIndex((o) => o.id === session.overlayId);
+
+        if (idx < 0) {
+          return;
+        }
+
+        const prev = overlays[idx]!;
+
+        if (nextX === prev.rect.x && nextY === prev.rect.y) {
+          return;
+        }
+
+        const nextOverlays = overlays.slice();
+        nextOverlays[idx] = {
+          ...prev,
+          rect: { ...prev.rect, x: nextX, y: nextY },
+        };
+        applyHudLive({ ...currentHud, overlays: nextOverlays });
+
+        return;
+      }
+
+      if (session.kind === "overlay-resize") {
+        const nextRect = applyResize(session.origin, session.handle, dx, dy);
+        const rounded: Required<UiRect> = {
+          x: Math.max(0, Math.round(nextRect.x)),
+          y: Math.max(0, Math.round(nextRect.y)),
+          w: Math.max(8, Math.round(nextRect.w)),
+          h: Math.max(8, Math.round(nextRect.h)),
+        };
+        const overlays = currentHud.overlays ?? [];
+        const idx = overlays.findIndex((o) => o.id === session.overlayId);
+
+        if (idx < 0) {
+          return;
+        }
+
+        const prev = overlays[idx]!;
+
+        if (
+          prev.rect.x === rounded.x &&
+          prev.rect.y === rounded.y &&
+          prev.rect.w === rounded.w &&
+          prev.rect.h === rounded.h
+        ) {
+          return;
+        }
+
+        const nextOverlays = overlays.slice();
+        nextOverlays[idx] = { ...prev, rect: rounded };
+        applyHudLive({ ...currentHud, overlays: nextOverlays });
+
+        return;
+      }
+
       if (session.kind === "drag") {
         const snaps = snapTargetsFor(
           session.nodeId,
@@ -345,109 +622,49 @@ export function HudVisualCanvas({
         const nextX = Math.max(0, Math.round(nextPos.x));
         const nextY = Math.max(0, Math.round(nextPos.y));
 
-        if (session.nodeId === "quickbarRoot") {
-          const prev = currentHud.nodes.quickbarRoot.rect;
-
-          if (nextX === prev.x && nextY === prev.y) {
-            return;
-          }
-
-          onHudChange({
-            ...currentHud,
-            nodes: {
-              ...currentHud.nodes,
-              quickbarRoot: {
-                ...currentHud.nodes.quickbarRoot,
-                rect: { x: nextX, y: nextY },
-              },
-            },
-          });
-
+        if (session.nodeId !== "quickbarRoot") {
           return;
         }
 
-        const screenDist = Math.hypot(
-          event.clientX - session.startX,
-          event.clientY - session.startY,
-        );
+        const prev = currentHud.nodes.quickbarRoot.rect;
 
-        if (screenDist < DRAG_ACTIVATION_THRESHOLD_PX) {
+        if (nextX === prev.x && nextY === prev.y) {
           return;
         }
 
-        const prevRect = currentHud.nodes.openBagButton.rect;
-        const prevW =
-          typeof prevRect?.w === "number" && prevRect.w > 0
-            ? prevRect.w
-            : currentLayout.openBagButton.w;
-        const prevH =
-          typeof prevRect?.h === "number" && prevRect.h > 0
-            ? prevRect.h
-            : currentLayout.openBagButton.h;
-
-        if (
-          prevRect &&
-          nextX === prevRect.x &&
-          nextY === prevRect.y &&
-          currentHud.nodes.openBagButton.layout === "absolute"
-        ) {
-          return;
-        }
-
-        onHudChange({
+        applyHudLive({
           ...currentHud,
           nodes: {
             ...currentHud.nodes,
-            openBagButton: {
-              ...currentHud.nodes.openBagButton,
-              layout: "absolute",
-              rect: { x: nextX, y: nextY, w: prevW, h: prevH },
+            quickbarRoot: {
+              ...currentHud.nodes.quickbarRoot,
+              rect: { x: nextX, y: nextY },
             },
           },
         });
-
-        return;
       }
-
-      // resize：仅 absolute 打开背包按钮
-      if (currentHud.nodes.openBagButton.layout !== "absolute") {
-        return;
-      }
-
-      const nextRect = applyResize(session.origin, session.handle, dx, dy);
-      const rounded: Required<UiRect> = {
-        x: Math.max(0, Math.round(nextRect.x)),
-        y: Math.max(0, Math.round(nextRect.y)),
-        w: Math.round(nextRect.w),
-        h: Math.round(nextRect.h),
-      };
-      const prev = currentHud.nodes.openBagButton.rect;
-
-      if (
-        prev &&
-        prev.x === rounded.x &&
-        prev.y === rounded.y &&
-        prev.w === rounded.w &&
-        prev.h === rounded.h
-      ) {
-        return;
-      }
-
-      onHudChange({
-        ...currentHud,
-        nodes: {
-          ...currentHud.nodes,
-          openBagButton: {
-            ...currentHud.nodes.openBagButton,
-            layout: "absolute",
-            rect: rounded,
-          },
-        },
-      });
     };
 
     const onPointerUp = (): void => {
+      const hadSession = sessionRef.current !== null;
+
       sessionRef.current = null;
+
+      if (!hadSession) {
+        return;
+      }
+
+      if (dragDirtyRef.current) {
+        dragDirtyRef.current = false;
+        onHudChangeRef.current(hudRef.current);
+      }
+
+      setDragDraft(null);
+
+      if (actionOpenRef.current) {
+        actionOpenRef.current = false;
+        onActionEndRef.current?.();
+      }
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -459,7 +676,7 @@ export function HudVisualCanvas({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [designWidth, designHeight, onHudChange]);
+  }, [applyHudLive, designWidth, designHeight]);
 
   /**
    * 开始拖拽快捷栏根：选中并记录原点（hit 层与各槽共用）。
@@ -470,6 +687,10 @@ export function HudVisualCanvas({
     (event: React.PointerEvent): void => {
       event.stopPropagation();
       event.preventDefault();
+      (event.currentTarget as HTMLElement).setPointerCapture?.(
+        event.pointerId,
+      );
+      ensureActionStarted();
       onSelectNode("quickbarRoot", event.shiftKey);
       sessionRef.current = {
         kind: "drag",
@@ -480,60 +701,7 @@ export function HudVisualCanvas({
         scale,
       };
     },
-    [layout.root.x, layout.root.y, onSelectNode, scale],
-  );
-
-  /**
-   * 开始拖拽打开背包按钮：pointerDown 仅选中；belowRoot→absolute 在 pointermove 越过阈值后由窗口处理器写入。
-   *
-   * @param event - 指针事件
-   */
-  const beginDragOpenBag = useCallback(
-    (event: React.PointerEvent): void => {
-      event.stopPropagation();
-      event.preventDefault();
-      onSelectNode("openBagButton", event.shiftKey);
-
-      const btn = layout.openBagButton;
-
-      sessionRef.current = {
-        kind: "drag",
-        nodeId: "openBagButton",
-        startX: event.clientX,
-        startY: event.clientY,
-        origin: { x: btn.x, y: btn.y },
-        scale,
-      };
-    },
-    [layout.openBagButton, onSelectNode, scale],
-  );
-
-  /**
-   * SelectionOverlay 手柄按下：开启 resize 会话（仅单选 absolute 按钮）。
-   *
-   * @param handle - 八向手柄
-   * @param event - 指针事件
-   */
-  const onResizeStart = useCallback(
-    (handle: ResizeHandle, event: React.PointerEvent<HTMLDivElement>): void => {
-      if (!canResizeOpenBag) {
-        return;
-      }
-
-      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-
-      const btn = layout.openBagButton;
-
-      sessionRef.current = {
-        kind: "resize",
-        handle,
-        startX: event.clientX,
-        startY: event.clientY,
-        origin: { x: btn.x, y: btn.y, w: btn.w, h: btn.h },
-        scale,
-      };
-    },
-    [canResizeOpenBag, layout.openBagButton, scale],
+    [ensureActionStarted, layout.root.x, layout.root.y, onSelectNode, scale],
   );
 
   /**
@@ -544,16 +712,16 @@ export function HudVisualCanvas({
   }, [onSelectNode]);
 
   const slotBoxCss = applyUiBoxStyle(layout.slotStyle);
-  const openBagBoxCss = applyUiBoxStyle(layout.openBagStyle);
-  const openBagTextCss = applyUiTextStyle(layout.openBagStyle);
 
   return (
     <div
       data-testid="hud-visual-canvas"
       style={{
         display: "flex",
+        flex: 1,
         width: "100%",
         height: "100%",
+        minWidth: 0,
         minHeight: 0,
         overflow: "hidden",
         background: tokens.bgSunken,
@@ -567,11 +735,10 @@ export function HudVisualCanvas({
         }}
       >
         <NodeList
-          items={HUD_NODE_ITEMS}
+          items={nodeListItems}
           selectedIds={selectedNodeIds}
-          onSelect={(id, { shiftKey }) =>
-            onSelectNode(id as HudNodeId, shiftKey)
-          }
+          onSelect={(id, { shiftKey }) => onSelectNode(id, shiftKey)}
+          onReorder={handleReorderNodes}
         />
       </div>
 
@@ -584,19 +751,18 @@ export function HudVisualCanvas({
           minHeight: 0,
           position: "relative",
           overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          background: tokens.bgSunken,
         }}
       >
         {hostSize.w > 0 && hostSize.h > 0 ? (
           <div
             data-testid="hud-visual-frame"
             style={{
+              position: "absolute",
+              left: world.offsetX,
+              top: world.offsetY,
               width: frameW,
               height: frameH,
-              position: "relative",
-              flexShrink: 0,
               boxShadow: "0 0 0 1px rgba(255,255,255,0.12)",
               overflow: "hidden",
             }}
@@ -627,7 +793,7 @@ export function HudVisualCanvas({
                   pointerEvents: "none",
                 }}
               >
-                HUD · 自由布局 · Shift+多选 · Esc 取消选中
+                HUD · 方向键微调 · Shift+10px · Shift+多选 · Esc 取消
               </div>
 
               {/*
@@ -643,6 +809,7 @@ export function HudVisualCanvas({
                   top: slotsHitRect.y,
                   width: slotsHitRect.w,
                   height: slotsHitRect.h,
+                  zIndex: layerZIndex(layerOrder, "quickbarRoot", 0),
                   cursor: "grab",
                   touchAction: "none",
                   userSelect: "none",
@@ -663,6 +830,7 @@ export function HudVisualCanvas({
                     top: slot.y,
                     width: slot.w,
                     height: slot.h,
+                    zIndex: layerZIndex(layerOrder, "quickbarRoot", 0),
                     boxSizing: "border-box",
                     borderRadius: 8,
                     border: `1px solid ${accent}59`,
@@ -675,49 +843,84 @@ export function HudVisualCanvas({
                 />
               ))}
 
-              <div
-                data-testid="hud-visual-open-bag"
-                onPointerDown={beginDragOpenBag}
-                style={{
-                  position: "absolute",
-                  left: layout.openBagButton.x,
-                  top: layout.openBagButton.y,
-                  width: layout.openBagButton.w,
-                  height: layout.openBagButton.h,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 8,
-                  background: accent,
-                  color: "#0B1210",
-                  cursor: "grab",
-                  touchAction: "none",
-                  userSelect: "none",
-                  ...openBagBoxCss,
-                  ...openBagTextCss,
+              <UiOverlayLayer
+                overlays={displayHud.overlays ?? []}
+                editorMode
+                onOverlayPointerDown={(overlayId, event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  (event.currentTarget as HTMLElement).setPointerCapture?.(
+                    event.pointerId,
+                  );
+                  ensureActionStarted();
+                  onSelectNode(overlaySelectionId(overlayId), event.shiftKey);
+                  const el = (displayHud.overlays ?? []).find(
+                    (o) => o.id === overlayId,
+                  );
+
+                  if (!el) {
+                    return;
+                  }
+
+                  sessionRef.current = {
+                    kind: "overlay-drag",
+                    overlayId,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    origin: { x: el.rect.x, y: el.rect.y },
+                    scale,
+                  };
                 }}
-              >
-                {openBagLabel}
-              </div>
+              />
 
               {selectedNodeIds.map((nodeId) => {
-                const rect = selectionRectFor(nodeId, layout);
+                const rect = selectionRectFor(nodeId, layout, displayHud);
 
                 if (!rect) {
                   return null;
                 }
+
+                const isOverlay = parseOverlaySelectionId(nodeId) !== null;
 
                 return (
                   <SelectionOverlay
                     key={`sel-${nodeId}`}
                     rect={rect}
                     scale={scale}
-                    resizable={
-                      canResizeOpenBag && nodeId === "openBagButton"
-                    }
+                    resizable={soleOverlayId !== null && isOverlay}
                     accentColor={accent}
-                    onResizeStart={onResizeStart}
+                    onResizeStart={(handle, event) => {
+                      if (soleOverlayId === null || !isOverlay) {
+                        return;
+                      }
+
+                      const el = (displayHud.overlays ?? []).find(
+                        (o) => o.id === soleOverlayId,
+                      );
+
+                      if (!el) {
+                        return;
+                      }
+
+                      (event.target as HTMLElement).setPointerCapture?.(
+                        event.pointerId,
+                      );
+                      ensureActionStarted();
+                      sessionRef.current = {
+                        kind: "overlay-resize",
+                        overlayId: soleOverlayId,
+                        handle,
+                        startX: event.clientX,
+                        startY: event.clientY,
+                        origin: {
+                          x: el.rect.x,
+                          y: el.rect.y,
+                          w: el.rect.w ?? 24,
+                          h: el.rect.h ?? 24,
+                        },
+                        scale,
+                      };
+                    }}
                   />
                 );
               })}

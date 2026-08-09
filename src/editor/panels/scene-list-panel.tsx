@@ -10,6 +10,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { SceneDefinition, ScenesLibraryFile } from "../../domain/types";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -83,6 +84,9 @@ function toolButtonStyle(
     fontWeight: 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -225,7 +229,7 @@ export function SceneListPanel({
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
-          新建
+          <IconLabel icon="plus">新建</IconLabel>
         </button>
       </div>
 
@@ -289,6 +293,7 @@ export function SceneListPanel({
                   onClick={() => onSelectScene(scene.id)}
                   style={rowStyle(tokens, selected)}
                 >
+                  <IconLabel icon="image" iconSize={11} />
                   <span
                     style={{
                       flex: 1,
@@ -304,8 +309,12 @@ export function SceneListPanel({
                       color: tokens.textMuted,
                       fontSize: 11,
                       flexShrink: 0,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
                     }}
                   >
+                    <IconLabel icon="location-dot" iconSize={10} />
                     {scene.hotspots.length}
                   </span>
                 </button>
@@ -320,7 +329,7 @@ export function SceneListPanel({
                     flexShrink: 0,
                   }}
                 >
-                  删
+                  <IconLabel icon="trash" />
                 </button>
               </div>
             );

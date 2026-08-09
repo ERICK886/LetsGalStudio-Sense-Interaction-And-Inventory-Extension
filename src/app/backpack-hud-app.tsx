@@ -2,10 +2,9 @@
  * backpack-hud-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.1
+ * 版本: 0.4.0
  *
- * 背包 HUD 程序根组件：异步加载 BackpackShell。
- * 单独预览且尚未绑定库存真源时，挂接扩展 settings 沙箱（不写玩家 slot）。
+ * 快捷栏 HUD 程序根：异步加载 HudShell（不含全屏背包）。
  */
 
 import React, { useEffect, useState } from "react";
@@ -26,15 +25,17 @@ import {
 import type { ThemeMode } from "../theme/tokens";
 
 /**
- * BackpackHudApp props（可由 ui.show 注入 openBackpack）。
+ * BackpackHudApp props。
  */
 export interface BackpackHudAppProps extends ExtensionProps {
-  /** true 时挂载后立即打开全屏背包 */
-  openBackpack?: boolean;
+  /**
+   * 紧凑宿主；缺省 true。
+   */
+  compactHost?: boolean;
 }
 
-type BackpackShellComponent = React.ComponentType<{
-  openBackpack?: boolean;
+type HudShellComponent = React.ComponentType<{
+  compactHost?: boolean;
 }>;
 
 /**
@@ -48,7 +49,6 @@ function MountPlaceholder({
   message: string;
   themeMode: ThemeMode;
 }): React.ReactElement {
-  const bg = themeMode === "dark" ? "transparent" : "transparent";
   const muted = themeMode === "dark" ? "#8B8B95" : "#8A8582";
 
   return (
@@ -60,7 +60,7 @@ function MountPlaceholder({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: bg,
+        background: "transparent",
         color: muted,
         pointerEvents: "none",
         ...rootTypographyStyle,
@@ -84,21 +84,21 @@ export function BackpackHudApp(
   const themeRaw = readAuthorSetting(ctx, "theme");
   const themeMode: ThemeMode = themeRaw === "light" ? "light" : "dark";
 
-  const [Shell, setShell] = useState<BackpackShellComponent | null>(null);
+  const [Shell, setShell] = useState<HudShellComponent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * 单独预览背包时：若场景/编辑器尚未绑定库存，则挂接 settings 沙箱。
-   * 玩家局内由 scene-interaction 先绑定 slot，本处不会覆盖。
-   */
   useEffect(() => {
     if (isInventoryPersistenceBound()) {
       return;
     }
 
+    /**
+     * 仅编辑器/独立预览回退：玩家局内应由 scene-interaction 先绑权威 slot。
+     * preview:true 避免本内存壳盖掉调试器 VariableSystem。
+     */
     const previewSave = createSettingsPreviewSave(ctx);
 
-    return bindInventoryPersistence(previewSave);
+    return bindInventoryPersistence(previewSave, { preview: true });
   }, [ctx]);
 
   useEffect(() => {
@@ -106,10 +106,10 @@ export function BackpackHudApp(
 
     (async () => {
       try {
-        const mod = await import("../backpack/backpack-shell");
+        const mod = await import("../backpack/hud-shell");
 
         if (!cancelled) {
-          setShell(() => mod.BackpackShell);
+          setShell(() => mod.HudShell);
         }
       } catch (err) {
         if (!cancelled) {
@@ -124,7 +124,7 @@ export function BackpackHudApp(
   }, []);
 
   return (
-    <ThemeProvider initialMode={themeMode}>
+    <ThemeProvider initialMode={themeMode} rootBackground="transparent">
       <div
         data-testid="backpack-hud-app-root"
         style={{
@@ -143,7 +143,7 @@ export function BackpackHudApp(
         ) : !Shell ? (
           <MountPlaceholder themeMode={themeMode} message="" />
         ) : (
-          <Shell openBackpack={props.openBackpack === true} />
+          <Shell compactHost={props.compactHost !== false} />
         )}
       </div>
     </ThemeProvider>

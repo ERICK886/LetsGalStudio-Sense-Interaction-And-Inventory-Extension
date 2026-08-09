@@ -11,6 +11,7 @@
 import type { FieldSchema } from "./types";
 import {
   boxStyleFields,
+  buttonSkinFields,
   rectFields,
   textStyleFields,
 } from "./ui-style-fields";
@@ -48,8 +49,8 @@ export function sceneReturnFields(): FieldSchema[] {
       key: "label",
       kind: "string",
       label: "按钮文案",
-      placeholder: "返回",
-      description: "normalize 后保证非空；空串回退默认「返回」",
+      placeholder: "可留空",
+      description: "可留空（纯图标/皮肤）；缺省字段时默认「返回」",
     },
     {
       kind: "section",
@@ -62,30 +63,20 @@ export function sceneReturnFields(): FieldSchema[] {
       ],
     },
     {
-      key: "imageSrc",
-      kind: "asset",
-      label: "背景/图标",
-      accept: "image",
-      showPreview: true,
-      placeholder: "asset://ui/back.png",
-      description: "可选；设置后作为按钮背景图",
+      kind: "section",
+      id: "scene-return-skin",
+      title: "按钮图片（三态）",
+      description: "可选；按下→悬停→常态依次回退",
+      children: buttonSkinFields(""),
     },
     {
       kind: "section",
       id: "scene-return-hover",
-      title: "悬停态（可选）",
-      description: "悬停时覆盖常态样式；未填字段沿用常态",
+      title: "悬停样式（可选）",
+      description: "悬停时覆盖常态盒/字样式；未填字段沿用常态",
       children: [
         ...boxStyleFields("hoverStyle"),
         ...textStyleFields("hoverStyle"),
-        {
-          key: "hoverImageSrc",
-          kind: "asset",
-          label: "悬停背景/图标",
-          accept: "image",
-          showPreview: true,
-          placeholder: "asset://ui/back-hover.png",
-        },
       ],
     },
   ];

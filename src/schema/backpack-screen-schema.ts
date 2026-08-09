@@ -12,6 +12,7 @@ import type { BackpackNodeId } from "../domain/types";
 import type { FieldSchema } from "./types";
 import {
   boxStyleFields,
+  buttonSkinFields,
   rectFields,
   textStyleFields,
 } from "./ui-style-fields";
@@ -30,7 +31,8 @@ export function backpackScreenGlobalFields(): FieldSchema[] {
       kind: "section",
       id: "backpack-screen-global",
       title: "全屏背包全局",
-      description: "强调色；各节点几何与样式请在画布选中节点后编辑",
+          description:
+            "强调色；物品网格/详情为功能节点，遮罩/主面板/标题/按钮等请在图层组件中编辑",
       children: [
         {
           key: "accent",
@@ -162,6 +164,13 @@ export function backpackScreenNodeFields(
             ...textStyleFields("nodes.closeButton.style", { withLabel: true }),
           ],
         },
+        {
+          kind: "section",
+          id: "bag-close-skin",
+          title: "按钮图片（三态）",
+          description: "可选；按下→悬停→常态依次回退",
+          children: buttonSkinFields("nodes.closeButton"),
+        },
       ];
 
     case "itemGrid":
@@ -187,19 +196,60 @@ export function backpackScreenNodeFields(
               step: 1,
               description: "Grid 单元格最小宽高（像素）",
             },
+            {
+              key: "nodes.itemGrid.iconMaxSize",
+              kind: "number",
+              label: "格内图标大小",
+              min: 24,
+              max: 160,
+              step: 1,
+              description: "格内物品图片边长（像素）",
+            },
           ],
         },
         {
           kind: "section",
           id: "bag-grid-style",
-          title: "网格默认样式",
+          title: "网格容器样式",
           children: boxStyleFields("nodes.itemGrid.style"),
+        },
+        {
+          kind: "section",
+          id: "bag-grid-cell-style",
+          title: "格子常态样式",
+          description: "未选中时的槽位底/边框/圆角",
+          children: boxStyleFields("nodes.itemGrid.cellStyle"),
         },
         {
           kind: "section",
           id: "bag-grid-selected-style",
           title: "选中格样式",
           children: boxStyleFields("nodes.itemGrid.selectedStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-grid-cell-label-style",
+          title: "格内名称样式",
+          description: "图标下方物品 / 配方名",
+          children: textStyleFields("nodes.itemGrid.cellLabelStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-grid-empty-style",
+          title: "空态文案（道具）",
+          description: "网格无物品时居中提示",
+          children: textStyleFields("nodes.itemGrid.emptyStyle", {
+            withLabel: true,
+          }),
+        },
+        {
+          kind: "section",
+          id: "bag-grid-empty-craft-style",
+          title: "空态文案（合成）",
+          description: "网格无配方时居中提示",
+          children: textStyleFields("nodes.itemGrid.emptyCraftStyle", {
+            withLabel: true,
+          }),
         },
       ];
 
@@ -248,21 +298,112 @@ export function backpackScreenNodeFields(
         {
           kind: "section",
           id: "bag-detail-style",
-          title: "详情面板样式",
+          title: "详情面板容器",
           children: boxStyleFields("nodes.detailPanel.style"),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-hero-style",
+          title: "大图框样式",
+          children: boxStyleFields("nodes.detailPanel.heroStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-title-style",
+          title: "名称样式",
+          children: textStyleFields("nodes.detailPanel.titleStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-meta-style",
+          title: "副文案样式",
+          description: "数量、可合成 / 原料不足等",
+          children: textStyleFields("nodes.detailPanel.metaStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-description-style",
+          title: "描述样式",
+          children: textStyleFields("nodes.detailPanel.descriptionStyle"),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-empty-style",
+          title: "空态文案（道具）",
+          description: "未选中物品时的提示",
+          children: textStyleFields("nodes.detailPanel.emptyStyle", {
+            withLabel: true,
+          }),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-empty-craft-style",
+          title: "空态文案（合成）",
+          description: "未选中配方时的提示",
+          children: textStyleFields("nodes.detailPanel.emptyCraftStyle", {
+            withLabel: true,
+          }),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-ingredients-label-style",
+          title: "合成原料·标题样式",
+          description: "详情区「原料」小标题",
+          children: textStyleFields("nodes.detailPanel.ingredientsLabelStyle", {
+            withLabel: true,
+          }),
+        },
+        {
+          kind: "section",
+          id: "bag-detail-ingredients-style",
+          title: "合成原料·列表样式",
+          description: "原料摘要正文（如「钥匙碎片 ×3」）",
+          children: textStyleFields("nodes.detailPanel.ingredientsStyle"),
         },
       ];
 
     case "craftButton":
       return [
         {
-          key: "nodes.craftButton.offsetY",
-          kind: "number",
-          label: "垂直偏移",
-          step: 1,
-          min: -400,
-          max: 400,
-          description: "相对详情面板底部的额外 Y 偏移（像素）",
+          kind: "section",
+          id: "bag-craft-geometry",
+          title: "合成按钮尺寸与偏移",
+          description: "位置锚定详情底边；可单独设置宽高覆盖默认",
+          children: [
+            {
+              key: "nodes.craftButton.offsetY",
+              kind: "number",
+              label: "垂直偏移",
+              step: 1,
+              min: -400,
+              max: 400,
+              description: "相对详情面板底部的额外 Y 偏移（像素）",
+            },
+            {
+              kind: "grid",
+              id: "bag-craft-size",
+              columns: 2,
+              gap: 8,
+              children: [
+                {
+                  key: "nodes.craftButton.w",
+                  kind: "number",
+                  label: "宽度",
+                  min: 48,
+                  step: 1,
+                  description: "设计像素；空/非法则用详情区内宽",
+                },
+                {
+                  key: "nodes.craftButton.h",
+                  kind: "number",
+                  label: "高度",
+                  min: 24,
+                  step: 1,
+                  description: "设计像素；空/非法则默认 44",
+                },
+              ],
+            },
+          ],
         },
         {
           kind: "section",
@@ -272,6 +413,13 @@ export function backpackScreenNodeFields(
             ...boxStyleFields("nodes.craftButton.style"),
             ...textStyleFields("nodes.craftButton.style", { withLabel: true }),
           ],
+        },
+        {
+          kind: "section",
+          id: "bag-craft-skin",
+          title: "按钮图片（三态）",
+          description: "可选；按下→悬停→常态依次回退",
+          children: buttonSkinFields("nodes.craftButton"),
         },
       ];
 

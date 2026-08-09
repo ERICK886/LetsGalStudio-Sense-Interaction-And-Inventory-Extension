@@ -29,6 +29,7 @@ export function boxStyleFields(prefix: string): FieldSchema[] {
       kind: "color",
       label: "背景色",
       placeholder: "#1a1a2e",
+      allowAlpha: true,
       description: "留空则使用运行时默认或 accent 派生色",
     },
     {
@@ -36,6 +37,7 @@ export function boxStyleFields(prefix: string): FieldSchema[] {
       kind: "color",
       label: "边框色",
       placeholder: "#64e0d0",
+      allowAlpha: true,
     },
     {
       key: `${prefix}.borderWidth`,
@@ -123,8 +125,8 @@ export function textStyleFields(
       key: `${prefix}.label`,
       kind: "string",
       label: "文案",
-      placeholder: "留空使用内置默认",
-      description: "覆写显示文案；空串或缺省则回退运行时默认",
+      placeholder: "可留空",
+      description: "显示文案；可留空",
     });
   }
 
@@ -190,4 +192,51 @@ export function rectFields(
   }
 
   return fields;
+}
+
+/**
+ * 生成按钮图片三态（UiButtonSkin）对应的表单字段。
+ *
+ * @param prefix - 对象路径前缀，如 `"nodes.closeButton"` 或 `""`（扁平根）
+ * @returns FieldSchema 数组
+ *
+ * @example
+ * ```ts
+ * buttonSkinFields("nodes.openBagButton");
+ * // → imageSrc / hoverImageSrc / pressedImageSrc
+ * ```
+ */
+export function buttonSkinFields(prefix: string): FieldSchema[] {
+  const key = (name: string): string =>
+    prefix === "" ? name : `${prefix}.${name}`;
+
+  return [
+    {
+      key: key("imageSrc"),
+      kind: "asset",
+      label: "常态图片",
+      accept: "image",
+      showPreview: true,
+      placeholder: "asset://ui/button.png",
+      description: "可选；设置后作为按钮背景图（常态）",
+    },
+    {
+      key: key("hoverImageSrc"),
+      kind: "asset",
+      label: "悬停图片",
+      accept: "image",
+      showPreview: true,
+      placeholder: "asset://ui/button-hover.png",
+      description: "可选；未设置时回退常态图",
+    },
+    {
+      key: key("pressedImageSrc"),
+      kind: "asset",
+      label: "按下图片",
+      accept: "image",
+      showPreview: true,
+      placeholder: "asset://ui/button-pressed.png",
+      description: "可选；未设置时回退悬停→常态",
+    },
+  ];
 }

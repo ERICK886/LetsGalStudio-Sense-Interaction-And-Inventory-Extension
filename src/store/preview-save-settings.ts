@@ -12,10 +12,14 @@ import type { ExtensionContext } from "@avg-studio/sdk";
 import { SCENE_INTERACTION_MODULE_ID } from "../shared/module-ids";
 import { logError } from "../shared/logger";
 
-/** 预览库存 JSON（settings） */
+/**
+ * @deprecated 预览库存不再写 settings；保留常量以免旧引用编译失败。
+ */
 export const PREVIEW_INVENTORY_JSON_KEY = "previewInventoryJson";
 
-/** 预览场景进度 JSON（settings） */
+/**
+ * @deprecated once 进度不再写 settings；保留常量以免旧引用编译失败。
+ */
 export const PREVIEW_PROGRESS_JSON_KEY = "previewProgressJson";
 
 /** 预览当前场景 ID（settings） */

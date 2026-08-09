@@ -2,22 +2,28 @@
  * editor-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.1
+ * 版本: 0.3.3
  *
  * 编辑器程序（`@extension id: editor`）根组件：
  * - 编辑态：EditorShell
- * - 预览态：本程序内 PreviewShell（settings 沙箱存档；≠ 玩家 slot）
+ * - 预览态：本程序内 PreviewShell（顶栏 + RuntimeShell，settings 沙箱；≠ 玩家 slot）
+ * - 「运行预览」优先预览左侧当前选中场景
+ * - 预览非主场景时预置返回栈（主场景 = defaultSceneId，否则场景库首项）
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
+  type ExtensionContext,
   type ExtensionProps,
   type SaveAPI,
 } from "@avg-studio/sdk";
+import { parseScenesLibraryJson } from "../domain/serialize";
+import { stringifySceneReturnStack } from "../domain/scene-return-stack";
 import { logError } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { createSettingsPreviewSave } from "../store/preview-save";
+import { readScenesLibraryJson } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
 import {
@@ -26,6 +32,67 @@ import {
   rootTypographyStyle,
 } from "../theme/theme-provider";
 import type { ThemeMode } from "../theme/tokens";
+
+/**
+ * 解析编辑器预览用的「主场景」id。
+ *
+ * 优先级：`defaultSceneId` → 场景库首个场景 id → `""`。
+ *
+ * @param ctx - 扩展上下文
+ * @param defaultSceneId - 已 trim 的默认场景 id（可为空）
+ * @returns 主场景 id；库空且无默认时为 `""`
+ *
+ * @example
+ * ```ts
+ * resolvePreviewMainSceneId(ctx, "home"); // "home"
+ * resolvePreviewMainSceneId(ctx, "");     // 库中首个场景 id 或 ""
+ * ```
+ */
+function resolvePreviewMainSceneId(
+  ctx: ExtensionContext,
+  defaultSceneId: string,
+): string {
+  if (defaultSceneId.length > 0) {
+    return defaultSceneId;
+  }
+
+  try {
+    const raw = readScenesLibraryJson((key) => readAuthorSetting(ctx, key));
+    const lib = parseScenesLibraryJson(raw);
+    const first = lib.scenes[0];
+
+    return first !== undefined ? first.id : "";
+  } catch (err) {
+    logError("preview", "解析主场景（场景库首项）失败", err);
+
+    return "";
+  }
+}
+
+/**
+ * 计算进入预览时应写入的返回栈 JSON。
+ *
+ * - 预览场景与主场景不同且二者均非空 → `["主场景id"]`
+ * - 否则 → `"[]"`（预览的就是主场景，无需返回）
+ *
+ * @param previewSceneId - 即将预览的场景 id
+ * @param mainSceneId - 主场景 id
+ * @returns `sceneReturnStackJson` 字符串
+ */
+function buildPreviewReturnStackJson(
+  previewSceneId: string,
+  mainSceneId: string,
+): string {
+  if (
+    previewSceneId.length > 0 &&
+    mainSceneId.length > 0 &&
+    previewSceneId !== mainSceneId
+  ) {
+    return stringifySceneReturnStack([mainSceneId]);
+  }
+
+  return "[]";
+}
 
 /**
  * 编辑器顶部分区（与 editor-shell 保持一致）。
@@ -43,12 +110,25 @@ type EditorAppMode = "edit" | "preview";
 export interface EditorAppProps extends ExtensionProps {}
 
 /**
+ * 进入运行预览时的可选参数。
+ *
+ * @property sceneId - 左侧场景列表当前选中的场景 id；缺省则回退 defaultSceneId
+ */
+export type EnterPreviewOptions = {
+  sceneId?: string | null;
+};
+
+/**
  * 异步加载后的编辑壳 props。
  */
 type EditorShellComponent = React.ComponentType<{
   editorSection: EditorSection;
   onEditorSectionChange: (section: EditorSection) => void;
-  onSetEditMode: (enabled: boolean) => void;
+  /**
+   * @param enabled - true → 回编辑；false → 进预览
+   * @param options - 进预览时传入左侧选中场景等
+   */
+  onSetEditMode: (enabled: boolean, options?: EnterPreviewOptions) => void;
 }>;
 
 /**
@@ -146,9 +226,16 @@ function EditorAppContent(): React.ReactElement {
    * 顶栏「运行预览」/「编辑」切换。
    *
    * @param enabled - true → 回到编辑；false → 进入本程序 PreviewShell
+   * @param options - 进预览时的选项；`sceneId` 为左侧列表当前选中场景
+   *
+   * @remarks
+   * 预览场景优先级：左侧选中 id → settings.defaultSceneId → 空
+   * （空时 PreviewShell 会再回退场景库首项）。
+   * 主场景：`defaultSceneId`，否则场景库首项；预览非主场景时种子返回栈为 `[主场景]`。
+   * 使用 `preferOverrideSceneId` 覆盖沙箱中上次预览残留的场景 id。
    */
   const handleSetEditMode = useCallback(
-    (enabled: boolean): void => {
+    (enabled: boolean, options?: EnterPreviewOptions): void => {
       if (enabled) {
         setMode("edit");
         setPreviewSave(null);
@@ -157,22 +244,43 @@ function EditorAppContent(): React.ReactElement {
       }
 
       try {
+        const selectedId =
+          typeof options?.sceneId === "string" ? options.sceneId.trim() : "";
+
         const defaultSceneId = String(
           readAuthorSetting(ctx, "defaultSceneId") ?? "",
         ).trim();
 
+        const mainSceneId = resolvePreviewMainSceneId(ctx, defaultSceneId);
+
+        const previewSceneId =
+          selectedId.length > 0
+            ? selectedId
+            : defaultSceneId.length > 0
+              ? defaultSceneId
+              : mainSceneId;
+
+        const sceneReturnStackJson = buildPreviewReturnStackJson(
+          previewSceneId,
+          mainSceneId,
+        );
+
         /**
          * 沙箱落在 scene-interaction.settings；
-         * 若预览尚未选场景，则用编辑器 defaultSceneId 填入。
+         * 强制写入本次要预览的场景，并在非主场景时预置返回主场景的栈。
          */
         setPreviewSave(
           createSettingsPreviewSave(
             ctx,
             {
-              currentSceneId: defaultSceneId,
+              currentSceneId: previewSceneId,
+              sceneReturnStackJson,
               isEditMode: false,
             },
-            { resetReturnStack: true },
+            {
+              resetReturnStack: true,
+              preferOverrideSceneId: true,
+            },
           ),
         );
         setPreviewSessionKey((n) => n + 1);
@@ -243,7 +351,15 @@ function EditorAppContent(): React.ReactElement {
   }, [mode, EditorShellComp, PreviewShellComp, previewSave]);
 
   return (
-    <ThemeProvider initialMode={themeMode}>
+    <ThemeProvider
+      initialMode={themeMode}
+      rootBackground={mode === "preview" ? "transparent" : undefined}
+      /**
+       * 预览虽透明底，但编辑器顶栏 /「编辑」按钮必须可点；
+       * 不可沿用玩家叠层的 pointer-events:none 默认。
+       */
+      rootPointerEvents="auto"
+    >
       <div
         data-testid="editor-app-root"
         style={{
@@ -251,6 +367,8 @@ function EditorAppContent(): React.ReactElement {
           height: "100%",
           position: "relative",
           minHeight: 0,
+          background: mode === "preview" ? "transparent" : undefined,
+          pointerEvents: "auto",
         }}
       >
         {loadError ? (

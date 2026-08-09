@@ -11,8 +11,8 @@
 
 import type { HotspotHoverShadow, HoverShadowLayer } from "./types";
 
-/** 光晕层默认色（对齐运行时旧硬编码 rgb(255, 236, 160)） */
-const DEFAULT_GLOW_COLOR = "#FFECA0";
+/** 光晕层默认色（场景 UI 预设） */
+const DEFAULT_GLOW_COLOR = "#DCDAD3";
 
 /** 底影层默认色 */
 const DEFAULT_BASE_COLOR = "#000000";
@@ -100,7 +100,7 @@ function normalizeHexToUpper(color: string): string {
  * @returns 该层完整默认配置
  *
  * @example
- * defaultHoverShadowLayer("glow").color; // "#FFECA0"
+ * defaultHoverShadowLayer("glow").color; // "#DCDAD3"
  * defaultHoverShadowLayer("base").offsetY; // 2
  */
 export function defaultHoverShadowLayer(
@@ -137,7 +137,7 @@ export function defaultHoverShadowLayer(
  * @example
  * const shadow = defaultHotspotHoverShadow();
  * buildHoverShadowFilter(shadow);
- * // "drop-shadow(0 0 10px rgba(255, 236, 160, 0.85)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45))"
+ * // "drop-shadow(0 0 10px rgba(220, 218, 211, 0.85)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45))"
  */
 export function defaultHotspotHoverShadow(): HotspotHoverShadow {
   return {

@@ -2,10 +2,13 @@
  * theme-provider.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.2
  *
  * React 主题上下文 Provider：向子树提供 mode / setMode / tokens，
  * 并挂载全屏根容器与 UI 字体栈。
+ * 0.1.1：可选 rootBackground；运行时叠层可传 transparent，避免挡住引擎对话框。
+ * 0.1.2：rootBackground 为 transparent 时根节点 pointer-events:none，点击穿透。
+ * 0.1.3：新增 rootPointerEvents，可覆盖上述默认（编辑器预览必须 auto，否则顶栏点不了）。
  */
 
 import React, {
@@ -15,6 +18,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { ensureFontAwesomeCss } from "../shared/font-awesome";
 import { getThemeTokens, type ThemeMode, type ThemeTokens } from "./tokens";
 
 /**
@@ -75,6 +79,20 @@ export interface ThemeProviderProps {
   /** 初始主题模式，默认 `"dark"`（与扩展 settings 默认一致） */
   initialMode?: ThemeMode;
 
+  /**
+   * 根容器背景 CSS。
+   * - 缺省：使用 `tokens.bgBase`（编辑器等需要不透明底）
+   * - 传 `"transparent"`：叠在引擎上的运行时/HUD，避免挡住对话框
+   */
+  rootBackground?: string;
+
+  /**
+   * 根容器 pointer-events。
+   * - 未传且 `rootBackground === "transparent"` 时默认 `"none"`（玩家叠层穿透）
+   * - 编辑器预览等仍要透明底、但整页可点的场景，请显式传 `"auto"`
+   */
+  rootPointerEvents?: "auto" | "none";
+
   /** 子组件 */
   children: React.ReactNode;
 }
@@ -83,6 +101,8 @@ export interface ThemeProviderProps {
  * 主题 Provider：在组件树顶层包裹，提供主题 mode 与 tokens。
  *
  * @param props.initialMode - 初始主题，默认 `"dark"`
+ * @param props.rootBackground - 可选根背景；缺省为主题 bgBase
+ * @param props.rootPointerEvents - 可选；覆盖透明底默认的 pointer-events:none
  * @param props.children - 子组件
  * @returns 包裹主题上下文的全屏容器
  *
@@ -91,10 +111,24 @@ export interface ThemeProviderProps {
  * <ThemeProvider initialMode="dark">
  *   <EditorShell ... />
  * </ThemeProvider>
+ *
+ * <ThemeProvider initialMode="dark" rootBackground="transparent">
+ *   <RuntimeShell ... />
+ * </ThemeProvider>
+ *
+ * <ThemeProvider
+ *   initialMode="dark"
+ *   rootBackground="transparent"
+ *   rootPointerEvents="auto"
+ * >
+ *   <PreviewShell ... />
+ * </ThemeProvider>
  * ```
  */
 export function ThemeProvider({
   initialMode = "dark",
+  rootBackground,
+  rootPointerEvents,
   children,
 }: ThemeProviderProps): React.ReactElement {
   const [mode, setMode] = useState<ThemeMode>(initialMode);
@@ -107,12 +141,26 @@ export function ThemeProvider({
     setMode(initialMode);
   }, [initialMode]);
 
+  useEffect(() => {
+    ensureFontAwesomeCss();
+  }, []);
+
   const tokens = useMemo(() => getThemeTokens(mode), [mode]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({ mode, setMode, tokens }),
     [mode, tokens],
   );
+
+  const background =
+    typeof rootBackground === "string" ? rootBackground : tokens.bgBase;
+
+  /**
+   * 显式 rootPointerEvents 优先；否则透明底默认 none（玩家叠层穿透）。
+   */
+  const pointerEvents: "auto" | "none" | undefined =
+    rootPointerEvents ??
+    (rootBackground === "transparent" ? "none" : undefined);
 
   return (
     <ThemeContext.Provider value={value}>
@@ -123,8 +171,9 @@ export function ThemeProvider({
           width: "100%",
           height: "100%",
           minHeight: 0,
-          background: tokens.bgBase,
+          background,
           color: tokens.textPrimary,
+          ...(pointerEvents !== undefined ? { pointerEvents } : {}),
         }}
       >
         {children}

@@ -2,11 +2,13 @@
  * player-session.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.2.2
  *
  * 玩家会话门闩：在模态 UI（如背包、合成）打开期间阻塞场景交互，
  * 直到 UI 关闭后由 endPlayerSessionWait 解除等待。
  */
+
+import { logDebug, logWarn } from "../shared/logger";
 
 /** 当前挂起的门闩状态；无 pending 时为 null */
 let pending: { promise: Promise<void>; resolve: () => void } | null = null;
@@ -28,6 +30,10 @@ let pending: { promise: Promise<void>; resolve: () => void } | null = null;
  */
 export function beginPlayerSessionWait(): Promise<void> {
   if (pending !== null) {
+    logDebug("continue-story", "beginPlayerSessionWait：复用已有门闩", {
+      t: Date.now(),
+    });
+
     return pending.promise;
   }
 
@@ -37,7 +43,29 @@ export function beginPlayerSessionWait(): Promise<void> {
   });
 
   pending = { promise, resolve };
+  logDebug("continue-story", "beginPlayerSessionWait：新建门闩", {
+    t: Date.now(),
+  });
+
   return promise;
+}
+
+/**
+ * 丢弃残留门闩且不 resolve（用于预览重启后无活跃叠层的僵尸 pending）。
+ *
+ * 勿对仍有 await 的活跃会话调用——那会永久卡住对应 method。
+ */
+export function abandonPlayerSessionWait(): void {
+  if (pending === null) {
+    return;
+  }
+
+  logWarn(
+    "continue-story",
+    "abandonPlayerSessionWait：丢弃残留门闩（不 resolve，避免误推进剧本）",
+    { t: Date.now() },
+  );
+  pending = null;
 }
 
 /**
@@ -55,9 +83,16 @@ export function beginPlayerSessionWait(): Promise<void> {
  */
 export function endPlayerSessionWait(): void {
   if (pending === null) {
+    logDebug("continue-story", "endPlayerSessionWait：无 pending（no-op）", {
+      t: Date.now(),
+    });
+
     return;
   }
 
+  logDebug("continue-story", "endPlayerSessionWait：解除门闩", {
+    t: Date.now(),
+  });
   pending.resolve();
   pending = null;
 }

@@ -20,12 +20,14 @@ import React, {
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
   defaultBackpackScreen,
+  isBackpackChromeOverlayId,
   resetBackpackScreenNode,
 } from "../../domain/backpack-screen-config";
 import { resolveBackpackLayout } from "../../domain/backpack-layout";
 import { resolveHudLayout } from "../../domain/hud-layout";
 import {
   defaultInventoryHud,
+  isHudChromeOverlayId,
   normalizeInventoryHud,
   resetInventoryHudNode,
 } from "../../domain/inventory-hud";
@@ -39,8 +41,15 @@ import type {
   BackpackNodeId,
   BackpackScreenConfig,
   InventoryHudConfig,
+  UiOverlayKind,
   UiRect,
 } from "../../domain/types";
+import {
+  createUiOverlayElement,
+  overlaySelectionId,
+  parseOverlaySelectionId,
+  UI_OVERLAY_KIND_LABELS,
+} from "../../domain/ui-overlay";
 import {
   backpackScreenGlobalFields,
   backpackScreenNodeFields,
@@ -50,6 +59,7 @@ import {
   inventoryHudNodeFields,
   type HudNodeId,
 } from "../../schema/inventory-hud-schema";
+import { uiOverlayFields } from "../../schema/ui-overlay-schema";
 import { FormRenderer } from "../../schema/form-renderer";
 import { createHistory } from "../../store/history";
 import {
@@ -64,6 +74,7 @@ import {
   registerUiHistoryBridge,
 } from "../../store/ui-edit-history-bridge";
 import { useDesignSize } from "../../store/use-design-size";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   useTheme,
@@ -80,6 +91,7 @@ import { BackpackVisualCanvas } from "./backpack-visual-canvas";
 import { HudVisualCanvas } from "./hud-visual-canvas";
 import { ItemToastEditorPanel } from "./item-toast-editor-panel";
 import { HotspotHoverEditorPanel } from "./hotspot-hover-editor-panel";
+import { OverlayPalette } from "./overlay-palette";
 import { SceneReturnEditorPanel } from "./scene-return-editor-panel";
 
 /** UI 子分区 */
@@ -88,11 +100,8 @@ type UiSubSection = "hud" | "backpack" | "sceneUi";
 /** 「场景 UI」分区内的二级子页 */
 type SceneUiTab = "itemToast" | "hotspotHover" | "sceneReturn";
 
-/** 可对齐的背包节点（排除 backdrop / craftButton） */
+/** 可对齐的背包功能节点 */
 const BAG_ALIGNABLE: readonly BackpackNodeId[] = [
-  "panelChrome",
-  "titleBlock",
-  "closeButton",
   "itemGrid",
   "detailPanel",
 ];
@@ -146,6 +155,9 @@ function resetButtonStyle(
     cursor: "pointer",
     width: "100%",
     textAlign: "left" as const,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -159,7 +171,7 @@ function resetButtonStyle(
  */
 function applyHudAlign(
   hud: InventoryHudConfig,
-  ids: readonly HudNodeId[],
+  ids: readonly string[],
   mode: AlignMode,
 ): InventoryHudConfig {
   const layout = resolveHudLayout(hud);
@@ -256,14 +268,14 @@ function applyHudAlign(
  */
 function applyBagAlign(
   bag: BackpackScreenConfig,
-  ids: readonly BackpackNodeId[],
+  ids: readonly string[],
   mode: AlignMode,
 ): BackpackScreenConfig {
   const layout = resolveBackpackLayout(bag);
   const items: AlignableRect[] = [];
 
   for (const id of ids) {
-    if (!BAG_ALIGNABLE.includes(id)) {
+    if (!BAG_ALIGNABLE.includes(id as BackpackNodeId)) {
       continue;
     }
 
@@ -317,8 +329,8 @@ export function UiEditorPanel(): React.ReactElement {
     loadBackpackScreen(ctx),
   );
 
-  const [selectedHudIds, setSelectedHudIds] = useState<HudNodeId[]>([]);
-  const [selectedBagIds, setSelectedBagIds] = useState<BackpackNodeId[]>([]);
+  const [selectedHudIds, setSelectedHudIds] = useState<string[]>([]);
+  const [selectedBagIds, setSelectedBagIds] = useState<string[]>([]);
 
   const hudHistoryRef = useRef(createHistory<InventoryHudConfig>());
   const bagHistoryRef = useRef(createHistory<BackpackScreenConfig>());
@@ -404,6 +416,28 @@ export function UiEditorPanel(): React.ReactElement {
     },
     [writeBagOnly],
   );
+
+  /** 画布拖拽等连续动作：开始（栈顶即动作前状态） */
+  const beginHudAction = useCallback((): void => {
+    hudHistoryRef.current.beginAction();
+  }, []);
+
+  /** 画布拖拽等连续动作：结束 */
+  const endHudAction = useCallback((): void => {
+    hudHistoryRef.current.endAction();
+    notifyUiHistoryTick();
+  }, []);
+
+  /** 画布拖拽等连续动作：开始 */
+  const beginBagAction = useCallback((): void => {
+    bagHistoryRef.current.beginAction();
+  }, []);
+
+  /** 画布拖拽等连续动作：结束 */
+  const endBagAction = useCallback((): void => {
+    bagHistoryRef.current.endAction();
+    notifyUiHistoryTick();
+  }, []);
 
   useEffect(() => {
     registerUiHistoryBridge({
@@ -504,19 +538,53 @@ export function UiEditorPanel(): React.ReactElement {
     selectedBagIds.length === 1 ? selectedBagIds[0]! : null;
 
   const hudSchema = useMemo(() => {
-    return primaryHudId !== null
-      ? inventoryHudNodeFields(primaryHudId)
-      : inventoryHudGlobalFields();
-  }, [primaryHudId]);
+    if (primaryHudId === null) {
+      return inventoryHudGlobalFields();
+    }
+
+    const overlayId = parseOverlaySelectionId(primaryHudId);
+
+    if (overlayId !== null) {
+      const index = (hud.overlays ?? []).findIndex((o) => o.id === overlayId);
+      const el = index >= 0 ? hud.overlays![index]! : null;
+
+      if (el && index >= 0) {
+        return uiOverlayFields(`overlays.${index}`, el.kind);
+      }
+    }
+
+    if (primaryHudId === "quickbarRoot" || primaryHudId === "openBagButton") {
+      return inventoryHudNodeFields(primaryHudId as HudNodeId);
+    }
+
+    return inventoryHudGlobalFields();
+  }, [hud.overlays, primaryHudId]);
 
   const bagSchema = useMemo(() => {
-    return primaryBagId !== null
-      ? backpackScreenNodeFields(primaryBagId)
-      : backpackScreenGlobalFields();
-  }, [primaryBagId]);
+    if (primaryBagId === null) {
+      return backpackScreenGlobalFields();
+    }
+
+    const overlayId = parseOverlaySelectionId(primaryBagId);
+
+    if (overlayId !== null) {
+      const index = (bag.overlays ?? []).findIndex((o) => o.id === overlayId);
+      const el = index >= 0 ? bag.overlays![index]! : null;
+
+      if (el && index >= 0) {
+        return uiOverlayFields(`overlays.${index}`, el.kind);
+      }
+    }
+
+    if (primaryBagId === "itemGrid" || primaryBagId === "detailPanel") {
+      return backpackScreenNodeFields(primaryBagId);
+    }
+
+    return backpackScreenGlobalFields();
+  }, [bag.overlays, primaryBagId]);
 
   const handleSelectHud = useCallback(
-    (id: HudNodeId | null, shiftKey = false): void => {
+    (id: string | null, shiftKey = false): void => {
       if (id === null) {
         setSelectedHudIds([]);
 
@@ -531,7 +599,7 @@ export function UiEditorPanel(): React.ReactElement {
   );
 
   const handleSelectBag = useCallback(
-    (id: BackpackNodeId | null, shiftKey = false): void => {
+    (id: string | null, shiftKey = false): void => {
       if (id === null) {
         setSelectedBagIds([]);
 
@@ -544,6 +612,74 @@ export function UiEditorPanel(): React.ReactElement {
     },
     [],
   );
+
+  const handleAddHudOverlay = useCallback(
+    (kind: UiOverlayKind): void => {
+      const el = createUiOverlayElement(
+        kind,
+        designSize.width,
+        designSize.height,
+      );
+      persistHud({
+        ...hud,
+        overlays: [...(hud.overlays ?? []), el],
+      });
+      setSelectedHudIds([overlaySelectionId(el.id)]);
+    },
+    [designSize.height, designSize.width, hud, persistHud],
+  );
+
+  const handleAddBagOverlay = useCallback(
+    (kind: UiOverlayKind): void => {
+      const el = createUiOverlayElement(
+        kind,
+        designSize.width,
+        designSize.height,
+      );
+      persistBag({
+        ...bag,
+        overlays: [...(bag.overlays ?? []), el],
+      });
+      setSelectedBagIds([overlaySelectionId(el.id)]);
+    },
+    [bag, designSize.height, designSize.width, persistBag],
+  );
+
+  const handleDeleteHudOverlay = useCallback((): void => {
+    if (primaryHudId === null) {
+      return;
+    }
+
+    const overlayId = parseOverlaySelectionId(primaryHudId);
+
+    if (overlayId === null || isHudChromeOverlayId(overlayId)) {
+      return;
+    }
+
+    persistHud({
+      ...hud,
+      overlays: (hud.overlays ?? []).filter((o) => o.id !== overlayId),
+    });
+    setSelectedHudIds([]);
+  }, [hud, persistHud, primaryHudId]);
+
+  const handleDeleteBagOverlay = useCallback((): void => {
+    if (primaryBagId === null) {
+      return;
+    }
+
+    const overlayId = parseOverlaySelectionId(primaryBagId);
+
+    if (overlayId === null || isBackpackChromeOverlayId(overlayId)) {
+      return;
+    }
+
+    persistBag({
+      ...bag,
+      overlays: (bag.overlays ?? []).filter((o) => o.id !== overlayId),
+    });
+    setSelectedBagIds([]);
+  }, [bag, persistBag, primaryBagId]);
 
   const handleAlignHud = useCallback(
     (mode: AlignMode): void => {
@@ -564,7 +700,13 @@ export function UiEditorPanel(): React.ReactElement {
       return;
     }
 
-    persistHud(resetInventoryHudNode(hud, primaryHudId));
+    if (parseOverlaySelectionId(primaryHudId) !== null) {
+      return;
+    }
+
+    persistHud(
+      resetInventoryHudNode(hud, primaryHudId as HudNodeId),
+    );
   }, [hud, persistHud, primaryHudId]);
 
   const handleResetHudAll = useCallback((): void => {
@@ -577,10 +719,14 @@ export function UiEditorPanel(): React.ReactElement {
       return;
     }
 
+    if (parseOverlaySelectionId(primaryBagId) !== null) {
+      return;
+    }
+
     persistBag(
       resetBackpackScreenNode(
         bag,
-        primaryBagId,
+        primaryBagId as BackpackNodeId,
         designSize.width,
         designSize.height,
       ),
@@ -592,7 +738,11 @@ export function UiEditorPanel(): React.ReactElement {
     setSelectedBagIds([]);
   }, [designSize.height, designSize.width, persistBag]);
 
-  const tabBtn = (id: UiSubSection, label: string): React.ReactElement => {
+  const tabBtn = (
+    id: UiSubSection,
+    label: string,
+    icon: string,
+  ): React.ReactElement => {
     const active = sub === id;
 
     return (
@@ -617,9 +767,12 @@ export function UiEditorPanel(): React.ReactElement {
           fontFamily: "inherit",
           fontWeight: active ? 650 : 500,
           cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
-        {label}
+        <IconLabel icon={icon}>{label}</IconLabel>
       </button>
     );
   };
@@ -629,11 +782,13 @@ export function UiEditorPanel(): React.ReactElement {
    *
    * @param id - 子页 id
    * @param label - 按钮文案
+   * @param icon - FA 图标名
    * @returns 按钮 React 元素
    */
   const sceneUiTabBtn = (
     id: SceneUiTab,
     label: string,
+    icon: string,
   ): React.ReactElement => {
     const active = sceneUiTab === id;
 
@@ -656,25 +811,53 @@ export function UiEditorPanel(): React.ReactElement {
           fontFamily: "inherit",
           fontWeight: active ? 650 : 500,
           cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
-        {label}
+        <IconLabel icon={icon}>{label}</IconLabel>
       </button>
     );
   };
 
+  const formatSelectionLabel = (ids: readonly string[]): string => {
+    if (ids.length === 0) {
+      return "全局";
+    }
+
+    if (ids.length > 1) {
+      return `多选 ${ids.length} 项`;
+    }
+
+    const id = ids[0]!;
+    const overlayId = parseOverlaySelectionId(id);
+
+    if (overlayId !== null) {
+      const list = sub === "hud" ? hud.overlays : bag.overlays;
+      const el = (list ?? []).find((o) => o.id === overlayId);
+
+      return el
+        ? `图层 · ${UI_OVERLAY_KIND_LABELS[el.kind]} · ${el.name}`
+        : `图层 · ${overlayId}`;
+    }
+
+    return id;
+  };
+
   const selectedLabel =
     sub === "hud"
-      ? selectedHudIds.length === 0
-        ? "全局"
-        : selectedHudIds.length === 1
-          ? selectedHudIds[0]!
-          : `多选 ${selectedHudIds.length} 项`
-      : selectedBagIds.length === 0
-        ? "全局"
-        : selectedBagIds.length === 1
-          ? selectedBagIds[0]!
-          : `多选 ${selectedBagIds.length} 项`;
+      ? formatSelectionLabel(selectedHudIds)
+      : formatSelectionLabel(selectedBagIds);
+
+  const hudOverlayId =
+    primaryHudId !== null ? parseOverlaySelectionId(primaryHudId) : null;
+  const canDeleteHudOverlay =
+    hudOverlayId !== null && !isHudChromeOverlayId(hudOverlayId);
+  const bagOverlayId =
+    primaryBagId !== null ? parseOverlaySelectionId(primaryBagId) : null;
+  const canDeleteBagOverlay =
+    bagOverlayId !== null && !isBackpackChromeOverlayId(bagOverlayId);
 
   const hudFormValue = useMemo(
     () => hud as unknown as Record<string, unknown>,
@@ -690,9 +873,12 @@ export function UiEditorPanel(): React.ReactElement {
       data-testid="ui-editor-panel"
       style={{
         display: "flex",
+        flex: 1,
         width: "100%",
         height: "100%",
+        minWidth: 0,
         minHeight: 0,
+        overflow: "hidden",
       }}
     >
       <aside
@@ -700,6 +886,9 @@ export function UiEditorPanel(): React.ReactElement {
         style={{
           width: 220,
           flexShrink: 0,
+          height: "100%",
+          minHeight: 0,
+          overflow: "auto",
           borderRight: `1px solid ${tokens.border}`,
           background: tokens.bgElevated,
           padding: 14,
@@ -718,9 +907,9 @@ export function UiEditorPanel(): React.ReactElement {
         >
           界面
         </div>
-        {tabBtn("hud", "快捷栏 HUD")}
-        {tabBtn("backpack", "全屏背包")}
-        {tabBtn("sceneUi", "场景 UI")}
+        {tabBtn("hud", "快捷栏 HUD", "grip")}
+        {tabBtn("backpack", "全屏背包", "bag-shopping")}
+        {tabBtn("sceneUi", "场景 UI", "clapperboard")}
         <p
           style={{
             marginTop: 12,
@@ -730,9 +919,9 @@ export function UiEditorPanel(): React.ReactElement {
           }}
         >
           {sub === "hud"
-            ? "Shift+单击多选；顶栏 Ctrl+Z / Y 撤销重做；间隙点击可选中快捷栏。"
+            ? "右侧可添加文字/图片/按钮等图层；Shift+单击多选；Ctrl+Z / Y 撤销重做。"
             : sub === "backpack"
-              ? "Shift+单击多选节点后可用右侧对齐；Ctrl+Z / Y 撤销重做。"
+              ? "右侧可添加图层；Shift+单击多选后可用对齐；Ctrl+Z / Y 撤销重做。"
               : "获得提示、交互点悬停与返回场景的全局预设；中栏顶部切换子页。"}
         </p>
       </aside>
@@ -743,6 +932,10 @@ export function UiEditorPanel(): React.ReactElement {
           flex: 1,
           minWidth: 0,
           minHeight: 0,
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           borderRight: `1px solid ${tokens.border}`,
           background: tokens.bgSunken,
         }}
@@ -755,6 +948,8 @@ export function UiEditorPanel(): React.ReactElement {
             selectedNodeIds={selectedHudIds}
             onSelectNode={handleSelectHud}
             onHudChange={persistHud}
+            onActionStart={beginHudAction}
+            onActionEnd={endHudAction}
           />
         ) : sub === "backpack" ? (
           <BackpackVisualCanvas
@@ -764,6 +959,8 @@ export function UiEditorPanel(): React.ReactElement {
             selectedNodeIds={selectedBagIds}
             onSelectNode={handleSelectBag}
             onConfigChange={persistBag}
+            onActionStart={beginBagAction}
+            onActionEnd={endBagAction}
           />
         ) : (
           <div
@@ -771,9 +968,12 @@ export function UiEditorPanel(): React.ReactElement {
             style={{
               display: "flex",
               flexDirection: "column",
+              flex: 1,
               width: "100%",
               height: "100%",
+              minWidth: 0,
               minHeight: 0,
+              overflow: "hidden",
             }}
           >
             <div
@@ -787,9 +987,9 @@ export function UiEditorPanel(): React.ReactElement {
                 flexShrink: 0,
               }}
             >
-              {sceneUiTabBtn("itemToast", "获得提示")}
-              {sceneUiTabBtn("hotspotHover", "交互点悬停")}
-              {sceneUiTabBtn("sceneReturn", "返回场景")}
+              {sceneUiTabBtn("itemToast", "获得提示", "bell")}
+              {sceneUiTabBtn("hotspotHover", "交互点悬停", "hand-pointer")}
+              {sceneUiTabBtn("sceneReturn", "返回场景", "arrow-left")}
             </div>
             <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
               {sceneUiTab === "itemToast" ? (
@@ -809,6 +1009,7 @@ export function UiEditorPanel(): React.ReactElement {
         style={{
           width: 300,
           flexShrink: 0,
+          height: "100%",
           minHeight: 0,
           overflow: "auto",
           background: tokens.bgElevated,
@@ -829,6 +1030,20 @@ export function UiEditorPanel(): React.ReactElement {
         </div>
 
         {sub === "hud" ? (
+          <OverlayPalette
+            onAdd={handleAddHudOverlay}
+            onDelete={handleDeleteHudOverlay}
+            canDelete={canDeleteHudOverlay}
+          />
+        ) : (
+          <OverlayPalette
+            onAdd={handleAddBagOverlay}
+            onDelete={handleDeleteBagOverlay}
+            canDelete={canDeleteBagOverlay}
+          />
+        )}
+
+        {sub === "hud" ? (
           <AlignToolbar
             selectedCount={selectedHudIds.length}
             onAlign={handleAlignHud}
@@ -836,7 +1051,7 @@ export function UiEditorPanel(): React.ReactElement {
         ) : (
           <AlignToolbar
             selectedCount={selectedBagIds.filter((id) =>
-              BAG_ALIGNABLE.includes(id),
+              BAG_ALIGNABLE.includes(id as BackpackNodeId),
             ).length}
             onAlign={handleAlignBag}
           />
@@ -851,14 +1066,14 @@ export function UiEditorPanel(): React.ReactElement {
         >
           {sub === "hud" ? (
             <>
-              {primaryHudId !== null ? (
+              {primaryHudId !== null && !canDeleteHudOverlay ? (
                 <button
                   type="button"
                   data-testid="ui-editor-reset-hud-node"
                   onClick={handleResetHudNode}
                   style={resetButtonStyle(tokens, false)}
                 >
-                  重置此节点
+                  <IconLabel icon="rotate-left">重置此节点</IconLabel>
                 </button>
               ) : null}
               <button
@@ -867,19 +1082,19 @@ export function UiEditorPanel(): React.ReactElement {
                 onClick={handleResetHudAll}
                 style={resetButtonStyle(tokens, true)}
               >
-                全部重置为默认
+                <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
               </button>
             </>
           ) : (
             <>
-              {primaryBagId !== null ? (
+              {primaryBagId !== null && !canDeleteBagOverlay ? (
                 <button
                   type="button"
                   data-testid="ui-editor-reset-bag-node"
                   onClick={handleResetBagNode}
                   style={resetButtonStyle(tokens, false)}
                 >
-                  重置此节点
+                  <IconLabel icon="rotate-left">重置此节点</IconLabel>
                 </button>
               ) : null}
               <button
@@ -888,7 +1103,7 @@ export function UiEditorPanel(): React.ReactElement {
                 onClick={handleResetBagAll}
                 style={resetButtonStyle(tokens, true)}
               >
-                全部重置为默认
+                <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
               </button>
             </>
           )}

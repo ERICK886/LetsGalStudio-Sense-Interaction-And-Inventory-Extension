@@ -16,6 +16,7 @@ import type {
   ItemsLibraryFile,
   SceneDefinition,
 } from "../../domain/types";
+import { IconLabel } from "../../shared/fa-icon";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -99,6 +100,9 @@ function toolButtonStyle(
     fontWeight: 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -272,7 +276,7 @@ export function ItemListPanel({
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
-          新建
+          <IconLabel icon="plus">新建</IconLabel>
         </button>
       </div>
 
@@ -358,6 +362,10 @@ export function ItemListPanel({
                   onClick={() => onSelectItem(item.id)}
                   style={rowStyle(tokens, selected)}
                 >
+                  <IconLabel
+                    icon={item.stackable ? "layer-group" : "cube"}
+                    iconSize={11}
+                  />
                   <span
                     style={{
                       flex: 1,
@@ -389,7 +397,7 @@ export function ItemListPanel({
                     flexShrink: 0,
                   }}
                 >
-                  删
+                  <IconLabel icon="trash" />
                 </button>
               </div>
             );

@@ -250,19 +250,37 @@ export function ToastLayer({
     return null;
   }
 
-  const anchor = hotspots.find((h) => h.id === current.anchorHotspotId);
-  const anchorPos = anchor
-    ? normToWorld(anchor.x, anchor.y, contentRect)
-    : {
-        x: contentRect.originX + contentRect.width / 2,
-        y: contentRect.originY + contentRect.height * 0.35,
-      };
+  const hasPixelAnchor =
+    current.anchorPixel !== undefined &&
+    Number.isFinite(current.anchorPixel.x) &&
+    Number.isFinite(current.anchorPixel.y);
+
+  const anchorPos = hasPixelAnchor
+    ? { x: current.anchorPixel!.x, y: current.anchorPixel!.y }
+    : current.screenCenter
+      ? {
+          x: contentRect.originX + contentRect.width / 2,
+          y: contentRect.originY + contentRect.height / 2,
+        }
+      : (() => {
+          const anchor = hotspots.find(
+            (h) => h.id === current.anchorHotspotId,
+          );
+
+          return anchor
+            ? normToWorld(anchor.x, anchor.y, contentRect)
+            : {
+                x: contentRect.originX + contentRect.width / 2,
+                y: contentRect.originY + contentRect.height * 0.35,
+              };
+        })();
 
   const layout = computeToastAnchorStyle(anchorPos, {
-    placement: current.placement,
-    offsetX: current.offsetX,
-    offsetY: current.offsetY,
-    gap: current.gap,
+    placement:
+      current.screenCenter && !hasPixelAnchor ? "center" : current.placement,
+    offsetX: current.screenCenter && !hasPixelAnchor ? 0 : current.offsetX,
+    offsetY: current.screenCenter && !hasPixelAnchor ? 0 : current.offsetY,
+    gap: current.screenCenter && !hasPixelAnchor ? 0 : current.gap,
   });
 
   const text =
@@ -291,10 +309,10 @@ export function ToastLayer({
           left: layout.left,
           top: layout.top,
           padding: "8px 14px",
-          whiteSpace: "nowrap",
-          maxWidth: 280,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
+          /** 完整展示作者/系统文案，不做省略截断 */
+          whiteSpace: "pre-wrap",
+          maxWidth: "min(90%, 720px)",
+          wordBreak: "break-word",
           ...applyUiBoxStyle(current.style),
           ...applyUiTextStyle(current.style),
           ...toastMotionStyle(current.motion, phase, layout.transform),

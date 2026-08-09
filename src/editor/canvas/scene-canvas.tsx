@@ -2,10 +2,12 @@
  * scene-canvas.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.1.3
  *
  * 编辑器中部场景画布：DOM 底图 + hotspot overlay（设计分辨率 letterbox）。
  * 0.1.1：宿主节点在空态也保持挂载，ResizeObserver 才能测到真实中栏尺寸并居中。
+ * 0.1.2：宿主与设计画幅底色跟随场景 letterbox（支持自定义透明）。
+ * 0.1.3：方向键对选中交互点做设计像素级微调（Shift=10px）。
  */
 
 import React, {
@@ -16,7 +18,12 @@ import React, {
   useState,
 } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
+import {
+  LETTERBOX_COLOR_BLACK,
+  resolveLetterboxColor,
+} from "../../domain/letterbox";
 import type { SceneDefinition } from "../../domain/types";
+import { clamp01 } from "../../shared/coords";
 import { resolveAssetUrl } from "../../shared/resolve-asset-url";
 import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
@@ -114,7 +121,10 @@ export function SceneCanvas({
   );
   const onSelectRef = useRef(onSelectHotspot);
   const onPlaceRef = useRef(onCanvasPlace);
+  const onMoveRef = useRef(onHotspotMove);
   const placementActiveRef = useRef(placementActive);
+  const sceneRef = useRef(scene);
+  const selectedHotspotIdRef = useRef(selectedHotspotId);
 
   const [hostSize, setHostSize] = useState({ width: 800, height: 600 });
   const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
@@ -122,7 +132,10 @@ export function SceneCanvas({
 
   onSelectRef.current = onSelectHotspot;
   onPlaceRef.current = onCanvasPlace;
+  onMoveRef.current = onHotspotMove;
   placementActiveRef.current = placementActive;
+  sceneRef.current = scene;
+  selectedHotspotIdRef.current = selectedHotspotId;
 
   const ctx = useExtensionContext();
 
@@ -169,6 +182,76 @@ export function SceneCanvas({
   );
 
   layoutRef.current = layout;
+
+  /**
+   * 方向键微调选中交互点：相对 contentRect 移动 1 设计像素（Shift 为 10）。
+   * 在 INPUT / TEXTAREA / SELECT / contentEditable 内不拦截。
+   */
+  useEffect(() => {
+    /**
+     * @param event - 键盘事件
+     */
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const key = event.key;
+
+      if (
+        key !== "ArrowUp" &&
+        key !== "ArrowDown" &&
+        key !== "ArrowLeft" &&
+        key !== "ArrowRight"
+      ) {
+        return;
+      }
+
+      const hotspotId = selectedHotspotIdRef.current;
+      const currentScene = sceneRef.current;
+
+      if (hotspotId === null || currentScene === null) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable === true
+      ) {
+        return;
+      }
+
+      const hs = currentScene.hotspots.find((h) => h.id === hotspotId);
+
+      if (hs === undefined) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const stepPx = event.shiftKey ? 10 : 1;
+      const rect = layoutRef.current.contentRect;
+      const dxNorm =
+        (key === "ArrowLeft" ? -stepPx : key === "ArrowRight" ? stepPx : 0) /
+        Math.max(1e-6, rect.width);
+      const dyNorm =
+        (key === "ArrowUp" ? -stepPx : key === "ArrowDown" ? stepPx : 0) /
+        Math.max(1e-6, rect.height);
+
+      onMoveRef.current(
+        hotspotId,
+        clamp01(hs.x + dxNorm),
+        clamp01(hs.y + dyNorm),
+      );
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   /**
    * 测量宿主尺寸。
@@ -263,6 +346,13 @@ export function SceneCanvas({
     [],
   );
 
+  /**
+   * 画布宿主与设计画幅共用 letterbox；自定义透明时透出中栏 bgSunken，
+   * 便于作者确认 Alpha 生效（运行时再透出引擎层）。
+   */
+  const letterbox =
+    scene !== null ? resolveLetterboxColor(scene) : LETTERBOX_COLOR_BLACK;
+
   return (
     <div
       ref={rootRef}
@@ -272,7 +362,7 @@ export function SceneCanvas({
         position: "absolute",
         inset: 0,
         overflow: "hidden",
-        background: "#141418",
+        background: letterbox,
         cursor:
           scene !== null && placementActive ? "crosshair" : "default",
       }}
@@ -297,6 +387,7 @@ export function SceneCanvas({
         <SceneBaseLayer
           layout={layout}
           imageUrl={imageUrl}
+          frameBackground={letterbox}
           onImageNaturalSize={(w, h) => {
             setImageNatural({ width: w, height: h });
           }}

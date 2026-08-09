@@ -2,9 +2,9 @@
  * free-layout-selection.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
- * 自由布局编辑器纯逻辑：边缘吸附、拖拽（Shift 锁轴）、八向 resize。
+ * 自由布局编辑器纯逻辑：边缘吸附、拖拽（Shift 锁轴）、八向 resize、方向键微调。
  * 供 HUD / 背包可视化画布复用，不含 React 依赖。
  */
 
@@ -19,6 +19,80 @@ const DEFAULT_SNAP_THRESHOLD = 4;
 /** 默认 resize 最小宽/高（设计像素）。 */
 const DEFAULT_MIN_W = 24;
 const DEFAULT_MIN_H = 24;
+
+/** 方向键微调步进（设计像素）；按住 Shift 为 10。 */
+const NUDGE_STEP = 1;
+const NUDGE_STEP_SHIFT = 10;
+
+/**
+ * 判断按键目标是否为正在输入的表单控件（此时不拦截方向键）。
+ *
+ * @param target - 事件 target
+ * @returns 是可编辑控件则为 true
+ */
+export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  const tag = el?.tagName;
+
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    el?.isContentEditable === true
+  );
+}
+
+/**
+ * 由方向键得到设计像素位移（Shift=10，否则 1）。
+ *
+ * @param key - KeyboardEvent.key
+ * @param shiftKey - 是否按住 Shift
+ * @returns 位移；非方向键时 null
+ *
+ * @example
+ * ```ts
+ * arrowNudgeDelta("ArrowLeft", false); // { dx: -1, dy: 0 }
+ * arrowNudgeDelta("ArrowUp", true); // { dx: 0, dy: -10 }
+ * ```
+ */
+export function arrowNudgeDelta(
+  key: string,
+  shiftKey: boolean,
+): { dx: number; dy: number } | null {
+  const step = shiftKey ? NUDGE_STEP_SHIFT : NUDGE_STEP;
+
+  switch (key) {
+    case "ArrowLeft":
+      return { dx: -step, dy: 0 };
+    case "ArrowRight":
+      return { dx: step, dy: 0 };
+    case "ArrowUp":
+      return { dx: 0, dy: -step };
+    case "ArrowDown":
+      return { dx: 0, dy: step };
+    default:
+      return null;
+  }
+}
+
+/**
+ * 将矩形原点按位移微调，并钳制到非负坐标。
+ *
+ * @param rect - 原矩形（至少含 x/y）
+ * @param dx - 水平位移
+ * @param dy - 竖直位移
+ * @returns 新的 x/y（已 round + clamp）
+ */
+export function nudgeOrigin(
+  rect: { x: number; y: number },
+  dx: number,
+  dy: number,
+): { x: number; y: number } {
+  return {
+    x: Math.max(0, Math.round(rect.x + dx)),
+    y: Math.max(0, Math.round(rect.y + dy)),
+  };
+}
 
 /**
  * 将数值吸附到最近的目标边缘。

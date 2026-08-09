@@ -4,7 +4,7 @@
  * 日期: 2026-08-08
  * 版本: 0.1.0
  *
- * 扫描场景库中 giveItem 动作对物品 id 的引用（软依赖警告用）。
+ * 扫描场景库中 giveItem / removeItem 动作对物品 id 的引用（软依赖警告用）。
  */
 
 import type { SceneAction, SceneDefinition } from "./types";
@@ -14,10 +14,13 @@ import type { SceneAction, SceneDefinition } from "./types";
  *
  * @param action - 场景动作
  * @param itemId - 物品 id
- * @returns 是否为 giveItem 且 itemId 匹配
+ * @returns 是否为 giveItem/removeItem 且 itemId 匹配
  */
 function actionReferencesItem(action: SceneAction, itemId: string): boolean {
-  return action.type === "giveItem" && action.itemId === itemId;
+  return (
+    (action.type === "giveItem" || action.type === "removeItem") &&
+    action.itemId === itemId
+  );
 }
 
 /**

@@ -4,10 +4,15 @@ sdk
 *.log
 .DS_Store
 
-# Agent / SDD scratch (briefs, review pkgs, progress ledgers)
+# Agent / SDD scratch
 .superpowers/
+docs/superpowers/
+
+# npm lock when using pnpm
+package-lock.json
 
 # Local one-off scripts
 tmp-*.cjs
 tmp-*.js
 tmp-*.ts
+scripts/

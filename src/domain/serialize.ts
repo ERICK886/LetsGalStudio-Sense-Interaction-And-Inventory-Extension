@@ -5,7 +5,7 @@
  * 版本: 0.1.3
  *
  * 场景库 / 物品库 / 库存 / 进度 / HUD 的 JSON 安全编解码与规范化。
- * openScene 动作含 returnTarget / pushReturn 规范化；
+ * 含交互点动作 jumpFragment / giveItem / removeItem / continueStory；
  * 交互点 hoverShadow 经 normalizeHotspotHoverShadow 保留 useGlobal 决策字段。
  */
 import { clamp01 } from "../shared/coords";
@@ -329,6 +329,38 @@ function normalizeSceneAction(raw: unknown): SceneAction | null {
       const toastStyle = normalizeToastStyle(obj.toastStyle);
       if (toastStyle !== undefined) {
         action.toastStyle = toastStyle;
+      }
+
+      return action;
+    }
+
+    case "removeItem": {
+      return {
+        type: "removeItem",
+        itemId: typeof obj.itemId === "string" ? obj.itemId : "",
+        amount: normalizeGiveItemAmount(obj.amount),
+      };
+    }
+
+    case "continueStory":
+      return { type: "continueStory" };
+
+    case "jumpFragmentReturn":
+    case "jumpFragmentGoto": {
+      const fragmentId =
+        typeof obj.fragmentId === "string" ? obj.fragmentId : "";
+      const chapterRaw =
+        typeof obj.chapterId === "string" ? obj.chapterId.trim() : "";
+      const action: Extract<
+        SceneAction,
+        { type: "jumpFragmentReturn" | "jumpFragmentGoto" }
+      > = {
+        type: obj.type,
+        fragmentId,
+      };
+
+      if (chapterRaw.length > 0) {
+        action.chapterId = chapterRaw;
       }
 
       return action;

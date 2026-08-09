@@ -2,11 +2,14 @@
  * runtime-shell.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.4
+ * 版本: 0.3.5
  *
  * 场景交互运行时壳（纯玩家画面）：场景 + 动作链 / toast / once；
  * 无预览顶栏、无背包 HUD（背包由独立程序 backpack-hud 负责）。
  * 动作链执行中忽略重复 hotspot 点击（防抖）。
+ * 片段跳转经 ctx.flow 注入 ActionRuntime。
+ * 根背景透明，letterbox 透明时才能透出引擎对话框等下层 UI。
+ * 跳转片段时经 suspend-overlay-for-fragment 暂时 ui.hide，避免盖住对话框。
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +27,12 @@ import {
   stringifySceneReturnStack,
 } from "../domain/scene-return-stack";
 import {
+  advanceRewardFlyQueue,
+  emptyRewardFlyQueue,
+  enqueueRewardFly,
+  type RewardFlyQueueState,
+} from "../domain/reward-fly";
+import {
   advanceToastQueue,
   emptyToastQueue,
   enqueueToast,
@@ -36,10 +45,14 @@ import type {
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
+import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import {
-  useInventory,
   useProgress,
 } from "../store/inventory-persistence";
+import {
+  getInventorySession,
+  useInventorySession,
+} from "../store/inventory-session";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
@@ -47,9 +60,17 @@ import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
 import { useSceneUiConfig } from "../store/use-scene-ui-config";
 import { useTheme } from "../theme/theme-provider";
+import { logDebug } from "../shared/logger";
 import { createActionRuntime } from "./create-action-runtime";
+import { endPlayerSessionWait, isPlayerSessionPending } from "./player-session";
+import { RewardFlyLayer } from "./reward-fly-layer";
 import { SceneReturnButton } from "./scene-return-button";
 import { SceneView } from "./scene-view";
+import {
+  callFragmentYieldingOverlay,
+  goToFragmentYieldingOverlay,
+  isPlayerOverlaySessionActive,
+} from "./suspend-overlay-for-fragment";
 
 /**
  * RuntimeShell 组件属性。
@@ -59,6 +80,11 @@ export interface RuntimeShellProps {
    * 强类型存档 API（读写 currentSceneId / inventory / progress）。
    */
   save: SaveAPI<SceneInteractionSaveMap>;
+
+  /**
+   * 「继续剧情」动作回调；缺省仅解除会话门闩。
+   */
+  onContinueStory?: () => void | Promise<void>;
 }
 
 /**
@@ -91,15 +117,17 @@ function resolveCurrentScene(
  * 玩家运行时壳：全屏场景 + 动作链 / once / toast（无预览顶栏）。
  *
  * @param props.save - 存档 API
+ * @param props.onContinueStory - 继续剧情回调
  * @returns 全屏运行时 UI
  *
  * @example
  * ```tsx
- * <RuntimeShell save={save} />
+ * <RuntimeShell save={save} onContinueStory={closeSession} />
  * ```
  */
 export function RuntimeShell({
   save,
+  onContinueStory,
 }: RuntimeShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
@@ -107,7 +135,8 @@ export function RuntimeShell({
 
   const [library] = useScenesLibrary();
   const [itemsLibrary] = useItemsLibrary();
-  const [inventory, setInventory] = useInventory(save, ctx);
+  /** 经会话桥读写，hide/show 重挂不丢；并同步 save.inventoryJson */
+  const [inventory, setInventory] = useInventorySession();
   const [progress, setProgress] = useProgress(save, ctx);
   const [currentSceneId, setCurrentSceneId] = useSaveValue(
     save,
@@ -122,6 +151,9 @@ export function RuntimeShell({
 
   const [toastQueue, setToastQueue] = useState<ToastQueueState>(() =>
     emptyToastQueue(),
+  );
+  const [rewardFlyQueue, setRewardFlyQueue] = useState<RewardFlyQueueState>(
+    () => emptyRewardFlyQueue(),
   );
 
   /** 场景 UI 预设（itemToast + hotspotHover），订阅 editor.sceneUiJson 写入 */
@@ -174,7 +206,13 @@ export function RuntimeShell({
   const handleEnqueueToast = useCallback(
     (payload: Parameters<ActionRuntime["enqueueToast"]>[0]): void => {
       const global = sceneUi.itemToast;
-      const { text, anchorHotspotId, motion, ...overrides } = payload;
+      const {
+        text,
+        anchorHotspotId,
+        motion,
+        screenCenter,
+        ...overrides
+      } = payload;
       const appearance = resolveItemToastAppearance(global, overrides);
 
       setToastQueue((prev) =>
@@ -183,18 +221,94 @@ export function RuntimeShell({
           anchorHotspotId,
           motion,
           ...appearance,
+          ...(screenCenter === true ? { screenCenter: true } : {}),
         }),
       );
     },
     [sceneUi],
   );
 
+  /**
+   * 奖励飞入入队。
+   *
+   * @param payload - 已解析的飞入载荷
+   */
+  const handleEnqueueRewardFly = useCallback(
+    (payload: {
+      itemId: string;
+      iconUrl: string;
+      displayName: string;
+      slotIndex: number;
+    }): void => {
+      setRewardFlyQueue((prev) => enqueueRewardFly(prev, payload));
+    },
+    [],
+  );
+
+  /**
+   * 可跳回：卸扩展叠层后再 callFragment（避免盖住引擎对话框）。
+   *
+   * @param fragmentId - 片段 id
+   * @param chapterId - 可选章节
+   */
+  /** hide 未立刻卸树时，先本地藏起场景区 */
+  const [overlayYielded, setOverlayYielded] = useState(false);
+
+  const handleCallFragment = useCallback(
+    async (fragmentId: string, chapterId?: string): Promise<void> => {
+      await callFragmentYieldingOverlay(
+        ctx,
+        fragmentId,
+        chapterId,
+        setOverlayYielded,
+      );
+    },
+    [ctx],
+  );
+
+  /**
+   * 不可跳回：卸扩展叠层后 goToFragment。
+   *
+   * @param fragmentId - 片段 id
+   * @param chapterId - 可选章节
+   */
+  const handleGoToFragment = useCallback(
+    (fragmentId: string, chapterId?: string): void => {
+      goToFragmentYieldingOverlay(
+        ctx,
+        fragmentId,
+        chapterId,
+        setOverlayYielded,
+      );
+    },
+    [ctx],
+  );
+
+  /**
+   * 继续剧情：优先 App 注入的关闭回调，否则仅解除会话门闩。
+   */
+  const handleContinueStory = useCallback((): void | Promise<void> => {
+    logDebug("continue-story", "RuntimeShell.handleContinueStory", {
+      hasOnContinueStory: Boolean(onContinueStory),
+      playerOverlaySession: isPlayerOverlaySessionActive(),
+      sessionPending: isPlayerSessionPending(),
+      t: Date.now(),
+    });
+
+    if (onContinueStory) {
+      return onContinueStory();
+    }
+
+    endPlayerSessionWait();
+  }, [onContinueStory]);
+
   const actionRuntime = useMemo(
     () =>
       createActionRuntime({
         getScenes: () => scenesRef.current,
         getItems: () => itemsRef.current,
-        getInventory: () => inventoryRef.current,
+        /** 读模块会话，避免 inventoryRef 尚未随 React 重渲染更新时用空库存覆盖 */
+        getInventory: () => getInventorySession(),
         setInventory,
         setCurrentSceneId: (id) => {
           currentSceneIdRef.current = id;
@@ -209,12 +323,23 @@ export function RuntimeShell({
           setReturnStackJson(json);
         },
         enqueueToast: handleEnqueueToast,
+        enqueueRewardFly: handleEnqueueRewardFly,
+        resolveUrl: (uri) =>
+          resolveAssetUrl(uri, ctx.asset?.resolve?.bind(ctx.asset)),
+        callFragment: handleCallFragment,
+        goToFragment: handleGoToFragment,
+        continueStory: handleContinueStory,
       }),
     [
       setInventory,
       setCurrentSceneId,
       setReturnStackJson,
       handleEnqueueToast,
+      handleEnqueueRewardFly,
+      ctx.asset,
+      handleCallFragment,
+      handleGoToFragment,
+      handleContinueStory,
     ],
   );
 
@@ -223,6 +348,13 @@ export function RuntimeShell({
    */
   const handleToastAdvance = useCallback((): void => {
     setToastQueue((prev) => advanceToastQueue(prev));
+  }, []);
+
+  /**
+   * 推进奖励飞入队列。
+   */
+  const handleRewardFlyAdvance = useCallback((): void => {
+    setRewardFlyQueue((prev) => advanceRewardFlyQueue(prev));
   }, []);
 
   /**
@@ -240,13 +372,13 @@ export function RuntimeShell({
       hotspotBusyRef.current = true;
 
       try {
-        await executeSceneActions(
+        const { aborted } = await executeSceneActions(
           hotspot.actions,
           hotspot.id,
           actionRuntime,
         );
 
-        if (hotspot.once) {
+        if (hotspot.once && !aborted) {
           setProgress(markConsumed(progressRef.current, hotspot.id));
         }
       } catch (err) {
@@ -266,8 +398,18 @@ export function RuntimeShell({
         height: "100%",
         position: "relative",
         minHeight: 0,
-        background: tokens.bgBase,
+        /**
+         * 勿铺不透明主题底：SceneView 已按 letterbox 填色；
+         * 自定义透明时需透出引擎层（对话框等）。
+         */
+        background: "transparent",
         color: tokens.textPrimary,
+        visibility: overlayYielded ? "hidden" : "visible",
+        /**
+         * 全屏根不抢指针：空白穿透到引擎对话框；
+         * 交互点 / 返回钮各自 pointerEvents:auto。
+         */
+        pointerEvents: "none",
       }}
     >
       <div
@@ -276,6 +418,7 @@ export function RuntimeShell({
           width: "100%",
           height: "100%",
           position: "relative",
+          pointerEvents: "none",
         }}
       >
         <SceneView
@@ -306,6 +449,11 @@ export function RuntimeShell({
           }}
         />
       </div>
+
+      <RewardFlyLayer
+        queue={rewardFlyQueue}
+        onAdvance={handleRewardFlyAdvance}
+      />
     </div>
   );
 }

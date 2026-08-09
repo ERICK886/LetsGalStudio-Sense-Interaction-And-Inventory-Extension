@@ -1,28 +1,59 @@
 /**
  * inventory-hud.ts
  * 作者: 池水三两升
- * 日期: 2026-08-08
- * 版本: 0.2.1
+ * 日期: 2026-08-09
+ * 版本: 0.3.0
  *
  * 物品栏 HUD 外观默认值、v1→v2 迁移与 JSON 规范化。
+ * 「打开背包」已迁为 chrome overlay 按钮组件（role: openBag）。
  */
+import { resolveHudLayout } from "./hud-layout";
 import type {
   InventoryHudConfig,
   UiBoxStyle,
+  UiOverlayElement,
   UiRect,
   UiTextStyle,
 } from "./types";
+import {
+  cloneUiButtonSkin,
+  normalizeUiButtonSkin,
+} from "./ui-button-skin";
+import {
+  buildDefaultLayerOrder,
+  normalizeLayerOrder,
+} from "./layer-order";
+import {
+  cloneUiOverlayElement,
+  normalizeUiOverlays,
+} from "./ui-overlay";
 import {
   normalizeUiBoxStyle,
   normalizeUiRect,
   normalizeUiTextStyle,
 } from "./ui-style";
 
+/** HUD 侧栏固定功能节点（可拖排序）；打开背包已迁为 overlay */
+export const HUD_FIXED_LAYER_IDS = ["quickbarRoot"] as const;
+
+/** HUD chrome 图层稳定 id（不可删） */
+export const HUD_CHROME_OVERLAY_IDS = {
+  openBag: "hud-chrome-open-bag",
+} as const;
+
+/**
+ * @param id - 图层 id
+ * @returns 是否为 HUD chrome 稳定 id
+ */
+export function isHudChromeOverlayId(id: string): boolean {
+  return (Object.values(HUD_CHROME_OVERLAY_IDS) as string[]).includes(id);
+}
+
 /** 快捷栏左边距默认值（设计像素） */
-const DEFAULT_LEFT = 24;
+const DEFAULT_LEFT = 37;
 
 /** 快捷栏顶边距默认值（设计像素） */
-const DEFAULT_TOP = 120;
+const DEFAULT_TOP = 198;
 
 /** 槽位尺寸默认值（设计像素） */
 const DEFAULT_SLOT_SIZE = 64;
@@ -32,6 +63,14 @@ const DEFAULT_GAP = 8;
 
 /** 打开背包按钮默认文案 */
 const DEFAULT_OPEN_BAG_LABEL = "打开背包";
+
+/** 打开背包按钮默认矩形（设计像素） */
+const DEFAULT_OPEN_BAG_RECT: Required<UiRect> = {
+  x: 38,
+  y: 776,
+  w: 64,
+  h: 64,
+};
 
 /** 强调色默认值（与全屏背包默认 accent 对齐） */
 const DEFAULT_ACCENT = "#64e0d0";
@@ -57,7 +96,7 @@ const DEFAULT_BADGE_STYLE: UiBoxStyle & UiTextStyle = {
 };
 
 /**
- * 「打开背包」按钮默认样式（贴近现网：accent 底半透明 + 圆角 8）。
+ * 「打开背包」按钮默认样式（图标按钮：accent 底半透明 + 圆角 8）。
  */
 const DEFAULT_OPEN_BAG_STYLE: UiBoxStyle & UiTextStyle = {
   background: "#64e0d022",
@@ -65,7 +104,7 @@ const DEFAULT_OPEN_BAG_STYLE: UiBoxStyle & UiTextStyle = {
   borderWidth: 1,
   borderRadius: 8,
   color: "#F2F2F4",
-  fontSize: 12,
+  fontSize: 24,
   fontWeight: 600,
   label: DEFAULT_OPEN_BAG_LABEL,
 };
@@ -117,6 +156,7 @@ function cloneOpenBagButton(
     layout: node.layout,
     rect: node.rect ? { ...node.rect } : undefined,
     style: { ...node.style },
+    ...cloneUiButtonSkin(node),
   };
 }
 
@@ -207,6 +247,7 @@ function normalizeOpenBagButton(
   const result: InventoryHudConfig["nodes"]["openBagButton"] = {
     layout,
     style: normalizeBoxAndTextStyle(obj.style, fallback.style),
+    ...normalizeUiButtonSkin(obj),
   };
 
   if (obj.rect !== undefined && obj.rect !== null && typeof obj.rect === "object") {
@@ -222,6 +263,106 @@ function normalizeOpenBagButton(
 }
 
 /**
+ * 由遗留 nodes.openBagButton + resolveHudLayout 生成「打开背包」按钮组件。
+ *
+ * @param nodes - HUD nodes（含 openBagButton 供迁移）
+ * @returns chrome overlays
+ */
+export function buildHudChromeOverlays(
+  nodes: InventoryHudConfig["nodes"],
+): UiOverlayElement[] {
+  const layout = resolveHudLayout({
+    version: 2,
+    accent: DEFAULT_ACCENT,
+    customCss: "",
+    overlays: [],
+    nodes,
+  });
+  const btn = layout.openBagButton;
+  // 允许空文案（纯图标）；仅缺省字段时用默认「打开背包」
+  const label =
+    typeof nodes.openBagButton.style.label === "string"
+      ? nodes.openBagButton.style.label.trim()
+      : DEFAULT_OPEN_BAG_LABEL;
+
+  return [
+    {
+      id: HUD_CHROME_OVERLAY_IDS.openBag,
+      kind: "button",
+      name: "打开背包",
+      role: "openBag",
+      rect: { x: btn.x, y: btn.y, w: btn.w, h: btn.h },
+      zIndex: 10,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      opacity: 1,
+      customCss: "",
+      style: { ...nodes.openBagButton.style, label },
+      skin: cloneUiButtonSkin(nodes.openBagButton),
+      props: {
+        /** 默认纯图标；文案由 style.label 保留供无障碍/重置 */
+        text: "",
+        icon: "bag-shopping",
+        thickness: 2,
+        lineStyle: "solid",
+        initialIndex: 0,
+        initialOn: true,
+        initialValue: 60,
+        showValue: true,
+        maxLength: 0,
+        tabGap: 8,
+      },
+    },
+  ];
+}
+
+/**
+ * 补齐缺失的 HUD chrome overlays；已存在的保留用户编辑。
+ *
+ * @param overlays - 当前图层
+ * @param nodes - 用于生成缺省 chrome
+ */
+export function ensureHudChromeOverlays(
+  overlays: readonly UiOverlayElement[],
+  nodes: InventoryHudConfig["nodes"],
+): UiOverlayElement[] {
+  const seeds = buildHudChromeOverlays(nodes);
+  const byId = new Map(overlays.map((el) => [el.id, el]));
+  const out: UiOverlayElement[] = [];
+
+  for (const seed of seeds) {
+    const existing = byId.get(seed.id);
+
+    if (existing) {
+      const cloned = cloneUiOverlayElement(existing);
+
+      if (
+        (cloned.role === "openBag" || seed.role === "openBag") &&
+        !cloned.props.icon
+      ) {
+        cloned.props = { ...cloned.props, icon: "bag-shopping" };
+      }
+
+      if (cloned.role === "none" || cloned.role === undefined) {
+        cloned.role = "openBag";
+      }
+
+      out.push(cloned);
+      byId.delete(seed.id);
+    } else {
+      out.push(cloneUiOverlayElement(seed));
+    }
+  }
+
+  for (const el of byId.values()) {
+    out.push(cloneUiOverlayElement(el));
+  }
+
+  return out;
+}
+
+/**
  * 返回 v2 约定的物品栏 HUD 默认配置。
  *
  * @returns 默认 InventoryHudConfig（version: 2）
@@ -230,28 +371,34 @@ function normalizeOpenBagButton(
  * ```ts
  * const hud = defaultInventoryHud();
  * // hud.version === 2
- * // hud.nodes.quickbarRoot.rect === { x: 24, y: 120 }
+ * // hud.nodes.quickbarRoot.rect === { x: 37, y: 198 }
  * ```
  */
 export function defaultInventoryHud(): InventoryHudConfig {
+  const nodes: InventoryHudConfig["nodes"] = {
+    quickbarRoot: {
+      rect: { x: DEFAULT_LEFT, y: DEFAULT_TOP },
+      direction: "column",
+      slotSize: DEFAULT_SLOT_SIZE,
+      gap: DEFAULT_GAP,
+      slotStyle: { ...DEFAULT_SLOT_STYLE },
+      badgeStyle: { ...DEFAULT_BADGE_STYLE },
+    },
+    openBagButton: {
+      layout: "absolute",
+      rect: { ...DEFAULT_OPEN_BAG_RECT },
+      style: { ...DEFAULT_OPEN_BAG_STYLE },
+    },
+  };
+  const overlays = buildHudChromeOverlays(nodes);
+
   return {
     version: 2,
     accent: DEFAULT_ACCENT,
     customCss: "",
-    nodes: {
-      quickbarRoot: {
-        rect: { x: DEFAULT_LEFT, y: DEFAULT_TOP },
-        direction: "column",
-        slotSize: DEFAULT_SLOT_SIZE,
-        gap: DEFAULT_GAP,
-        slotStyle: { ...DEFAULT_SLOT_STYLE },
-        badgeStyle: { ...DEFAULT_BADGE_STYLE },
-      },
-      openBagButton: {
-        layout: "belowRoot",
-        style: { ...DEFAULT_OPEN_BAG_STYLE },
-      },
-    },
+    overlays,
+    layerOrder: ["quickbarRoot", `overlay:${HUD_CHROME_OVERLAY_IDS.openBag}`],
+    nodes,
   };
 }
 
@@ -287,25 +434,30 @@ function migrateV1ToV2(
       ? obj.accent.trim()
       : defaults.accent;
 
+  const nodes: InventoryHudConfig["nodes"] = {
+    quickbarRoot: {
+      ...cloneQuickbarRoot(defaults.nodes.quickbarRoot),
+      rect: { x: left, y: top },
+      slotSize,
+      gap,
+    },
+    openBagButton: {
+      ...cloneOpenBagButton(defaults.nodes.openBagButton),
+      style: {
+        ...defaults.nodes.openBagButton.style,
+        label: openBagLabel,
+      },
+    },
+  };
+  const overlays = ensureHudChromeOverlays([], nodes);
+
   return {
     version: 2,
     accent,
     customCss,
-    nodes: {
-      quickbarRoot: {
-        ...cloneQuickbarRoot(defaults.nodes.quickbarRoot),
-        rect: { x: left, y: top },
-        slotSize,
-        gap,
-      },
-      openBagButton: {
-        ...cloneOpenBagButton(defaults.nodes.openBagButton),
-        style: {
-          ...defaults.nodes.openBagButton.style,
-          label: openBagLabel,
-        },
-      },
-    },
+    overlays,
+    layerOrder: buildDefaultLayerOrder(HUD_FIXED_LAYER_IDS, overlays),
+    nodes,
   };
 }
 
@@ -334,7 +486,21 @@ export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
   const obj = raw as Record<string, unknown>;
 
   if (obj.version === 2 && obj.nodes !== null && typeof obj.nodes === "object") {
-    const nodes = obj.nodes as Record<string, unknown>;
+    const nodesRaw = obj.nodes as Record<string, unknown>;
+    const nodes: InventoryHudConfig["nodes"] = {
+      quickbarRoot: normalizeQuickbarRoot(
+        nodesRaw.quickbarRoot,
+        defaults.nodes.quickbarRoot,
+      ),
+      openBagButton: normalizeOpenBagButton(
+        nodesRaw.openBagButton,
+        defaults.nodes.openBagButton,
+      ),
+    };
+    const overlays = ensureHudChromeOverlays(
+      normalizeUiOverlays(obj.overlays),
+      nodes,
+    );
 
     return {
       version: 2,
@@ -344,16 +510,13 @@ export function normalizeInventoryHud(raw: unknown): InventoryHudConfig {
           : defaults.accent,
       customCss:
         typeof obj.customCss === "string" ? obj.customCss : defaults.customCss,
-      nodes: {
-        quickbarRoot: normalizeQuickbarRoot(
-          nodes.quickbarRoot,
-          defaults.nodes.quickbarRoot,
-        ),
-        openBagButton: normalizeOpenBagButton(
-          nodes.openBagButton,
-          defaults.nodes.openBagButton,
-        ),
-      },
+      overlays,
+      layerOrder: normalizeLayerOrder(
+        obj.layerOrder,
+        HUD_FIXED_LAYER_IDS,
+        overlays,
+      ),
+      nodes,
     };
   }
 
@@ -389,11 +552,24 @@ export function resetInventoryHudNode(
     };
   }
 
+  /** 遗留 openBagButton：重置节点并重建 chrome 打开背包按钮 */
+  const nodes: InventoryHudConfig["nodes"] = {
+    ...cfg.nodes,
+    openBagButton: cloneOpenBagButton(defaults.nodes.openBagButton),
+  };
+  const withoutChrome = (cfg.overlays ?? []).filter(
+    (el) => !isHudChromeOverlayId(el.id),
+  );
+  const overlays = ensureHudChromeOverlays(withoutChrome, nodes);
+
   return {
     ...cfg,
-    nodes: {
-      ...cfg.nodes,
-      openBagButton: cloneOpenBagButton(defaults.nodes.openBagButton),
-    },
+    nodes,
+    overlays,
+    layerOrder: normalizeLayerOrder(
+      cfg.layerOrder,
+      HUD_FIXED_LAYER_IDS,
+      overlays,
+    ),
   };
 }

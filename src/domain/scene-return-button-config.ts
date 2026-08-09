@@ -123,7 +123,7 @@ function normalizeHoverStyle(
  * - 非对象 / null / undefined → 完整默认
  * - `enabled` 非 boolean → 默认 true
  * - `rect` 经 `normalizeUiRect`，保证有限 x/y 与正 w/h
- * - `label` 非空字符串，否则回退默认「返回」
+ * - `label` 字符串（可空）；缺省字段时用默认「返回」
  * - `style` 合并默认盒/字样式
  * - `imageSrc` / `hoverImageSrc` 非空字符串才保留
  * - `hoverStyle` 相对默认 style 规范化 Partial
@@ -134,7 +134,7 @@ function normalizeHoverStyle(
  * @example
  * ```ts
  * normalizeSceneReturnButtonConfig(null); // defaultSceneReturnButtonConfig()
- * normalizeSceneReturnButtonConfig({ label: "  " }).label; // "返回"
+ * normalizeSceneReturnButtonConfig({ label: "  " }).label; // ""
  * ```
  */
 export function normalizeSceneReturnButtonConfig(
@@ -156,9 +156,9 @@ export function normalizeSceneReturnButtonConfig(
     defaults.rect,
   );
 
-  const rawLabel =
+  // 允许空文案（纯图标 / 纯皮肤）；仅缺省字段时用默认「返回」
+  const label =
     typeof obj.label === "string" ? obj.label.trim() : defaults.label;
-  const label = rawLabel !== "" ? rawLabel : defaults.label;
 
   const style: UiBoxStyle & UiTextStyle = {
     ...normalizeUiBoxStyle(
@@ -173,6 +173,7 @@ export function normalizeSceneReturnButtonConfig(
 
   const imageSrc = normalizeOptionalNonEmptyString(obj.imageSrc);
   const hoverImageSrc = normalizeOptionalNonEmptyString(obj.hoverImageSrc);
+  const pressedImageSrc = normalizeOptionalNonEmptyString(obj.pressedImageSrc);
   const hoverStyle = normalizeHoverStyle(obj.hoverStyle, style);
 
   const result: SceneReturnButtonConfig = {
@@ -192,6 +193,10 @@ export function normalizeSceneReturnButtonConfig(
 
   if (hoverImageSrc !== undefined) {
     result.hoverImageSrc = hoverImageSrc;
+  }
+
+  if (pressedImageSrc !== undefined) {
+    result.pressedImageSrc = pressedImageSrc;
   }
 
   return result;

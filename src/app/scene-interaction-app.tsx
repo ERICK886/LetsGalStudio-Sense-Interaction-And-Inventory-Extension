@@ -2,14 +2,15 @@
  * scene-interaction-app.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.2
+ * 版本: 0.4.0
  *
  * 运行时程序 App：RuntimeShell / PlayerShell（纯场景画面）。
- * 背包 UI 由独立程序 `backpack-hud` 负责。
+ * - 快捷栏：玩家用 React 紧凑 `backpack-hud`（Visual UI 待 ui/ 恢复后再接）
+ * - 全屏背包：独立程序 `backpack`
  *
- * - 预览（Studio 程序预览）：settings 沙箱 + **内嵌** BackpackShell
- *   （不可 ctx.ui.show 背包，否则会顶掉当前预览容器，场景消失）
- * - 玩家会话：slot save + ctx.ui.show(backpack-hud) 叠层
+ * - 预览：settings 沙箱 + **内嵌** HudShell（勿 ui.show，以免顶掉预览容器）
+ * - 玩家会话：slot save + ui.show(backpack-hud)
+ * - ThemeProvider 根背景 transparent；场景壳根 pointer-events:none
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -19,12 +20,30 @@ import {
   type SaveAPI,
 } from "@avg-studio/sdk";
 import { SCENE_INTERACTION_UI_ID } from "../methods/scene-methods";
-import { endPlayerSessionWait } from "../runtime/player-session";
+import {
+  installHudForeignCover,
+  subscribeHudForeignCover,
+} from "../runtime/hud-foreign-cover";
+import {
+  endPlayerSessionWait,
+  isPlayerSessionPending,
+} from "../runtime/player-session";
+import {
+  clearPlayerOverlaySessionIfEpoch,
+  forceClearPlayerOverlaySession,
+  isPlayerOverlaySessionActive,
+  markPlayerOverlaySession,
+  setHudUiSession,
+  setSceneInteractionRestoreProps,
+} from "../runtime/suspend-overlay-for-fragment";
+import { closeVisualInventoryHud } from "../runtime/visual-inventory-hud";
 import {
   BACKPACK_HUD_MODULE_ID,
+  BACKPACK_MODULE_ID,
   SCENE_INTERACTION_MODULE_ID,
 } from "../shared/module-ids";
-import { logError } from "../shared/logger";
+import { getTightBackpackHudShowOptions } from "../store/hud-ui-show";
+import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { bindInventoryPersistence } from "../store/inventory-session";
 import { createSettingsPreviewSave } from "../store/preview-save";
@@ -48,6 +67,7 @@ export interface SceneInteractionAppProps extends ExtensionProps {
 
 type RuntimeShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
+  onContinueStory?: () => void | Promise<void>;
 }>;
 
 type PlayerShellComponent = React.ComponentType<{
@@ -55,8 +75,8 @@ type PlayerShellComponent = React.ComponentType<{
   onRequestClose: () => void | Promise<void>;
 }>;
 
-type BackpackShellComponent = React.ComponentType<{
-  openBackpack?: boolean;
+type HudShellComponent = React.ComponentType<{
+  compactHost?: boolean;
 }>;
 
 /**
@@ -150,15 +170,49 @@ function SceneInteractionAppContent({
     });
   }, [ctx, isPlayerRuntime, save]);
 
-  /** 绑定库存会话，供背包层共享 */
+  /** 绑定库存会话，供背包层共享；Studio 预览为内存壳，玩家为权威 slot */
   useEffect(
-    () => bindInventoryPersistence(effectiveSave),
-    [effectiveSave],
+    () =>
+      bindInventoryPersistence(effectiveSave, {
+        preview: !isPlayerRuntime,
+      }),
+    [effectiveSave, isPlayerRuntime],
   );
 
   /**
-   * 仅玩家运行时用 ui.show 叠背包。
-   * Studio 程序预览若 show 另一个程序，会顶掉当前容器导致场景消失。
+   * 系统设置等界面打开时隐藏快捷栏，避免盖住其它 UI。
+   */
+  useEffect(() => installHudForeignCover(ctx), [ctx]);
+
+  /**
+   * 片段结束后按当前会话形态恢复 ui.show props；
+   * 只要场景交互壳已挂载就标记 playerOverlaySession。
+   *
+   * 注意：`openSceneInteraction` 会在 method 侧先登记 modal props；
+   * 此处仅在 React 确实收到 player* props 时加固，**禁止**预览路径写 `{}` 覆盖。
+   */
+  useEffect(() => {
+    if (isPlayerModal) {
+      setSceneInteractionRestoreProps({
+        playerPresentation: true,
+        playerSession: "modal",
+      });
+    } else if (playerPresentation === true) {
+      setSceneInteractionRestoreProps({ playerPresentation: true });
+    }
+
+    const epoch = markPlayerOverlaySession();
+
+    return () => {
+      clearPlayerOverlaySessionIfEpoch(epoch);
+    };
+  }, [isPlayerModal, playerPresentation]);
+
+  /**
+   * 仅玩家运行时叠快捷栏：先走 React 紧凑包围盒（可靠）。
+   * Visual UI（inventory-hud.json）缺失时 open 会失败并干扰调试；
+   * 有界面文件后再切回 preferVisual。
+   * Studio 程序预览勿 ui.show，以免顶掉当前容器导致场景消失。
    */
   useEffect(() => {
     if (!isPlayerRuntime) {
@@ -171,18 +225,19 @@ function SceneInteractionAppContent({
       try {
         await ctx.ui.show(
           BACKPACK_HUD_MODULE_ID,
-          {},
-          {
-            size: "(100%, 100%)",
-            position: "(0, 0)",
-            interactable: true,
-          },
+          { compactHost: true },
+          getTightBackpackHudShowOptions(ctx),
         );
+
+        if (!cancelled) {
+          setHudUiSession(true);
+        }
       } catch (err) {
         if (!cancelled) {
+          setHudUiSession(false);
           logError(
             "scene-interaction-app",
-            "自动显示 backpack-hud 失败",
+            "自动显示快捷栏 HUD 失败",
             err,
           );
         }
@@ -191,18 +246,58 @@ function SceneInteractionAppContent({
 
     return () => {
       cancelled = true;
+      setHudUiSession(false);
+
+      try {
+        closeVisualInventoryHud(ctx);
+      } catch {
+        // Visual 可能未打开
+      }
+
+      void ctx.ui.hide(BACKPACK_HUD_MODULE_ID).catch(() => {
+        // 忽略
+      });
     };
   }, [ctx, isPlayerRuntime]);
 
   const handlePlayerRequestClose = useCallback(async (): Promise<void> => {
+    const sessionPending = isPlayerSessionPending();
+    const overlaySession = isPlayerOverlaySessionActive();
+
+    logDebug("continue-story", "handlePlayerRequestClose 开始", {
+      playerOverlaySession: overlaySession,
+      sessionPending,
+      t: Date.now(),
+    });
+
+    if (!sessionPending) {
+      logWarn(
+        "continue-story",
+        "继续剧情时无阻塞门闩（endWait 将 no-op）。若剧本用的是「打开场景」而非「打开场景交互（阻塞）」，关闭 UI 后剧本不会因此前进一步；跳转片段后再关闭更容易把 flow 指针对乱。请改用 open-scene-interaction。",
+        { sessionPending, overlaySession },
+      );
+    }
+
     try {
-      await ctx.ui.hide(BACKPACK_HUD_MODULE_ID);
+      await ctx.ui.hide(BACKPACK_MODULE_ID);
+      logDebug("continue-story", "已 hide 全屏背包", { t: Date.now() });
     } catch {
-      // 背包可能未打开
+      // 全屏背包可能未打开
+      logDebug("continue-story", "hide 全屏背包跳过/失败", { t: Date.now() });
+    }
+
+    try {
+      closeVisualInventoryHud(ctx);
+      await ctx.ui.hide(BACKPACK_HUD_MODULE_ID);
+      logDebug("continue-story", "已 hide HUD", { t: Date.now() });
+    } catch {
+      // HUD 可能未打开
+      logDebug("continue-story", "hide HUD 跳过/失败", { t: Date.now() });
     }
 
     try {
       await ctx.ui.hide(SCENE_INTERACTION_UI_ID);
+      logDebug("continue-story", "已 hide 场景交互", { t: Date.now() });
     } catch (err) {
       logError(
         "scene-interaction-app",
@@ -212,15 +307,23 @@ function SceneInteractionAppContent({
     }
 
     endPlayerSessionWait();
+    forceClearPlayerOverlaySession();
+    logDebug("continue-story", "handlePlayerRequestClose 结束（已 endWait）", {
+      sessionPending: isPlayerSessionPending(),
+      t: Date.now(),
+    });
   }, [ctx]);
 
   const [RuntimeShellComp, setRuntimeShellComp] =
     useState<RuntimeShellComponent | null>(null);
   const [PlayerShellComp, setPlayerShellComp] =
     useState<PlayerShellComponent | null>(null);
-  const [BackpackShellComp, setBackpackShellComp] =
-    useState<BackpackShellComponent | null>(null);
+  const [HudShellComp, setHudShellComp] =
+    useState<HudShellComponent | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [hudCovered, setHudCovered] = useState(false);
+
+  useEffect(() => subscribeHudForeignCover(setHudCovered), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,16 +353,16 @@ function SceneInteractionAppContent({
         }
 
         /**
-         * 程序预览：同树内嵌背包，避免 ui.show 顶掉场景。
+         * 程序预览：同树内嵌 HUD（设计绝对坐标），避免 ui.show 顶掉场景。
          */
         if (!isPlayerRuntime) {
-          const bagMod = await import("../backpack/backpack-shell");
+          const hudMod = await import("../backpack/hud-shell");
 
           if (!cancelled) {
-            setBackpackShellComp(() => bagMod.BackpackShell);
+            setHudShellComp(() => hudMod.HudShell);
           }
         } else if (!cancelled) {
-          setBackpackShellComp(null);
+          setHudShellComp(null);
         }
       } catch (err) {
         if (!cancelled) {
@@ -284,7 +387,7 @@ function SceneInteractionAppContent({
     : RuntimeShellComp != null;
 
   return (
-    <ThemeProvider initialMode={themeMode}>
+    <ThemeProvider initialMode={themeMode} rootBackground="transparent">
       <div
         data-testid="scene-interaction-app-root"
         style={{
@@ -292,6 +395,7 @@ function SceneInteractionAppContent({
           height: "100%",
           position: "relative",
           minHeight: 0,
+          background: "transparent",
         }}
       >
         {loadError ? (
@@ -310,12 +414,15 @@ function SceneInteractionAppContent({
             onRequestClose={handlePlayerRequestClose}
           />
         ) : RuntimeShellComp ? (
-          <RuntimeShellComp save={effectiveSave} />
+          <RuntimeShellComp
+            save={effectiveSave}
+            onContinueStory={handlePlayerRequestClose}
+          />
         ) : null}
 
-        {!isPlayerRuntime && BackpackShellComp ? (
+        {!isPlayerRuntime && HudShellComp && !hudCovered ? (
           <div
-            data-testid="scene-interaction-preview-backpack"
+            data-testid="scene-interaction-preview-hud"
             style={{
               position: "absolute",
               inset: 0,
@@ -323,7 +430,7 @@ function SceneInteractionAppContent({
               pointerEvents: "none",
             }}
           >
-            <BackpackShellComp />
+            <HudShellComp compactHost={false} />
           </div>
         ) : null}
       </div>

@@ -2,11 +2,13 @@
  * inventory-methods.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.1
+ * 版本: 0.3.2
  *
  * 场景交互扩展剧本 methods：给予物品、是否持有、数量查询、配方合成。
  * 物品/配方定义从 editor settings（cross）读取；
  * 库存优先写已绑定会话（玩家 slot 或预览 settings 沙箱），否则写 this.save。
+ *
+ * runImmediately / skip：无 UI；与 run 共用写档 / 只读查询（giveItem / craft 等）。
  */
 
 import { method, type ExtensionContext, type SaveAPI } from "@avg-studio/sdk";
@@ -38,8 +40,8 @@ import {
 } from "../store/inventory-session";
 import { readItemsLibraryJson } from "../store/items-persistence";
 import { readRecipesLibraryJson } from "../store/recipes-persistence";
-import { notifySaveField } from "../store/save-sync";
 import type { SceneInteractionSaveMap } from "../store/save-types";
+import { registerSlotSave, writeSlotField } from "../store/slot-save-bridge";
 
 /**
  * 将 method run 回调内的 this.save 收窄为本扩展存档形状。
@@ -50,6 +52,8 @@ import type { SceneInteractionSaveMap } from "../store/save-types";
 function narrowSave(save: unknown): SaveAPI<SceneInteractionSaveMap> {
   return save as SaveAPI<SceneInteractionSaveMap>;
 }
+
+type MethodThis = { save: unknown };
 
 /**
  * 读取当前库存：已绑定会话（含预览沙箱）优先，否则读宿主 save。
@@ -77,14 +81,19 @@ function writeInventoryState(
   save: SaveAPI<SceneInteractionSaveMap>,
   next: InventoryState,
 ): void {
+  registerSlotSave(save, { authoritative: true });
+
   if (isInventoryPersistenceBound()) {
     setInventorySession(next);
 
     return;
   }
 
-  save.set("inventoryJson", stringifyInventory(next));
-  notifySaveField("inventoryJson");
+  writeSlotField(
+    "inventoryJson",
+    stringifyInventory(next),
+    save,
+  );
 }
 
 /**
@@ -189,6 +198,57 @@ function loadRecipesLibrary(ctx: ExtensionContext): RecipesLibraryFile {
   }
 }
 
+type GiveItemParams = {
+  itemId: string;
+  amount: number;
+  resultVariable: string;
+};
+
+/**
+ * 场景动作 giveItem 的存档副作用：写 inventoryJson。
+ *
+ * @param this - 方法 this（取 save）
+ * @param ctx - 扩展上下文
+ * @param params - 方法参数
+ */
+function applyGiveItem(
+  this: MethodThis,
+  ctx: ExtensionContext,
+  params: GiveItemParams,
+): void {
+  const save = narrowSave(this.save);
+  const itemId = normalizeItemId(params.itemId);
+
+  if (itemId === null) {
+    logError("inventory-methods", "giveItem: itemId 无效");
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  const lib = loadItemsLibrary(ctx);
+  const item = findItem(lib.items, itemId);
+
+  if (item === undefined) {
+    logError("inventory-methods", `giveItem: 未找到物品: ${itemId}`);
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  const amountRaw = params.amount;
+  const amount =
+    typeof amountRaw === "number" && Number.isFinite(amountRaw)
+      ? Math.max(1, Math.floor(amountRaw))
+      : 1;
+
+  const inventory = readInventoryState(save);
+  const next = giveItemToInventory(inventory, item, amount, Date.now());
+
+  writeInventoryState(save, next);
+  writeBoolResult(ctx, params.resultVariable, true);
+}
+
 /**
  * 向玩家库存发放物品（按物品库定义堆叠 / 唯一实例）。
  *
@@ -199,45 +259,48 @@ function loadRecipesLibrary(ctx: ExtensionContext): RecipesLibraryFile {
 export const giveItem = method({
   id: "give-item",
   title: "给予物品",
+  description: "写入 save.inventoryJson（对齐场景动作 giveItem）",
   schema: {
     itemId: { type: "string", label: "物品 ID", required: true },
     amount: { type: "number", label: "数量", default: 1, required: false },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
-  run(ctx, params) {
-    const save = narrowSave(this.save);
-    const itemId = normalizeItemId(params.itemId);
-
-    if (itemId === null) {
-      logError("inventory-methods", "giveItem: itemId 无效");
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    const lib = loadItemsLibrary(ctx);
-    const item = findItem(lib.items, itemId);
-
-    if (item === undefined) {
-      logError("inventory-methods", `giveItem: 未找到物品: ${itemId}`);
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    const amountRaw = params.amount;
-    const amount =
-      typeof amountRaw === "number" && Number.isFinite(amountRaw)
-        ? Math.max(1, Math.floor(amountRaw))
-        : 1;
-
-    const inventory = readInventoryState(save);
-    const next = giveItemToInventory(inventory, item, amount, Date.now());
-
-    writeInventoryState(save, next);
-    writeBoolResult(ctx, params.resultVariable, true);
-  },
+  run: applyGiveItem,
+  runImmediately: applyGiveItem,
+  skip: applyGiveItem,
 });
+
+type HasItemParams = {
+  itemId: string;
+  resultVariable: string;
+};
+
+/**
+ * 只读查询是否持有（不改 save）。
+ *
+ * @param this - 方法 this
+ * @param ctx - 扩展上下文
+ * @param params - 方法参数
+ */
+function applyHasItem(
+  this: MethodThis,
+  ctx: ExtensionContext,
+  params: HasItemParams,
+): void {
+  const save = narrowSave(this.save);
+  const itemId = normalizeItemId(params.itemId);
+
+  if (itemId === null) {
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  const inventory = readInventoryState(save);
+  const owned = domainHasItem(inventory, itemId);
+
+  writeBoolResult(ctx, params.resultVariable, owned);
+}
 
 /**
  * 判断库存是否持有指定物品（数量 > 0）。
@@ -248,26 +311,47 @@ export const giveItem = method({
 export const hasItem = method({
   id: "has-item",
   title: "是否持有物品",
+  description: "只读 inventoryJson / 会话库存，不改存档",
   schema: {
     itemId: { type: "string", label: "物品 ID", required: true },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
-  run(ctx, params) {
-    const save = narrowSave(this.save);
-    const itemId = normalizeItemId(params.itemId);
-
-    if (itemId === null) {
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    const inventory = readInventoryState(save);
-    const owned = domainHasItem(inventory, itemId);
-
-    writeBoolResult(ctx, params.resultVariable, owned);
-  },
+  run: applyHasItem,
+  runImmediately: applyHasItem,
+  skip: applyHasItem,
 });
+
+type GetItemCountParams = {
+  itemId: string;
+  targetVariable: string;
+};
+
+/**
+ * 只读数量查询（不改 save）。
+ *
+ * @param this - 方法 this
+ * @param ctx - 扩展上下文
+ * @param params - 方法参数
+ */
+function applyGetItemCount(
+  this: MethodThis,
+  ctx: ExtensionContext,
+  params: GetItemCountParams,
+): void {
+  const save = narrowSave(this.save);
+  const itemId = normalizeItemId(params.itemId);
+
+  if (itemId === null) {
+    writeNumber(ctx, params.targetVariable, 0);
+
+    return;
+  }
+
+  const inventory = readInventoryState(save);
+  const count = domainGetItemCount(inventory, itemId);
+
+  writeNumber(ctx, params.targetVariable, count);
+}
 
 /**
  * 读取指定物品在库存中的总数量，写入剧本变量。
@@ -278,26 +362,78 @@ export const hasItem = method({
 export const getItemCount = method({
   id: "get-item-count",
   title: "获取物品数量",
+  description: "只读 inventoryJson / 会话库存，不改存档",
   schema: {
     itemId: { type: "string", label: "物品 ID", required: true },
     targetVariable: { type: "string", label: "写入变量", required: true },
   },
-  run(ctx, params) {
-    const save = narrowSave(this.save);
-    const itemId = normalizeItemId(params.itemId);
-
-    if (itemId === null) {
-      writeNumber(ctx, params.targetVariable, 0);
-
-      return;
-    }
-
-    const inventory = readInventoryState(save);
-    const count = domainGetItemCount(inventory, itemId);
-
-    writeNumber(ctx, params.targetVariable, count);
-  },
+  run: applyGetItemCount,
+  runImmediately: applyGetItemCount,
+  skip: applyGetItemCount,
 });
+
+type CraftRecipeParams = {
+  recipeIdOrName: string;
+  resultVariable: string;
+};
+
+/**
+ * 场景合成副作用：扣原料 + 发产物，写 inventoryJson（对齐 removeItem+giveItem）。
+ *
+ * @param this - 方法 this
+ * @param ctx - 扩展上下文
+ * @param params - 方法参数
+ */
+function applyCraftRecipe(
+  this: MethodThis,
+  ctx: ExtensionContext,
+  params: CraftRecipeParams,
+): void {
+  const save = narrowSave(this.save);
+  const key = normalizeItemId(params.recipeIdOrName);
+
+  if (key === null) {
+    logError(
+      "inventory-methods",
+      "craftRecipe: recipeIdOrName 无效（请用「值」填写配方 id/名称，勿用未绑定变量）",
+    );
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  const recipesLib = loadRecipesLibrary(ctx);
+  const recipe = findRecipe(recipesLib.recipes, key);
+
+  if (recipe === undefined) {
+    logError("inventory-methods", `craftRecipe: 未找到配方: ${key}`);
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  const itemsLib = loadItemsLibrary(ctx);
+  const inventory = readInventoryState(save);
+  const result = craftRecipeInInventory(
+    inventory,
+    recipe,
+    itemsLib.items,
+    Date.now(),
+  );
+
+  if (!result.ok) {
+    logError(
+      "inventory-methods",
+      `craftRecipe: 合成失败 (${key}): ${result.reason}`,
+    );
+    writeBoolResult(ctx, params.resultVariable, false);
+
+    return;
+  }
+
+  writeInventoryState(save, result.state);
+  writeBoolResult(ctx, params.resultVariable, true);
+}
 
 /**
  * 按配方 id 或名称在库存中执行一次合成。
@@ -315,6 +451,7 @@ export const getItemCount = method({
 export const craftRecipe = method({
   id: "craft-recipe",
   title: "合成配方",
+  description: "写入 save.inventoryJson（扣原料+发产物）",
   schema: {
     recipeIdOrName: {
       type: "string",
@@ -327,50 +464,7 @@ export const craftRecipe = method({
       required: false,
     },
   },
-  run(ctx, params) {
-    const save = narrowSave(this.save);
-    const key = normalizeItemId(params.recipeIdOrName);
-
-    if (key === null) {
-      logError(
-        "inventory-methods",
-        "craftRecipe: recipeIdOrName 无效（请用「值」填写配方 id/名称，勿用未绑定变量）",
-      );
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    const recipesLib = loadRecipesLibrary(ctx);
-    const recipe = findRecipe(recipesLib.recipes, key);
-
-    if (recipe === undefined) {
-      logError("inventory-methods", `craftRecipe: 未找到配方: ${key}`);
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    const itemsLib = loadItemsLibrary(ctx);
-    const inventory = readInventoryState(save);
-    const result = craftRecipeInInventory(
-      inventory,
-      recipe,
-      itemsLib.items,
-      Date.now(),
-    );
-
-    if (!result.ok) {
-      logError(
-        "inventory-methods",
-        `craftRecipe: 合成失败 (${key}): ${result.reason}`,
-      );
-      writeBoolResult(ctx, params.resultVariable, false);
-
-      return;
-    }
-
-    writeInventoryState(save, result.state);
-    writeBoolResult(ctx, params.resultVariable, true);
-  },
+  run: applyCraftRecipe,
+  runImmediately: applyCraftRecipe,
+  skip: applyCraftRecipe,
 });

@@ -1,57 +1,31 @@
 /**
  * preview-shell.tsx
  * 作者: 池水三两升
- * 日期: 2026-08-08
- * 版本: 0.3.3
+ * 日期: 2026-08-09
+ * 版本: 0.4.0
  *
- * 编辑器内「运行预览」壳（作者工具侧，≠ scene-interaction 玩家运行时）。
- * 提供场景 / 动作链 / toast / once 预览。
+ * 编辑器内「运行预览」薄壳：顶栏（返回编辑）+ 与玩家一致的 RuntimeShell。
  * `save` 为扩展 settings 沙箱，与玩家 slot 隔离。
- * 背包以内嵌 BackpackShell 叠层显示（勿 ui.show，以免顶掉编辑器预览容器）。
- * 另带预览顶栏：品牌、场景名、「编辑」返回 EditorShell。
+ * 快捷栏以内嵌 HudShell 叠层显示（勿 ui.show，以免顶掉编辑器预览容器）；
+ * 场景交互体直接复用 `RuntimeShell`，与 `scene-interaction` 非 modal 玩家路径同壳。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
   type SaveAPI,
 } from "@avg-studio/sdk";
-import type { ActionRuntime } from "../domain/actions";
-import { executeSceneActions } from "../domain/actions";
-import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
-import { markConsumed } from "../domain/progress";
+import type { SceneDefinition } from "../domain/types";
 import {
-  parseSceneReturnStackJson,
-  stringifySceneReturnStack,
-} from "../domain/scene-return-stack";
-import {
-  advanceToastQueue,
-  emptyToastQueue,
-  enqueueToast,
-  type ToastQueueState,
-} from "../domain/toast-queue";
-import type {
-  HotspotElement,
-  InventoryState,
-  ItemDefinition,
-  SceneDefinition,
-  SceneProgress,
-} from "../domain/types";
-import { createActionRuntime } from "../runtime/create-action-runtime";
-import { SceneReturnButton } from "../runtime/scene-return-button";
-import { SceneView } from "../runtime/scene-view";
-import {
-  useInventory,
-  useProgress,
-} from "../store/inventory-persistence";
+  installHudForeignCover,
+  subscribeHudForeignCover,
+} from "../runtime/hud-foreign-cover";
+import { IconLabel } from "../shared/fa-icon";
 import { bindInventoryPersistence } from "../store/inventory-session";
-import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
-import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
-import { useSceneUiConfig } from "../store/use-scene-ui-config";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -59,8 +33,13 @@ import {
 } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
 
-type BackpackShellComponent = React.ComponentType<{
-  openBackpack?: boolean;
+type RuntimeShellComponent = React.ComponentType<{
+  save: SaveAPI<SceneInteractionSaveMap>;
+  onContinueStory?: () => void | Promise<void>;
+}>;
+
+type HudShellComponent = React.ComponentType<{
+  compactHost?: boolean;
 }>;
 
 /**
@@ -105,6 +84,9 @@ function topBarButtonStyle(
     fontWeight: isPrimary ? 600 : 500,
     cursor: "pointer",
     lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   };
 }
 
@@ -135,9 +117,7 @@ function resolveCurrentScene(
 }
 
 /**
- * 编辑器运行预览壳：顶栏 + 场景交互能力（作者调试用）。
- *
- * 背包以内嵌 BackpackShell 叠在场景上（与库存会话共享）。
+ * 编辑器运行预览：顶栏 + RuntimeShell（与玩家同壳）+ 内嵌 HudShell。
  *
  * @param props.save - settings 沙箱预览存档
  * @param props.onBackToEditor - 点「编辑」返回 EditorShell
@@ -157,78 +137,52 @@ export function PreviewShell({
 }: PreviewShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const { size: designSize } = useDesignSize();
 
   const [library] = useScenesLibrary();
-  const [itemsLibrary] = useItemsLibrary();
-  const [inventory, setInventory] = useInventory(save, ctx);
-  const [progress, setProgress] = useProgress(save, ctx);
-  const [currentSceneId, setCurrentSceneId] = useSaveValue(
-    save,
-    "currentSceneId",
-    ctx,
-  );
-  const [returnStackJson, setReturnStackJson] = useSaveValue(
-    save,
-    "sceneReturnStackJson",
-    ctx,
-  );
-
-  const [toastQueue, setToastQueue] = useState<ToastQueueState>(() =>
-    emptyToastQueue(),
-  );
-
-  /** 场景 UI 预设（itemToast + hotspotHover），订阅 editor.sceneUiJson 写入 */
-  const sceneUi = useSceneUiConfig();
-
-  const [BackpackShellComp, setBackpackShellComp] =
-    useState<BackpackShellComponent | null>(null);
-
-  const inventoryRef = useRef<InventoryState>(inventory);
-  const scenesRef = useRef<SceneDefinition[]>(library.scenes);
-  const itemsRef = useRef<ItemDefinition[]>(itemsLibrary.items);
-  const progressRef = useRef<SceneProgress>(progress);
-  /** 当前场景 id / 返回栈 JSON 引用，供 ActionRuntime 闭包读取最新值 */
-  const currentSceneIdRef = useRef<string>(currentSceneId);
-  const returnStackJsonRef = useRef<string>(returnStackJson);
-  const hotspotBusyRef = useRef(false);
-
-  inventoryRef.current = inventory;
-  scenesRef.current = library.scenes;
-  itemsRef.current = itemsLibrary.items;
-  progressRef.current = progress;
-  currentSceneIdRef.current = currentSceneId;
-  returnStackJsonRef.current = returnStackJson;
+  const [currentSceneId] = useSaveValue(save, "currentSceneId", ctx);
 
   const scene = useMemo(
     () => resolveCurrentScene(library.scenes, currentSceneId),
     [library.scenes, currentSceneId],
   );
-
   const sceneTitle = scene?.name ?? "（无场景）";
 
-  useEffect(() => {
-    if (!currentSceneId && scene !== null) {
-      setCurrentSceneId(scene.id);
-    }
-  }, [currentSceneId, scene, setCurrentSceneId]);
+  const [RuntimeShellComp, setRuntimeShellComp] =
+    useState<RuntimeShellComponent | null>(null);
+  const [HudShellComp, setHudShellComp] =
+    useState<HudShellComponent | null>(null);
+  const [hudCovered, setHudCovered] = useState(false);
 
-  /** 绑定库存会话，供内嵌背包共享 */
-  useEffect(() => bindInventoryPersistence(save), [save]);
+  /** 绑定库存会话；编辑器预览为内存壳，勿标权威 slot */
+  useEffect(
+    () => bindInventoryPersistence(save, { preview: true }),
+    [save],
+  );
 
-  /** 预览内嵌背包壳（不走 ui.show） */
+  /** 系统设置等界面打开时隐藏内嵌 HUD */
+  useEffect(() => installHudForeignCover(ctx), [ctx]);
+
+  useEffect(() => subscribeHudForeignCover(setHudCovered), []);
+
+  /**
+   * 加载与玩家一致的 RuntimeShell，以及预览用内嵌 HudShell。
+   */
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const mod = await import("../backpack/backpack-shell");
+        const [runtimeMod, hudMod] = await Promise.all([
+          import("../runtime/runtime-shell"),
+          import("../backpack/hud-shell"),
+        ]);
 
         if (!cancelled) {
-          setBackpackShellComp(() => mod.BackpackShell);
+          setRuntimeShellComp(() => runtimeMod.RuntimeShell);
+          setHudShellComp(() => hudMod.HudShell);
         }
       } catch (err) {
-        console.warn("[editor-preview]", "加载 BackpackShell 失败", err);
+        console.warn("[editor-preview]", "加载 RuntimeShell / HudShell 失败", err);
       }
     })();
 
@@ -238,91 +192,14 @@ export function PreviewShell({
   }, []);
 
   /**
-   * toast 入队（ActionRuntime 回调）。
-   *
-   * 全局 Toast 配置取自 `SceneUiConfig.itemToast`（editor.sceneUiJson），
-   * 与动作级覆盖合并，得到完整外观后写入 `ToastRequest`，
-   * 保证队列中的请求始终包含必填的 `placement/offsetX/offsetY/gap/style`。
-   *
-   * @param payload - toast 载荷（含可选覆盖）
+   * 编辑器预览无阻塞剧情会话；「继续剧情」空操作。
    */
-  const handleEnqueueToast = useCallback(
-    (payload: Parameters<ActionRuntime["enqueueToast"]>[0]): void => {
-      const global = sceneUi.itemToast;
-      const { text, anchorHotspotId, motion, ...overrides } = payload;
-      const appearance = resolveItemToastAppearance(global, overrides);
-
-      setToastQueue((prev) =>
-        enqueueToast(prev, {
-          text,
-          anchorHotspotId,
-          motion,
-          ...appearance,
-        }),
-      );
-    },
-    [sceneUi],
-  );
-
-  const actionRuntime = useMemo(
-    () =>
-      createActionRuntime({
-        getScenes: () => scenesRef.current,
-        getItems: () => itemsRef.current,
-        getInventory: () => inventoryRef.current,
-        setInventory,
-        setCurrentSceneId: (id) => {
-          currentSceneIdRef.current = id;
-          setCurrentSceneId(id);
-        },
-        getCurrentSceneId: () => currentSceneIdRef.current,
-        getReturnStack: () =>
-          parseSceneReturnStackJson(returnStackJsonRef.current),
-        setReturnStack: (stack) => {
-          const json = stringifySceneReturnStack(stack);
-          returnStackJsonRef.current = json;
-          setReturnStackJson(json);
-        },
-        enqueueToast: handleEnqueueToast,
-      }),
-    [
-      setInventory,
-      setCurrentSceneId,
-      setReturnStackJson,
-      handleEnqueueToast,
-    ],
-  );
-
-  const handleToastAdvance = useCallback((): void => {
-    setToastQueue((prev) => advanceToastQueue(prev));
+  const handleContinueStory = useCallback((): void => {
+    console.info(
+      "[editor-preview]",
+      "continueStory：编辑器预览中忽略（无阻塞剧情会话）",
+    );
   }, []);
-
-  const handleHotspotActivate = useCallback(
-    async (hotspot: HotspotElement): Promise<void> => {
-      if (hotspotBusyRef.current) {
-        return;
-      }
-
-      hotspotBusyRef.current = true;
-
-      try {
-        await executeSceneActions(
-          hotspot.actions,
-          hotspot.id,
-          actionRuntime,
-        );
-
-        if (hotspot.once) {
-          setProgress(markConsumed(progressRef.current, hotspot.id));
-        }
-      } catch (err) {
-        console.warn("[editor-preview]", "hotspot activate failed", err);
-      } finally {
-        hotspotBusyRef.current = false;
-      }
-    },
-    [actionRuntime, setProgress],
-  );
 
   return (
     <div
@@ -333,8 +210,10 @@ export function PreviewShell({
         display: "flex",
         flexDirection: "column",
         minHeight: 0,
-        background: tokens.bgBase,
+        position: "relative",
+        background: "transparent",
         color: tokens.textPrimary,
+        pointerEvents: "auto",
       }}
     >
       <header
@@ -348,6 +227,9 @@ export function PreviewShell({
           background: tokens.bgElevated,
           flexShrink: 0,
           boxShadow: "0 1px 0 rgba(0,0,0,0.25)",
+          pointerEvents: "auto",
+          position: "relative",
+          zIndex: 2,
         }}
       >
         <div
@@ -386,7 +268,7 @@ export function PreviewShell({
           onClick={() => onBackToEditor(true)}
           style={topBarButtonStyle(tokens, "primary")}
         >
-          编辑
+          <IconLabel icon="pen-to-square">编辑</IconLabel>
         </button>
 
         <div style={{ flex: 1 }} />
@@ -398,45 +280,29 @@ export function PreviewShell({
         </span>
       </header>
 
-      <main
+      <div
         data-testid="preview-body"
         style={{
           flex: 1,
           minHeight: 0,
           position: "relative",
+          /**
+           * 与玩家 RuntimeShell 根一致：空白穿透；
+           * 交互点 / HUD / 返回钮各自 pointerEvents:auto。
+           */
+          pointerEvents: "none",
         }}
       >
-        <SceneView
-          scene={scene}
-          progress={progress}
-          designWidth={designSize.width}
-          designHeight={designSize.height}
-          toastQueue={toastQueue}
-          onToastAdvance={handleToastAdvance}
-          onHotspotActivate={handleHotspotActivate}
-          globalHoverShadow={sceneUi.hotspotHover}
-        />
+        {RuntimeShellComp ? (
+          <RuntimeShellComp
+            save={save}
+            onContinueStory={handleContinueStory}
+          />
+        ) : null}
 
-        {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}
-        <SceneReturnButton
-          config={sceneUi.sceneReturn}
-          stackJson={returnStackJson}
-          currentSceneId={currentSceneId}
-          scenes={library.scenes}
-          designWidth={designSize.width}
-          designHeight={designSize.height}
-          onReturn={(id, stack) => {
-            const json = stringifySceneReturnStack(stack);
-            returnStackJsonRef.current = json;
-            setReturnStackJson(json);
-            currentSceneIdRef.current = id;
-            setCurrentSceneId(id);
-          }}
-        />
-
-        {BackpackShellComp ? (
+        {HudShellComp && !hudCovered ? (
           <div
-            data-testid="preview-backpack-overlay"
+            data-testid="preview-hud-overlay"
             style={{
               position: "absolute",
               inset: 0,
@@ -444,10 +310,10 @@ export function PreviewShell({
               pointerEvents: "none",
             }}
           >
-            <BackpackShellComp />
+            <HudShellComp compactHost={false} />
           </div>
         ) : null}
-      </main>
+      </div>
     </div>
   );
 }

@@ -2,10 +2,15 @@
  * scene-return-button.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.3
  *
  * 运行时浮层「场景返回」按钮：当返回栈存在有效目标且与当前场景不同时显示，
  * 点击后弹出栈顶并切换场景。
+ *
+ * 层级：zIndex 100，高于预览内嵌背包 HUD 叠层（90）与快捷栏，低于全屏背包弹层（1100）。
+ *
+ * 测量：host 层始终挂载（即使按钮隐藏），用 useLayoutEffect 同步量尺寸，
+ * 避免「先 return null → 无 host → scale=NaN → 有栈后按钮不可见」。
  *
  * 定位策略：与 SceneView 共用同一 host（三层 shell 的 body 容器），通过 ResizeObserver
  * 自测 host 尺寸，复用 {@link fitDesignToHost}（margin=1，与 scene-view 一致）计算 world
@@ -25,12 +30,11 @@
 
 import React, {
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useExtensionContext } from "@avg-studio/sdk";
 import {
   parseSceneReturnStackJson,
   peekValidSceneReturn,
@@ -42,8 +46,8 @@ import type {
   UiBoxStyle,
   UiTextStyle,
 } from "../domain/types";
-import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { fitDesignToHost } from "../shared/scene-layout";
+import { useUiButtonSkin } from "./use-ui-button-skin";
 
 /**
  * SceneReturnButton 组件属性。
@@ -96,11 +100,16 @@ function mergeStyle(
   box: UiBoxStyle,
   text: UiTextStyle,
 ): React.CSSProperties {
+  const borderWidth =
+    typeof box.borderWidth === "number" ? box.borderWidth : undefined;
+
   return {
-    background: box.background,
+    // 用 backgroundColor，避免与 backgroundImage 的 background 简写互相覆盖
+    backgroundColor: box.background,
     borderColor: box.borderColor,
     borderWidth:
-      typeof box.borderWidth === "number" ? `${box.borderWidth}px` : undefined,
+      borderWidth !== undefined ? `${borderWidth}px` : undefined,
+    borderStyle: borderWidth !== undefined && borderWidth > 0 ? "solid" : undefined,
     borderRadius:
       typeof box.borderRadius === "number" ? `${box.borderRadius}px` : undefined,
     opacity: box.opacity,
@@ -147,20 +156,21 @@ export function SceneReturnButton({
   viewportWidth = 0,
   viewportHeight = 0,
   onReturn,
-}: SceneReturnButtonProps): React.ReactElement | null {
-  const ctx = useExtensionContext();
+}: SceneReturnButtonProps): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
+  const buttonSkin = useUiButtonSkin(config);
   const [measuredSize, setMeasuredSize] = useState({
-    width: viewportWidth,
-    height: viewportHeight,
+    width: typeof viewportWidth === "number" && viewportWidth > 0 ? viewportWidth : 0,
+    height:
+      typeof viewportHeight === "number" && viewportHeight > 0 ? viewportHeight : 0,
   });
 
   /**
-   * 解析返回栈并预览栈顶有效目标。
+   * 解析返回栈并预览栈顶有效目标（与当前场景不同才可显示）。
    */
   const peek = useMemo(() => {
     if (!config.enabled) {
-      return null;
+      return null as { stack: string[]; targetId: string } | null;
     }
 
     const stack = parseSceneReturnStackJson(stackJson);
@@ -179,13 +189,12 @@ export function SceneReturnButton({
   }, [config.enabled, stackJson, scenes, currentSceneId]);
 
   /**
-   * 自测 host 尺寸（与 SceneView 同一 host，保证 world transform 一致）。
-   *
-   * 当外部传入有效 viewportWidth/Height 时直接采用，跳过测量。
+   * 自测 host 尺寸：host 始终挂载，layout 阶段同步量一次，避免首帧 NaN scale。
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (viewportWidth > 0 && viewportHeight > 0) {
       setMeasuredSize({ width: viewportWidth, height: viewportHeight });
+
       return;
     }
 
@@ -219,9 +228,7 @@ export function SceneReturnButton({
         return;
       }
 
-      const { width, height } = entry.contentRect;
-
-      applySize(width, height);
+      applySize(entry.contentRect.width, entry.contentRect.height);
     });
 
     ro.observe(host);
@@ -234,12 +241,13 @@ export function SceneReturnButton({
 
   /**
    * 与 SceneView 一致的 world transform（margin=1）。
+   * host 尚未测到时用 1×1 占位，避免 NaN。
    */
   const world = useMemo(
     () =>
       fitDesignToHost(
-        measuredSize.width,
-        measuredSize.height,
+        measuredSize.width > 0 ? measuredSize.width : 1,
+        measuredSize.height > 0 ? measuredSize.height : 1,
         designWidth,
         designHeight,
         1,
@@ -247,21 +255,7 @@ export function SceneReturnButton({
     [measuredSize.width, measuredSize.height, designWidth, designHeight],
   );
 
-  const [hovered, setHovered] = useState(false);
-
-  /**
-   * 当前生效的图片 URI（hover 时优先 hoverImageSrc）。
-   */
-  const imageSrc = hovered && config.hoverImageSrc
-    ? config.hoverImageSrc
-    : config.imageSrc;
-  const imageUrl = useMemo(
-    () =>
-      imageSrc
-        ? resolveAssetUrl(imageSrc, ctx.asset?.resolve?.bind(ctx.asset))
-        : "",
-    [imageSrc, ctx.asset],
-  );
+  const layoutReady = measuredSize.width > 1 && measuredSize.height > 1;
 
   /**
    * 点击：真正出栈并回调。
@@ -280,24 +274,32 @@ export function SceneReturnButton({
     onReturn(targetId, nextStack);
   }, [peek, scenes, onReturn]);
 
-  if (peek === null) {
-    return null;
-  }
-
   const rect = config.rect;
-  const width =
+  const designW =
     typeof rect.w === "number" && rect.w > 0 ? rect.w : 120;
-  const height =
+  const designH =
     typeof rect.h === "number" && rect.h > 0 ? rect.h : 40;
 
+  /**
+   * 用 host CSS 像素定位（offset + design×scale），避免嵌套 scale 在部分环境下首帧不可见。
+   */
+  const screenLeft = world.offsetX + (rect.x ?? 0) * world.scale;
+  const screenTop = world.offsetY + (rect.y ?? 0) * world.scale;
+  const screenW = designW * world.scale;
+  const screenH = designH * world.scale;
+
   const baseStyle = mergeStyle(config.style, config.style);
-  const hoverStyle =
-    hovered && config.hoverStyle !== undefined
+  const hoverActive =
+    buttonSkin.phase === "hover" || buttonSkin.phase === "pressed";
+  const activeStyle =
+    hoverActive && config.hoverStyle !== undefined
       ? mergeStyle(
           { ...config.style, ...config.hoverStyle },
           { ...config.style, ...config.hoverStyle },
         )
       : baseStyle;
+
+  const showButton = peek !== null && layoutReady;
 
   return (
     <div
@@ -307,33 +309,26 @@ export function SceneReturnButton({
         position: "absolute",
         inset: 0,
         pointerEvents: "none",
-        zIndex: 50,
+        /**
+         * 须高于 preview-shell 内嵌背包叠层（zIndex 90），
+         * 否则按钮在左上角会被快捷栏盖住（日志显示、画面看不见）。
+         */
+        zIndex: 100,
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: designWidth,
-          height: designHeight,
-          transform: `translate(${world.offsetX}px, ${world.offsetY}px) scale(${world.scale})`,
-          transformOrigin: "0 0",
-          pointerEvents: "none",
-        }}
-      >
+      {showButton ? (
         <button
           type="button"
           data-testid="scene-return-button"
+          aria-label={config.label || "返回"}
           onClick={handleClick}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          {...buttonSkin.pointerHandlers}
           style={{
             position: "absolute",
-            left: rect.x,
-            top: rect.y,
-            width,
-            height,
+            left: screenLeft,
+            top: screenTop,
+            width: Math.max(44, screenW),
+            height: Math.max(32, screenH),
             boxSizing: "border-box",
             display: "flex",
             alignItems: "center",
@@ -342,16 +337,14 @@ export function SceneReturnButton({
             cursor: "pointer",
             fontFamily: "inherit",
             pointerEvents: "auto",
-            backgroundImage: imageUrl ? `url("${imageUrl}")` : undefined,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            ...hoverStyle,
+            zIndex: 1,
+            ...activeStyle,
+            ...buttonSkin.backgroundImageStyle,
           }}
         >
           {config.label}
         </button>
-      </div>
+      ) : null}
     </div>
   );
 }

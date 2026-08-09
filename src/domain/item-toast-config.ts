@@ -33,6 +33,8 @@ export interface ItemToastOverrides {
   offsetY?: number;
   gap?: number;
   style?: Partial<UiBoxStyle & UiTextStyle>;
+  /** 透传到 ToastRequest；不参与外观 merge */
+  screenCenter?: boolean;
 }
 
 /**
@@ -69,7 +71,7 @@ export function defaultItemToastConfig(): ItemToastConfig {
       borderRadius: 8,
       shadow: 1,
       color: "#F5F7F6",
-      fontSize: 13,
+      fontSize: 30,
       fontWeight: 600,
     },
   };

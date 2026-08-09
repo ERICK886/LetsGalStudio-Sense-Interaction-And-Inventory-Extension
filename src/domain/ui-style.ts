@@ -240,7 +240,17 @@ export function applyUiBoxStyle(style: UiBoxStyle): CSSProperties {
   const css: CSSProperties = {};
 
   if (style.background !== undefined) {
-    css.backgroundColor = style.background;
+    const bg = style.background.trim();
+    // 渐变 / 图片须用 background；纯色走 backgroundColor
+    if (
+      bg.includes("gradient(") ||
+      bg.startsWith("url(") ||
+      bg.includes("url(")
+    ) {
+      css.background = bg;
+    } else {
+      css.backgroundColor = bg;
+    }
   }
 
   if (style.borderColor !== undefined) {

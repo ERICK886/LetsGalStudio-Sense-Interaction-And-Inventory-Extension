@@ -2,7 +2,7 @@
  * scene-layout.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 版本: 0.1.1
  *
  * 场景画布纯布局：设计画幅 fit 进宿主 + 底图 contentRect。
  * 同一套数字驱动底图 CSS transform 与 hotspot overlay，避免错位。
@@ -211,12 +211,22 @@ export function worldToNorm(
 }
 
 /**
- * 将浏览器 client 坐标转为相对某元素左上的本地坐标（忽略 CSS scale）。
+ * 将浏览器 client 坐标转为相对某元素左上的布局坐标（不受 CSS transform 缩放影响）。
+ *
+ * 使用「布局尺寸 / 可视 getBoundingClientRect 尺寸」比例换算，
+ * 不解析 `matrix` / `matrix3d` 字符串（后者在部分浏览器下会导致 scale=1，
+ * 放置/拖拽交互点相对指针整体偏移）。
  *
  * @param el - 参考元素（通常为 world 节点）
  * @param clientX - 浏览器 clientX
  * @param clientY - 浏览器 clientY
- * @returns 本地坐标（相对 el 未缩放盒子）
+ * @returns 本地坐标（相对 el 未缩放盒子，即 offsetWidth/Height 空间）
+ *
+ * @example
+ * ```ts
+ * const { x, y } = clientToLocal(worldEl, ev.clientX, ev.clientY);
+ * const norm = worldToNorm(x, y, layout.contentRect);
+ * ```
  */
 export function clientToLocal(
   el: HTMLElement,
@@ -224,27 +234,13 @@ export function clientToLocal(
   clientY: number,
 ): { x: number; y: number } {
   const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  const transform = style.transform;
-
-  let scaleX = 1;
-  let scaleY = 1;
-
-  if (transform && transform !== "none") {
-    const match = transform.match(/^matrix\((.+)\)$/);
-
-    if (match !== null) {
-      const parts = match[1]!.split(",").map((s) => Number(s.trim()));
-      // matrix(a, b, c, d, e, f) → scaleX=a, scaleY=d
-      if (parts.length >= 4 && Number.isFinite(parts[0]) && Number.isFinite(parts[3])) {
-        scaleX = parts[0] === 0 ? 1 : parts[0]!;
-        scaleY = parts[3] === 0 ? 1 : parts[3]!;
-      }
-    }
-  }
+  const rw = Math.max(1e-6, rect.width);
+  const rh = Math.max(1e-6, rect.height);
+  const lx = el.offsetWidth;
+  const ly = el.offsetHeight;
 
   return {
-    x: (clientX - rect.left) / scaleX,
-    y: (clientY - rect.top) / scaleY,
+    x: ((clientX - rect.left) / rw) * lx,
+    y: ((clientY - rect.top) / rh) * ly,
   };
 }

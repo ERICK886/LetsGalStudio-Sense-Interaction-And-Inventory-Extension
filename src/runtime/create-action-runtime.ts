@@ -2,13 +2,17 @@
  * create-action-runtime.ts
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.2.0
+ * 版本: 0.3.0
  *
  * 将领域 ActionRuntime 接到存档 / 库存 / toast / 剧本 flow 等状态层。
  */
 
 import type { ActionRuntime } from "../domain/actions";
-import { giveItemToInventory } from "../domain/inventory";
+import {
+  consumeItemFromInventory,
+  getQuickbarEntries,
+  giveItemToInventory,
+} from "../domain/inventory";
 import type { ItemToastOverrides } from "../domain/item-toast-config";
 import { findItem } from "../domain/item-registry";
 import { openSceneWithReturn } from "../domain/scene-return-stack";
@@ -18,7 +22,8 @@ import type {
   ItemDefinition,
   SceneDefinition,
 } from "../domain/types";
-import { logError } from "../shared/logger";
+import { logDebug, logError } from "../shared/logger";
+import { resolveAssetUrl } from "../shared/resolve-asset-url";
 
 /**
  * 创建 ActionRuntime 所需的依赖注入。
@@ -89,6 +94,51 @@ export interface CreateActionRuntimeDeps {
   } & ItemToastOverrides) => void;
 
   /**
+   * 将奖励飞入请求入队（已解析 icon / 槽位）。
+   *
+   * @param payload - 飞入载荷
+   */
+  enqueueRewardFly: (payload: {
+    itemId: string;
+    iconUrl: string;
+    displayName: string;
+    slotIndex: number;
+  }) => void;
+
+  /**
+   * 解析资源 URI → 可加载 URL（奖励图标用）。
+   *
+   * @param uri - 领域 URI
+   * @returns URL 字符串
+   */
+  resolveUrl?: (uri: string) => string;
+
+  /**
+   * 调用剧本片段（可跳回）；通常转发给 `ctx.flow.callFragment`。
+   *
+   * @param fragmentId - 片段 id
+   * @param chapterId - 可选章节 id
+   */
+  callFragment: (
+    fragmentId: string,
+    chapterId?: string,
+  ) => Promise<void>;
+
+  /**
+   * 跳转剧本片段（不可跳回）；通常转发给 `ctx.flow.unsafe_goToFragment`。
+   *
+   * @param fragmentId - 片段 id
+   * @param chapterId - 可选章节 id
+   */
+  goToFragment: (fragmentId: string, chapterId?: string) => void;
+
+  /**
+   * 继续剧情：关闭场景交互叠层并解除 `openSceneInteraction` 阻塞。
+   * 玩家壳通常转发给 `onRequestClose`。
+   */
+  continueStory: () => void | Promise<void>;
+
+  /**
    * 非致命警告；缺省写 console.warn + logError。
    *
    * @param message - 警告文案
@@ -102,7 +152,9 @@ export interface CreateActionRuntimeDeps {
  * - `openScene`：经 `openSceneWithReturn` 计算下一场景与返回栈，成功则
  *   写回 `sceneReturnStackJson` 与 `currentSceneId`，否则返回 false 且不改存档
  * - `giveItem`：`findItem` + `giveItemToInventory`；找不到物品返回 false
+ * - `removeItem`：`consumeItemFromInventory`；不足返回 false
  * - `enqueueToast`：转发给依赖的队列入队
+ * - `callFragment` / `goToFragment` / `continueStory`：转发给注入回调
  * - `warn`：默认 `console.warn` + `logError`
  *
  * @param deps - 状态层依赖
@@ -121,6 +173,11 @@ export interface CreateActionRuntimeDeps {
  *   setReturnStack: (stack) =>
  *     setReturnStackJson(stringifySceneReturnStack(stack)),
  *   enqueueToast: (p) => setToastQueue((q) => enqueueToast(q, p)),
+ *   callFragment: (id, chapterId) =>
+ *     ctx.flow.callFragment(id, chapterId ? { chapterId } : undefined),
+ *   goToFragment: (id, chapterId) =>
+ *     ctx.flow.unsafe_goToFragment(id, chapterId ? { chapterId } : undefined),
+ *   continueStory: () => onRequestClose(),
  * });
  * await executeSceneActions(hs.actions, hs.id, runtime);
  * ```
@@ -142,6 +199,30 @@ export function createActionRuntime(
 
   /** 最近一次 giveItem 成功的物品名，供空 toastText 回退 */
   let lastGivenItemName = "";
+  /** 最近一次 giveItem 成功的图标 URL（与快捷栏同源解析） */
+  let lastGivenItemIconUrl = "";
+  /** 最近一次 giveItem 成功的物品 id */
+  let lastGivenItemId = "";
+
+  /**
+   * 解析物品图标 URL。
+   *
+   * @param iconRaw - 物品 icon 字段
+   * @returns 可加载 URL
+   */
+  const resolveIconUrl = (iconRaw: string): string => {
+    const trimmed = iconRaw.trim();
+
+    if (trimmed.length === 0) {
+      return "";
+    }
+
+    if (deps.resolveUrl) {
+      return deps.resolveUrl(trimmed);
+    }
+
+    return resolveAssetUrl(trimmed, undefined);
+  };
 
   return {
     /**
@@ -201,8 +282,51 @@ export function createActionRuntime(
 
       deps.setInventory(next);
       lastGivenItemName = item.name;
+      lastGivenItemId = item.id;
+      lastGivenItemIconUrl = resolveIconUrl(item.icon ?? "");
 
       return true;
+    },
+
+    /**
+     * @param itemId - 物品 id
+     * @param amount - 扣除数量
+     * @returns 成功或失败（含展示名）
+     */
+    removeItem(
+      itemId: string,
+      amount: number,
+    ):
+      | { ok: true }
+      | { ok: false; displayName: string; reason: string } {
+      const key = itemId.trim();
+      const known = key.length > 0 ? findItem(deps.getItems(), key) : undefined;
+      const displayName =
+        known?.name?.trim() || key || "物品";
+
+      if (key.length === 0) {
+        warnImpl("removeItem: itemId 为空");
+
+        return { ok: false, displayName, reason: "invalid-id" };
+      }
+
+      const result = consumeItemFromInventory(
+        deps.getInventory(),
+        key,
+        amount,
+      );
+
+      if (!result.ok) {
+        warnImpl(
+          `removeItem: ${result.reason} (${key} x${amount})`,
+        );
+
+        return { ok: false, displayName, reason: result.reason };
+      }
+
+      deps.setInventory(result.state);
+
+      return { ok: true };
     },
 
     /**
@@ -219,9 +343,94 @@ export function createActionRuntime(
           ? payload.text
           : lastGivenItemName || "获得物品";
 
+      const { screenCenter, ...rest } = payload;
+
       deps.enqueueToast({
-        ...payload,
+        ...rest,
         text,
+        ...(screenCenter === true ? { screenCenter: true } : {}),
+      });
+    },
+
+    /**
+     * 中心发光奖励飞入：解析图标与快捷栏槽位后入队。
+     *
+     * @param payload.itemId - 物品 id
+     * @param payload.amount - 数量（保留备用）
+     */
+    enqueueRewardFly(payload: { itemId: string; amount: number }): void {
+      const key = payload.itemId.trim() || lastGivenItemId;
+      const item = key.length > 0 ? findItem(deps.getItems(), key) : undefined;
+      const displayName =
+        item?.name?.trim() || lastGivenItemName || key || "物品";
+      /**
+       * 优先用 giveItem 刚解析的图标，保证与写入库存的物品一致，
+       * 避免二次查找 / 解析差异导致「文案对、图标不对」。
+       */
+      const iconUrl =
+        (key === lastGivenItemId || key === payload.itemId.trim()) &&
+        lastGivenItemIconUrl.length > 0
+          ? lastGivenItemIconUrl
+          : resolveIconUrl(item?.icon ?? "");
+
+      const entries = getQuickbarEntries(deps.getInventory());
+      let slotIndex = entries.findIndex((entry) => entry.itemId === key);
+
+      if (slotIndex < 0) {
+        slotIndex = 0;
+      }
+
+      deps.enqueueRewardFly({
+        itemId: key,
+        iconUrl,
+        displayName,
+        slotIndex,
+      });
+    },
+
+    /**
+     * @param fragmentId - 片段 id
+     * @param chapterId - 可选章节
+     */
+    async callFragment(
+      fragmentId: string,
+      chapterId?: string,
+    ): Promise<void> {
+      logDebug("jump-fragment", "ActionRuntime.callFragment → deps", {
+        fragmentId,
+        chapterId: chapterId ?? "(未指定)",
+        t: Date.now(),
+      });
+      await deps.callFragment(fragmentId, chapterId);
+      logDebug("jump-fragment", "ActionRuntime.callFragment ← deps 返回", {
+        fragmentId,
+        t: Date.now(),
+      });
+    },
+
+    /**
+     * @param fragmentId - 片段 id
+     * @param chapterId - 可选章节
+     */
+    goToFragment(fragmentId: string, chapterId?: string): void {
+      logDebug("jump-fragment", "ActionRuntime.goToFragment → deps", {
+        fragmentId,
+        chapterId: chapterId ?? "(未指定)",
+        t: Date.now(),
+      });
+      deps.goToFragment(fragmentId, chapterId);
+    },
+
+    /**
+     * 关闭场景交互并解除阻塞，使剧本继续。
+     */
+    async continueStory(): Promise<void> {
+      logDebug("continue-story", "ActionRuntime.continueStory → deps", {
+        t: Date.now(),
+      });
+      await deps.continueStory();
+      logDebug("continue-story", "ActionRuntime.continueStory ← deps 返回", {
+        t: Date.now(),
       });
     },
 

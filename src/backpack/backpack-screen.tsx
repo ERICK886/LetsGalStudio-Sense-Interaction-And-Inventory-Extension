@@ -1,17 +1,13 @@
-﻿/**
+/**
  * backpack-screen.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.5.2
+ * 版本: 0.5.3
  *
- * 背包全屏幕 UI（v2 节点布局）：
- * - 配置经 useBackpackScreenConfig → resolveBackpackLayout 解析；
- * - 设计分辨率 letterbox 舞台上绝对定位 backdrop / panelChrome / titleBlock /
- *   closeButton / itemGrid / detailPanel；合成钮锚定详情底边 + offsetY；
- * - 样式经 applyUiBoxStyle / applyUiTextStyle，缺省色由 accent 派生；
- * - 入场 / 退场：backdrop 单独淡入淡出；panelAnimation 挂在内容包装层
- *   （含 panelChrome / title / close / grid / detail / craft），宿主背景透明；
- * - 交互（选中 / 合成 / 关闭 / 模式切换）不变。
+ * 背包全屏幕 UI（v2）：
+ * - 功能节点仅 itemGrid / detailPanel；遮罩/主面板/标题/关闭/模式/合成等为 overlays 组件；
+ * - 按钮通过 role（closeBag / toggleMode / craft）接到关闭、模式切换与合成；
+ * - 入场 / 退场：宿主遮罩淡入淡出 + 内容包装层位移动画。
  *
  * 属于 backpack-hud 程序，不依赖场景壳。
  */
@@ -26,37 +22,69 @@ import React, {
 import { useExtensionContext } from "@avg-studio/sdk";
 import { canCraftRecipe } from "../domain/crafting";
 import { sortEntriesRecentFirst } from "../domain/inventory";
+import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findItem } from "../domain/item-registry";
 import {
   resolveBackpackLayout,
   type ResolvedBackpackLayout,
 } from "../domain/backpack-layout";
+import { BAG_CHROME_OVERLAY_IDS } from "../domain/backpack-screen-config";
+import { layerZIndex } from "../domain/layer-order";
+import { MOTION_DEFAULT_DURATION_MS } from "../domain/motion";
+import {
+  advanceToastQueue,
+  emptyToastQueue,
+  enqueueToast,
+  type ToastQueueState,
+} from "../domain/toast-queue";
 import {
   accentAlpha,
   applyUiBoxStyle,
   applyUiTextStyle,
 } from "../domain/ui-style";
 import type {
+  ElementMotion,
   InventoryEntry,
   InventoryState,
   ItemDefinition,
   RecipeDefinition,
   UiBoxStyle,
+  UiOverlayRole,
+  UiTextStyle,
 } from "../domain/types";
 import { formatIngredientSummary } from "../runtime/craft-panel";
+import { ToastLayer } from "../runtime/toast-layer";
+import { UiOverlayLayer } from "../runtime/ui-overlay-layer";
 import { fitDesignToHost } from "../shared/scene-layout";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { useBackpackScreenConfig } from "../store/use-backpack-ui-config";
 import { useDesignSize } from "../store/use-design-size";
+import { useSceneUiConfig } from "../store/use-scene-ui-config";
+
+/** 合成成功轻提示动效（与获得物品默认 toast 一致：上滑进 / 下滑出） */
+const CRAFT_SUCCESS_TOAST_MOTION: ElementMotion = {
+  enter: {
+    preset: "slideUp",
+    delayMs: 0,
+    durationMs: MOTION_DEFAULT_DURATION_MS,
+    customCss: "",
+  },
+  exit: {
+    preset: "slideDown",
+    delayMs: 0,
+    durationMs: MOTION_DEFAULT_DURATION_MS,
+    customCss: "",
+  },
+};
+
+/** 相对合成按钮顶边的提示间距（设计像素） */
+const CRAFT_SUCCESS_TOAST_GAP = 12;
 
 /** 入场动画时长（毫秒） */
 const ENTER_MS = 320;
 
 /** 退场动画时长（毫秒） */
 const EXIT_MS = 240;
-
-/** 合成按钮预览 / 运行时默认高度（设计像素） */
-const CRAFT_BUTTON_H = 44;
 
 /** 主界面模式：物品列表 / 合成 */
 type ScreenMode = "items" | "craft";
@@ -170,31 +198,6 @@ function buildTokens(layout: ResolvedBackpackLayout): BackpackTokens {
 }
 
 /**
- * 合成按钮在设计舞台上的绝对矩形（贴详情底边 + offsetY）。
- *
- * @param layout - 解析布局
- * @returns Required rect（设计像素）
- *
- * @example
- * ```ts
- * const r = craftButtonRect(layout);
- * // r.y === detail.y + detail.h - pad - h + offsetY
- * ```
- */
-function craftButtonRect(
-  layout: ResolvedBackpackLayout,
-): { x: number; y: number; w: number; h: number } {
-  const detail = layout.detailPanel.rect;
-  const pad = Math.max(8, layout.detailPanel.padding);
-  const w = Math.max(48, detail.w - pad * 2);
-  const h = CRAFT_BUTTON_H;
-  const x = detail.x + pad;
-  const y = detail.y + detail.h - pad - h + layout.craftButton.offsetY;
-
-  return { x, y, w, h };
-}
-
-/**
  * 注入背包全屏入场 / 退场关键帧。
  *
  * @returns style 节点
@@ -275,8 +278,9 @@ export interface BackpackScreenProps {
    * 合成回调。
    *
    * @param recipeId - 配方 id
+   * @returns 是否合成成功
    */
-  onCraftRecipe: (recipeId: string) => void;
+  onCraftRecipe: (recipeId: string) => boolean;
 
   /** 关闭全屏背包 */
   onClose: () => void;
@@ -382,7 +386,10 @@ function buildRecipeCells(
  * @param props.label - 底部名称
  * @param props.disabledLook - 视觉弱化（如不可合成）
  * @param props.tokens - 视觉 token
- * @param props.selectedStyle - 选中态盒样式（来自 layout.itemGrid.selectedStyle）
+ * @param props.cellStyle - 常态盒样式
+ * @param props.selectedStyle - 选中态盒样式
+ * @param props.cellLabelStyle - 名称文字样式
+ * @param props.iconMaxSize - 格内图片边长
  * @returns 槽位按钮
  */
 function GridCellButton({
@@ -394,7 +401,10 @@ function GridCellButton({
   label,
   disabledLook = false,
   tokens,
+  cellStyle,
   selectedStyle,
+  cellLabelStyle,
+  iconMaxSize,
 }: {
   active: boolean;
   title: string;
@@ -404,13 +414,27 @@ function GridCellButton({
   label: string;
   disabledLook?: boolean;
   tokens: BackpackTokens;
+  cellStyle: UiBoxStyle;
   selectedStyle: UiBoxStyle;
+  cellLabelStyle: UiTextStyle;
+  iconMaxSize: number;
 }): React.ReactElement {
+  const idleCss = applyUiBoxStyle(cellStyle);
   const selectedCss = applyUiBoxStyle(selectedStyle);
+  const labelCss = applyUiTextStyle(cellLabelStyle);
   const selectedBorder =
     selectedStyle.borderColor?.trim() || tokens.accent;
   const selectedBg =
     selectedStyle.background?.trim() || tokens.bgCellSelected;
+  const idleBorder =
+    cellStyle.borderColor?.trim() || tokens.border;
+  const idleBg = cellStyle.background?.trim() || tokens.bgCell;
+  const radius =
+    (active ? selectedStyle.borderRadius : cellStyle.borderRadius) ?? 12;
+  const borderW = active
+    ? (selectedStyle.borderWidth ?? 1)
+    : (cellStyle.borderWidth ?? 1);
+  const iconCap = Math.max(24, iconMaxSize);
 
   return (
     <button
@@ -429,22 +453,20 @@ function GridCellButton({
         alignItems: "stretch",
         justifyContent: "flex-end",
         padding: 10,
-        borderRadius: selectedStyle.borderRadius ?? 12,
-        border: active
-          ? `${selectedStyle.borderWidth ?? 1}px solid ${selectedBorder}`
-          : `1px solid ${tokens.border}`,
-        background: active ? selectedBg : tokens.bgCell,
+        borderRadius: radius,
+        border: `${borderW}px solid ${active ? selectedBorder : idleBorder}`,
+        background: active ? selectedBg : idleBg,
         boxShadow: active
           ? `0 0 0 1px ${tokens.accentDim}, 0 8px 24px rgba(0,0,0,0.35)`
           : "none",
-        color: tokens.text,
+        color: cellLabelStyle.color?.trim() || tokens.text,
         cursor: "pointer",
         fontFamily: tokens.font,
         overflow: "hidden",
         opacity: disabledLook && !active ? 0.55 : 1,
         transition:
           "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease",
-        ...(active ? selectedCss : null),
+        ...(active ? selectedCss : idleCss),
       }}
       onMouseEnter={(e) => {
         if (!active) {
@@ -452,9 +474,7 @@ function GridCellButton({
         }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = active
-          ? selectedBg
-          : tokens.bgCell;
+        e.currentTarget.style.background = active ? selectedBg : idleBg;
       }}
     >
       {active ? (
@@ -487,24 +507,24 @@ function GridCellButton({
             src={iconUrl}
             alt=""
             style={{
-              width: "70%",
-              height: "70%",
-              maxWidth: 64,
-              maxHeight: 64,
+              width: iconCap,
+              height: iconCap,
               objectFit: "contain",
               pointerEvents: "none",
+              flexShrink: 0,
             }}
           />
         ) : (
           <span
             aria-hidden
             style={{
-              width: 40,
-              height: 40,
+              width: iconCap,
+              height: iconCap,
               borderRadius: "50%",
               background:
                 "radial-gradient(circle at 35% 30%, #e8e0d0 0%, #6a7a88 100%)",
               opacity: 0.7,
+              flexShrink: 0,
             }}
           />
         )}
@@ -512,13 +532,12 @@ function GridCellButton({
 
       <div
         style={{
-          fontSize: 12,
-          fontWeight: 650,
           lineHeight: 1.25,
           textAlign: "center",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
+          ...labelCss,
         }}
       >
         {label}
@@ -536,20 +555,25 @@ function GridCellButton({
  * @param props.url - 图片 URL
  * @param props.alt - alt
  * @param props.heroHeight - 大图高度（设计像素，来自 layout.detailPanel.heroHeight）
- * @param props.tokens - 视觉 token
+ * @param props.heroStyle - 大图框样式（来自 layout.detailPanel.heroStyle）
+ * @param props.tokens - 视觉 token（无图占位光晕）
  * @returns 预览块
  */
 function DetailHeroImage({
   url,
   alt,
   heroHeight,
+  heroStyle,
   tokens,
 }: {
   url: string;
   alt: string;
   heroHeight: number;
+  heroStyle: UiBoxStyle;
   tokens: BackpackTokens;
 }): React.ReactElement {
+  const heroCss = applyUiBoxStyle(heroStyle);
+
   return (
     <div
       data-testid="backpack-screen-preview"
@@ -558,11 +582,9 @@ function DetailHeroImage({
         height: heroHeight,
         maxHeight: "34%",
         flexShrink: 0,
-        borderRadius: 14,
-        border: `1px solid ${tokens.border}`,
-        background: tokens.bgPreview,
         overflow: "hidden",
         boxSizing: "border-box",
+        ...heroCss,
       }}
     >
       <div
@@ -610,6 +632,16 @@ function DetailHeroImage({
 }
 
 /**
+ * @param style - 文本样式
+ * @param fallback - label 缺省文案
+ */
+function textLabelOf(style: UiTextStyle, fallback: string): string {
+  const label = style.label?.trim();
+
+  return label && label.length > 0 ? label : fallback;
+}
+
+/**
  * 全屏幕背包面板（v2 绝对节点：物品 / 合成 Grid + 详情，大图置顶）。
  *
  * @param props - BackpackScreenProps
@@ -636,6 +668,7 @@ export function BackpackScreen({
   const ctx = useExtensionContext();
   const resolve = ctx.asset?.resolve?.bind(ctx.asset);
   const screenCfg = useBackpackScreenConfig();
+  const sceneUi = useSceneUiConfig();
   const { size: designSize } = useDesignSize();
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -646,6 +679,8 @@ export function BackpackScreen({
   const [selectedRecipeKey, setSelectedRecipeKey] = useState<string | null>(
     null,
   );
+  const [craftToastQueue, setCraftToastQueue] =
+    useState<ToastQueueState>(emptyToastQueue);
 
   /**
    * 是否正在退场。挂载时固定播入场；仅关闭时切到退场，避免「shown」态重播入场。
@@ -860,38 +895,131 @@ export function BackpackScreen({
 
   const isCraft = mode === "craft";
 
-  const backdropCss = applyUiBoxStyle(layout.backdrop.style);
-  const panelCss = applyUiBoxStyle(layout.panelChrome.style);
   const gridCss = applyUiBoxStyle(layout.itemGrid.style);
   const detailCss = applyUiBoxStyle(layout.detailPanel.style);
-  const closeBoxCss = applyUiBoxStyle(layout.closeButton.style);
-  const closeTextCss = applyUiTextStyle(layout.closeButton.style);
-  const craftBoxCss = applyUiBoxStyle(layout.craftButton.style);
-  const craftTextCss = applyUiTextStyle(layout.craftButton.style);
-  const eyebrowCss = applyUiTextStyle(layout.titleBlock.eyebrow);
-  const titleCss = applyUiTextStyle(layout.titleBlock.title);
-  const modeLinkCss = applyUiTextStyle(layout.titleBlock.modeLink);
+  const gridEmptyCss = applyUiTextStyle(layout.itemGrid.emptyStyle);
+  const gridEmptyCraftCss = applyUiTextStyle(layout.itemGrid.emptyCraftStyle);
+  const detailTitleCss = applyUiTextStyle(layout.detailPanel.titleStyle);
+  const detailMetaCss = applyUiTextStyle(layout.detailPanel.metaStyle);
+  const detailDescriptionCss = applyUiTextStyle(
+    layout.detailPanel.descriptionStyle,
+  );
+  const detailEmptyCss = applyUiTextStyle(layout.detailPanel.emptyStyle);
+  const detailEmptyCraftCss = applyUiTextStyle(
+    layout.detailPanel.emptyCraftStyle,
+  );
+  const detailIngredientsLabelCss = applyUiTextStyle(
+    layout.detailPanel.ingredientsLabelStyle,
+  );
+  const detailIngredientsCss = applyUiTextStyle(
+    layout.detailPanel.ingredientsStyle,
+  );
+  const gridEmptyLabel = textLabelOf(
+    layout.itemGrid.emptyStyle,
+    "背包是空的",
+  );
+  const gridEmptyCraftLabel = textLabelOf(
+    layout.itemGrid.emptyCraftStyle,
+    "暂无配方",
+  );
+  const emptyItemLabel = textLabelOf(
+    layout.detailPanel.emptyStyle,
+    "选择物品以查看详情",
+  );
+  const emptyCraftLabel = textLabelOf(
+    layout.detailPanel.emptyCraftStyle,
+    "选择配方以查看详情",
+  );
+  const ingredientsHeading = textLabelOf(
+    layout.detailPanel.ingredientsLabelStyle,
+    "原料",
+  );
 
-  const titleEyebrow =
-    layout.titleBlock.eyebrow.label?.trim() || "INVENTORY";
-  const titleLabel = isCraft
-    ? "合成"
-    : layout.titleBlock.title.label?.trim() || "道具";
-  const modeLinkLabel = isCraft
-    ? "返回道具"
-    : layout.titleBlock.modeLink.label?.trim() || "打开合成";
-  const closeLabel = layout.closeButton.style.label?.trim() || "×";
-  const craftLabel = layout.craftButton.style.label?.trim() || "合成";
-
-  const panel = layout.panelChrome.rect;
-  const title = layout.titleBlock.rect;
-  const close = layout.closeButton.rect;
   const grid = layout.itemGrid.rect;
   const detail = layout.detailPanel.rect;
-  const craftRect = craftButtonRect(layout);
   const gridCellMin = layout.itemGrid.cellMin;
   const heroHeight = layout.detailPanel.heroHeight;
   const detailPad = layout.detailPanel.padding;
+  const heroStyle = layout.detailPanel.heroStyle;
+
+  const chromeBackdrop = (screenCfg.overlays ?? []).find(
+    (el) => el.id === BAG_CHROME_OVERLAY_IDS.backdrop,
+  );
+  const hostBackdropCss = applyUiBoxStyle(
+    chromeBackdrop?.style ?? layout.backdrop.style,
+  );
+
+  const showCraftButton = isCraft && Boolean(selectedRecipe);
+  const hiddenRoles: UiOverlayRole[] = showCraftButton ? [] : ["craft"];
+  const disabledRoles: UiOverlayRole[] =
+    selectedRecipe && !selectedRecipe.canCraft ? ["craft"] : [];
+  const labelByRole: Partial<Record<UiOverlayRole, string>> = {
+    toggleMode: isCraft ? "返回道具" : "合成",
+    craft: selectedRecipe?.canCraft === false ? "原料不足" : "合成",
+  };
+
+  const showCraftSuccessToast = useCallback((): void => {
+    const craftEl = (screenCfg.overlays ?? []).find(
+      (el) => el.id === BAG_CHROME_OVERLAY_IDS.craft,
+    );
+    const rect = craftEl?.rect;
+    const anchorX =
+      typeof rect?.x === "number" &&
+      typeof rect.w === "number" &&
+      rect.w > 0
+        ? rect.x + rect.w / 2
+        : detail.x + detail.w / 2;
+    const anchorY =
+      typeof rect?.y === "number" ? rect.y : detail.y + detail.h;
+
+    const appearance = resolveItemToastAppearance(sceneUi.itemToast, {
+      placement: "above",
+      gap: CRAFT_SUCCESS_TOAST_GAP,
+    });
+
+    setCraftToastQueue((prev) =>
+      enqueueToast(prev, {
+        text: "合成成功",
+        anchorHotspotId: BAG_CHROME_OVERLAY_IDS.craft,
+        anchorPixel: { x: anchorX, y: anchorY },
+        motion: CRAFT_SUCCESS_TOAST_MOTION,
+        placement: appearance.placement,
+        offsetX: appearance.offsetX,
+        offsetY: appearance.offsetY,
+        gap: appearance.gap,
+        style: appearance.style,
+      }),
+    );
+  }, [detail.h, detail.w, detail.x, detail.y, sceneUi.itemToast, screenCfg.overlays]);
+
+  const advanceCraftToast = useCallback((): void => {
+    setCraftToastQueue((prev) => advanceToastQueue(prev));
+  }, []);
+
+  const handleOverlayAction = useCallback(
+    (role: UiOverlayRole): void => {
+      if (role === "closeBag") {
+        requestClose();
+
+        return;
+      }
+
+      if (role === "toggleMode") {
+        setMode((prev) => (prev === "craft" ? "items" : "craft"));
+
+        return;
+      }
+
+      if (role === "craft" && selectedRecipe?.canCraft) {
+        const ok = onCraftRecipe(selectedRecipe.recipe.id);
+
+        if (ok) {
+          showCraftSuccessToast();
+        }
+      }
+    },
+    [onCraftRecipe, requestClose, selectedRecipe, showCraftSuccessToast],
+  );
 
   return (
     <div
@@ -916,14 +1044,14 @@ export function BackpackScreen({
     >
       <BackpackMotionStyles />
 
-      {/* backdrop：铺满宿主，入场 / 退场淡入淡出（唯一绘制 bgPage 的层） */}
+      {/* 宿主级遮罩：覆盖 letterbox；舞台内另有 mask 组件（同源样式） */}
       <div
         data-testid="backpack-screen-backdrop"
         style={{
           position: "absolute",
           inset: 0,
           background: tokens.bgPage,
-          ...backdropCss,
+          ...hostBackdropCss,
           animation: backdropAnimation,
         }}
       />
@@ -953,9 +1081,7 @@ export function BackpackScreen({
             }}
           >
             {/*
-              内容包装层：panelAnimation 作用于可见面板内容整体
-             （panelChrome / title / close / grid / detail / craft），
-              子节点仍用舞台绝对坐标，交互不变。
+              内容包装层：overlays（chrome 组件）+ itemGrid + detailPanel
             */}
             <div
               data-testid="backpack-screen-panel-content"
@@ -969,131 +1095,35 @@ export function BackpackScreen({
                 animation: panelAnimation,
               }}
             >
-            {/* panelChrome：底板样式（动画由外层包装承担） */}
-            <div
-              data-testid="backpack-screen-panel"
-              style={{
-                position: "absolute",
-                left: panel.x,
-                top: panel.y,
-                width: panel.w,
-                height: panel.h,
-                boxSizing: "border-box",
-                borderRadius: 18,
-                border: `1px solid ${tokens.border}`,
-                background: tokens.bgPanel,
-                boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
-                overflow: "hidden",
-                ...panelCss,
-              }}
+            <UiOverlayLayer
+              overlays={screenCfg.overlays ?? []}
+              onOverlayAction={handleOverlayAction}
+              hiddenRoles={hiddenRoles}
+              disabledRoles={disabledRoles}
+              labelByRole={labelByRole}
             />
 
-            {/* titleBlock */}
             <div
-              data-testid="backpack-screen-title"
+              data-testid="backpack-craft-toast-host"
               style={{
                 position: "absolute",
-                left: title.x,
-                top: title.y,
-                width: title.w,
-                height: title.h,
-                boxSizing: "border-box",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                gap: 4,
-                pointerEvents: "auto",
+                inset: 0,
+                zIndex: 1000,
+                pointerEvents: "none",
               }}
             >
-              <div
-                style={{
-                  color: tokens.accent,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.22em",
-                  ...eyebrowCss,
-                }}
-              >
-                {titleEyebrow}
-              </div>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  color: tokens.text,
-                  lineHeight: 1.15,
-                  ...titleCss,
-                }}
-              >
-                {titleLabel}
-              </h1>
-              <div
-                style={{
-                  marginTop: 6,
-                  width: 44,
-                  height: 3,
-                  borderRadius: 2,
-                  background: tokens.accent,
+              <ToastLayer
+                queue={craftToastQueue}
+                onAdvance={advanceCraftToast}
+                hotspots={[]}
+                contentRect={{
+                  originX: 0,
+                  originY: 0,
+                  width: designSize.width,
+                  height: designSize.height,
                 }}
               />
-              <button
-                type="button"
-                data-testid="backpack-screen-mode-toggle"
-                onClick={() => setMode(isCraft ? "items" : "craft")}
-                style={{
-                  appearance: "none",
-                  marginTop: 8,
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  color: tokens.accent,
-                  fontSize: 13,
-                  fontFamily: tokens.font,
-                  fontWeight: 600,
-                  letterSpacing: "0.08em",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                  textUnderlineOffset: 4,
-                  textAlign: "left",
-                  ...modeLinkCss,
-                }}
-              >
-                {modeLinkLabel}
-              </button>
             </div>
-
-            {/* closeButton */}
-            <button
-              type="button"
-              data-testid="backpack-screen-close"
-              aria-label="关闭背包"
-              onClick={requestClose}
-              style={{
-                appearance: "none",
-                position: "absolute",
-                left: close.x,
-                top: close.y,
-                width: close.w,
-                height: close.h,
-                boxSizing: "border-box",
-                display: "grid",
-                placeItems: "center",
-                borderRadius: 10,
-                border: `1px solid ${tokens.border}`,
-                background: "rgba(255,255,255,0.06)",
-                color: tokens.text,
-                fontSize: 18,
-                lineHeight: 1,
-                cursor: "pointer",
-                fontFamily: tokens.font,
-                ...closeBoxCss,
-                ...closeTextCss,
-              }}
-            >
-              {closeLabel}
-            </button>
 
             {/* itemGrid */}
             <aside
@@ -1106,6 +1136,11 @@ export function BackpackScreen({
                 top: grid.y,
                 width: grid.w,
                 height: grid.h,
+                zIndex: layerZIndex(
+                  screenCfg.layerOrder,
+                  "itemGrid",
+                  10,
+                ),
                 boxSizing: "border-box",
                 borderRight: `1px solid ${tokens.border}`,
                 background: tokens.bgGrid,
@@ -1123,11 +1158,10 @@ export function BackpackScreen({
                       minHeight: 160,
                       display: "grid",
                       placeItems: "center",
-                      color: tokens.textMuted,
-                      fontSize: 14,
+                      ...gridEmptyCraftCss,
                     }}
                   >
-                    暂无配方
+                    {gridEmptyCraftLabel}
                   </div>
                 ) : (
                   <div
@@ -1156,7 +1190,10 @@ export function BackpackScreen({
                           label={cell.name}
                           disabledLook={!cell.canCraft}
                           tokens={tokens}
+                          cellStyle={layout.itemGrid.cellStyle}
                           selectedStyle={layout.itemGrid.selectedStyle}
+                          cellLabelStyle={layout.itemGrid.cellLabelStyle}
+                          iconMaxSize={layout.itemGrid.iconMaxSize}
                         />
                       );
                     })}
@@ -1170,11 +1207,10 @@ export function BackpackScreen({
                     minHeight: 160,
                     display: "grid",
                     placeItems: "center",
-                    color: tokens.textMuted,
-                    fontSize: 14,
+                    ...gridEmptyCss,
                   }}
                 >
-                  背包是空的
+                  {gridEmptyLabel}
                 </div>
               ) : (
                 <div
@@ -1202,7 +1238,10 @@ export function BackpackScreen({
                         iconUrl={icon}
                         label={cell.name}
                         tokens={tokens}
+                        cellStyle={layout.itemGrid.cellStyle}
                         selectedStyle={layout.itemGrid.selectedStyle}
+                        cellLabelStyle={layout.itemGrid.cellLabelStyle}
+                        iconMaxSize={layout.itemGrid.iconMaxSize}
                       />
                     );
                   })}
@@ -1219,6 +1258,11 @@ export function BackpackScreen({
                 top: detail.y,
                 width: detail.w,
                 height: detail.h,
+                zIndex: layerZIndex(
+                  screenCfg.layerOrder,
+                  "detailPanel",
+                  10,
+                ),
                 boxSizing: "border-box",
                 minHeight: 0,
                 overflow: "auto",
@@ -1236,11 +1280,10 @@ export function BackpackScreen({
                       flex: 1,
                       display: "grid",
                       placeItems: "center",
-                      color: tokens.textMuted,
-                      fontSize: 14,
+                      ...detailEmptyCraftCss,
                     }}
                   >
-                    选择配方以查看详情
+                    {emptyCraftLabel}
                   </div>
                 ) : (
                   <>
@@ -1248,6 +1291,7 @@ export function BackpackScreen({
                       url={recipePreviewUrl}
                       alt={selectedRecipe.name}
                       heroHeight={heroHeight}
+                      heroStyle={heroStyle}
                       tokens={tokens}
                     />
 
@@ -1255,20 +1299,13 @@ export function BackpackScreen({
                       <h2
                         style={{
                           margin: "0 0 8px",
-                          fontSize: 28,
-                          fontWeight: 750,
                           letterSpacing: "0.02em",
+                          ...detailTitleCss,
                         }}
                       >
                         {selectedRecipe.name}
                       </h2>
-                      <div
-                        style={{
-                          color: tokens.accent,
-                          fontSize: 14,
-                          fontWeight: 600,
-                        }}
-                      >
+                      <div style={detailMetaCss}>
                         {selectedRecipe.canCraft ? "可合成" : "原料不足"}
                       </div>
                     </div>
@@ -1276,10 +1313,9 @@ export function BackpackScreen({
                     <p
                       style={{
                         margin: 0,
-                        fontSize: 15,
                         lineHeight: 1.75,
-                        color: tokens.textSoft,
                         whiteSpace: "pre-wrap",
+                        ...detailDescriptionCss,
                       }}
                     >
                       {selectedRecipe.recipe.description?.trim() ||
@@ -1288,15 +1324,17 @@ export function BackpackScreen({
 
                     <div
                       style={{
-                        fontSize: 13,
-                        color: tokens.textMuted,
                         lineHeight: 1.6,
+                        ...detailIngredientsCss,
                       }}
                     >
                       <div
-                        style={{ marginBottom: 4, color: tokens.textSoft }}
+                        style={{
+                          marginBottom: 4,
+                          ...detailIngredientsLabelCss,
+                        }}
                       >
-                        原料
+                        {ingredientsHeading}
                       </div>
                       {selectedRecipe.summary}
                     </div>
@@ -1308,11 +1346,10 @@ export function BackpackScreen({
                     flex: 1,
                     display: "grid",
                     placeItems: "center",
-                    color: tokens.textMuted,
-                    fontSize: 14,
+                    ...detailEmptyCss,
                   }}
                 >
-                  选择物品以查看详情
+                  {emptyItemLabel}
                 </div>
               ) : (
                 <>
@@ -1320,6 +1357,7 @@ export function BackpackScreen({
                     url={itemPreviewUrl}
                     alt={selectedItem.name}
                     heroHeight={heroHeight}
+                    heroStyle={heroStyle}
                     tokens={tokens}
                   />
 
@@ -1327,32 +1365,22 @@ export function BackpackScreen({
                     <h2
                       style={{
                         margin: "0 0 8px",
-                        fontSize: 28,
-                        fontWeight: 750,
                         letterSpacing: "0.02em",
+                        ...detailTitleCss,
                       }}
                     >
                       {selectedItem.name}
                     </h2>
-                    <div
-                      style={{
-                        color: tokens.accent,
-                        fontSize: 14,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {selectedItem.meta}
-                    </div>
+                    <div style={detailMetaCss}>{selectedItem.meta}</div>
                   </div>
 
                   <p
                     style={{
                       margin: 0,
                       maxWidth: 560,
-                      fontSize: 15,
                       lineHeight: 1.75,
-                      color: tokens.textSoft,
                       whiteSpace: "pre-wrap",
+                      ...detailDescriptionCss,
                     }}
                   >
                     {selectedItem.def?.description?.trim() || "暂无描述。"}
@@ -1361,57 +1389,6 @@ export function BackpackScreen({
               )}
             </section>
 
-            {/* craftButton：详情底边 + offsetY；仅合成模式显示 */}
-            {isCraft && selectedRecipe ? (
-              <button
-                type="button"
-                data-testid={`craft-button-${selectedRecipe.recipe.id}`}
-                disabled={!selectedRecipe.canCraft}
-                onClick={() => {
-                  if (selectedRecipe.canCraft) {
-                    onCraftRecipe(selectedRecipe.recipe.id);
-                  }
-                }}
-                style={{
-                  appearance: "none",
-                  position: "absolute",
-                  left: craftRect.x,
-                  top: craftRect.y,
-                  width: craftRect.w,
-                  height: craftRect.h,
-                  boxSizing: "border-box",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  border: "none",
-                  borderRadius: 10,
-                  padding: "12px 18px",
-                  fontSize: 15,
-                  fontFamily: tokens.font,
-                  fontWeight: 700,
-                  cursor: selectedRecipe.canCraft
-                    ? "pointer"
-                    : "not-allowed",
-                  background: selectedRecipe.canCraft
-                    ? tokens.accent
-                    : "rgba(255,255,255,0.08)",
-                  color: selectedRecipe.canCraft
-                    ? tokens.accentTextOn
-                    : tokens.textMuted,
-                  opacity: selectedRecipe.canCraft ? 1 : 0.7,
-                  ...craftBoxCss,
-                  ...craftTextCss,
-                  ...(selectedRecipe.canCraft
-                    ? null
-                    : {
-                        background: "rgba(255,255,255,0.08)",
-                        color: tokens.textMuted,
-                      }),
-                }}
-              >
-                {selectedRecipe.canCraft ? craftLabel : "原料不足"}
-              </button>
-            ) : null}
             </div>
           </div>
         </div>

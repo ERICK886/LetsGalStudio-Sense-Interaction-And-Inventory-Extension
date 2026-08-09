@@ -2,19 +2,19 @@
  * hotspot-view.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.3.0
+ * 版本: 0.4.0
  *
  * 运行时交互点：可配置悬浮阴影、标签、PNG 剪影 alpha-hit（对齐大地图地点）。
  *
  * 行为要点：
  * - 悬停阴影由 hotspot.hoverShadow 经 normalize + buildHoverShadowFilter 生成
- * - 有图：pointermove 同步 data-si-hit；透明区无阴影/hover 标签/pointer 光标
- * - 透明区 pointerdown 不 stopPropagation，事件可落到下层
+ * - 有图：透明区 `pointer-events: none`，不挡下方对话框；仅剪影命中时 `auto`
+ * - 有图时用 window 级 pointermove 采样（因 none 时收不到元素事件）
  * - 镂空内部仍命中（剪影掩码）
  * - 无图或采样失败 → 整框可点
  */
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { buildHoverShadowFilter } from "../domain/hover-shadow";
 import { resolveHotspotHoverShadow } from "../domain/scene-ui-config";
 import type { HotspotElement, HotspotHoverShadow } from "../domain/types";
@@ -85,6 +85,29 @@ function hotspotDisplaySize(hs: HotspotElement): {
 }
 
 /**
+ * 判断客户端坐标是否落在元素轴对齐包围盒内。
+ *
+ * @param el - DOM 元素
+ * @param clientX - 指针 clientX
+ * @param clientY - 指针 clientY
+ * @returns 是否在盒内
+ */
+function isClientPointInElement(
+  el: HTMLElement,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const rect = el.getBoundingClientRect();
+
+  return (
+    clientX >= rect.left &&
+    clientX < rect.right &&
+    clientY >= rect.top &&
+    clientY < rect.bottom
+  );
+}
+
+/**
  * 运行时单个交互点视图。
  *
  * @param props - HotspotViewProps
@@ -99,6 +122,11 @@ function hotspotDisplaySize(hs: HotspotElement): {
  *   onActivate={handleActivate}
  * />
  * ```
+ *
+ * @remarks
+ * 下方对话框与扩展叠层不同树：`stopPropagation` 无法把点击交给对话框。
+ * 有图时必须在透明像素上使用 `pointer-events: none`，否则瓦罐等底部交互点
+ * 的大包围盒会挡住对话框（佛像偏上通常无此问题）。
  */
 export function HotspotView({
   hotspot,
@@ -107,10 +135,11 @@ export function HotspotView({
   onActivate,
   globalHoverShadow,
 }: HotspotViewProps): React.ReactElement {
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   /** 指针是否落在剪影内（有图时）；无图恒为 true */
   const [alphaHit, setAlphaHit] = useState(false);
-  /** 指针是否仍在外壳内（用于 leave 复位） */
+  /** 指针是否仍在外壳包围盒内（用于 leave 复位 / hover） */
   const [pointerInside, setPointerInside] = useState(false);
 
   const size = hotspotDisplaySize(hotspot);
@@ -145,6 +174,16 @@ export function HotspotView({
     (labelMode === "hover" && interactiveHover);
 
   /**
+   * 有图：仅剪影命中时接收指针，透明区放行给下方对话框。
+   * 无图：整框可点。
+   */
+  const rootPointerEvents: "auto" | "none" = hasImage
+    ? alphaHit
+      ? "auto"
+      : "none"
+    : "auto";
+
+  /**
    * 按指针位置同步剪影命中状态。
    *
    * @param clientX - 浏览器 clientX
@@ -177,7 +216,52 @@ export function HotspotView({
   );
 
   /**
-   * pointerdown：剪影命中才激活；透明区不拦截事件（对齐大地图地点）。
+   * 有图时：window 采样包围盒 + alpha。
+   * 透明时根节点为 none，收不到元素级 move，必须挂全局。
+   */
+  useEffect(() => {
+    if (!hasImage) {
+      return;
+    }
+
+    /**
+     * @param event - 指针事件
+     */
+    const onWindowPointerMove = (event: PointerEvent): void => {
+      const root = rootRef.current;
+
+      if (root === null) {
+        return;
+      }
+
+      const inside = isClientPointInElement(
+        root,
+        event.clientX,
+        event.clientY,
+      );
+
+      setPointerInside(inside);
+
+      if (!inside) {
+        setAlphaHit(false);
+
+        return;
+      }
+
+      syncAlphaHit(event.clientX, event.clientY);
+    };
+
+    window.addEventListener("pointermove", onWindowPointerMove, {
+      passive: true,
+    });
+
+    return () => {
+      window.removeEventListener("pointermove", onWindowPointerMove);
+    };
+  }, [hasImage, syncAlphaHit]);
+
+  /**
+   * pointerdown：剪影命中才激活。
    *
    * @param event - 指针事件
    */
@@ -186,7 +270,6 @@ export function HotspotView({
       const hit = syncAlphaHit(event.clientX, event.clientY);
 
       if (!hit) {
-        // 透明区域：不 stopPropagation，让下层可响应
         return;
       }
 
@@ -197,40 +280,48 @@ export function HotspotView({
   );
 
   /**
-   * pointermove：更新 data-si-hit / 阴影 / hover 标签。
+   * 无图占位：元素级 enter/leave/move。
    *
    * @param event - 指针事件
    */
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (hasImage) {
+        return;
+      }
+
       syncAlphaHit(event.clientX, event.clientY);
     },
-    [syncAlphaHit],
+    [hasImage, syncAlphaHit],
   );
 
   /**
-   * 指针进入外壳。
-   *
    * @param event - 指针事件
    */
   const handlePointerEnter = useCallback(
     (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (hasImage) {
+        return;
+      }
+
       setPointerInside(true);
       syncAlphaHit(event.clientX, event.clientY);
     },
-    [syncAlphaHit],
+    [hasImage, syncAlphaHit],
   );
 
-  /**
-   * 指针离开外壳：复位 hit。
-   */
   const handlePointerLeave = useCallback((): void => {
+    if (hasImage) {
+      return;
+    }
+
     setPointerInside(false);
     setAlphaHit(false);
-  }, []);
+  }, [hasImage]);
 
   return (
     <div
+      ref={rootRef}
       data-testid={`runtime-hotspot-${hotspot.id}`}
       data-hotspot-id={hotspot.id}
       data-si-alpha={hasImage ? "1" : undefined}
@@ -246,13 +337,12 @@ export function HotspotView({
         width: size.width,
         height: size.height,
         boxSizing: "border-box",
-        // 有图时：仅剪影命中显示 pointer；透明区 default（视觉提示不拦截由逻辑保证）
         cursor: hasImage
           ? alphaHit
             ? "pointer"
             : "default"
           : "pointer",
-        pointerEvents: "auto",
+        pointerEvents: rootPointerEvents,
         overflow: "visible",
         filter: showShadow ? hoverFilter : undefined,
         transition: "filter 120ms ease-out",
