@@ -13,7 +13,7 @@
  * - studio/scene-inline-cards：剧本方法块内联摘要卡片（侧效安装）
  *
  * @remarks
- * `extension.json.id`（`ext-27b96b`）是包/项目 id，勿与子模块 id 混淆。
+ * `extension.json.id`（`ink.zenly.ext-27b96b`）是包/项目 id，勿与子模块 id 混淆。
  * 片段跳转（可跳回 / 不可跳回）是交互点 SceneAction，不单独成扩展。
  */
 

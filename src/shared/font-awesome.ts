@@ -11,7 +11,7 @@
 export const FONT_AWESOME_CSS_HREF =
   "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.0/css/all.min.css";
 
-const LINK_ID = "ext-27b96b-font-awesome";
+const LINK_ID = "ink-zenly-ext-27b96b-font-awesome";
 
 /**
  * 确保页面已加载 Font Awesome CSS（幂等）。

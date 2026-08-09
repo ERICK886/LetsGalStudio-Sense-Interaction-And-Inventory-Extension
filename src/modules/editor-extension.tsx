@@ -28,7 +28,7 @@ import { EDITOR_MODULE_ID } from "../shared/module-ids";
  * - render：EditorApp → EditorShell
  *
  * @remarks
- * `extension.json.id`（`ext-27b96b`）是包 id，与本程序 id `editor` 不同。
+ * `extension.json.id`（`ink.zenly.ext-27b96b`）是包 id，与本程序 id `editor` 不同。
  */
 @extension({ id: EDITOR_MODULE_ID, label: "场景编辑器" })
 export class EditorExtension extends Extension<EditorAppProps> {

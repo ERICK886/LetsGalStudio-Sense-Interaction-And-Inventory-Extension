@@ -1,6 +1,6 @@
 # LetsGal Studio 场景交互及物品栏系统
 
-> 扩展包 ID：`ext-27b96b`｜ 程序界面：`editor`、`scene-interaction`、`backpack-hud`、`backpack`  
+> 扩展包 ID：`ink.zenly.ext-27b96b`｜ 程序界面：`editor`、`scene-interaction`、`backpack-hud`、`backpack`  
 > 扩展版本：`0.2.0` ｜ 需要 LetsGal Studio SDK：`>=1.9.2-beta`  
 > 作者：池水三两升
 
@@ -34,7 +34,7 @@
 
 **要注意：**
 
-- `extension.json.id`（`ext-27b96b`）是**扩展包** id；剧本里调用方法时选的是子模块（如 `scene-interaction`）
+- `extension.json.id`（`ink.zenly.ext-27b96b`）是**扩展包** id；剧本里调用方法时选的是子模块（如 `scene-interaction`）
 - 库存写在 `scene-interaction` 的 `inventoryJson`；背包 HUD 通过进程内会话桥读取，勿另建第二份存档
 - 可视化界面 JSON（若使用）放在 `ui/`，请用 Studio 可视化界面编辑器维护，不要手改随机文件名
 
@@ -56,7 +56,7 @@ pnpm run build
 pnpm run watch
 ```
 
-Studio 加载 `extension.json` 里的 `entry`（`dist/index.js`）。  
+Studio 加载 `extension.json` 里的 `entry`（`dist/index.mjs`）。  
 改完代码后：先等 `build`/`watch` 完成，再在 Studio 里重载扩展或重启 Preview。
 
 ## 3. 程序模块一览
@@ -111,7 +111,7 @@ SDK `method().run` 无返回值；成功/失败或查询结果通过可选 **`re
 调用路径示例（在「调用扩展方法」里选模块即可，不必手写）：
 
 ```text
-ext-27b96b / scene-interaction / open-scene-interaction
+ink.zenly.ext-27b96b / scene-interaction / open-scene-interaction
 ```
 
 ## 6. 背包 HUD / 全屏背包方法
@@ -173,7 +173,7 @@ src/
   theme/                 主题 tokens
   shared/                模块 id、日志、坐标等
 extension.json           manifest：id / 版本 / entry / sdkVersion
-vite.config.ts           lib 模式 ESM → dist/index.js
+vite.config.ts           lib 模式 ESM → dist/index.mjs
 sdk/                     @avg-studio/sdk（Studio 同步，勿手改）
 ui/                      可视化界面（若有；用 Studio 编辑器维护）
 dist/                    构建产物（勿手改）

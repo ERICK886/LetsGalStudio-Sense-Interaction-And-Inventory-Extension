@@ -4,7 +4,7 @@
  * 日期: 2026-08-08
  * 版本: 0.3.0
  *
- * 本包内各 `@extension` 程序的稳定 id（≠ extension.json.id `ext-27b96b`）。
+ * 本包内各 `@extension` 程序的稳定 id（≠ extension.json.id `ink.zenly.ext-27b96b`）。
  * ui.show / settings.cross 均使用这些 id。
  */
 
@@ -12,7 +12,7 @@
  * 扩展包 id（`extension.json.id`）。
  * 剧本 method 的 ctx 可能按包 id 做 ui 路径前缀，与模块内 render 的前缀不一致。
  */
-export const EXTENSION_PACKAGE_ID = "ext-27b96b";
+export const EXTENSION_PACKAGE_ID = "ink.zenly.ext-27b96b";
 
 /** 作者工具：场景 / 物品库 / 配方编辑 */
 export const EDITOR_MODULE_ID = "editor";
