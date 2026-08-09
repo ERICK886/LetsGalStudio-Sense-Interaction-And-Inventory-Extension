@@ -320,7 +320,7 @@ function findBlock(content: HTMLElement): ExtensionBlock | undefined {
  */
 function applyTheme(card: HTMLElement): void {
   card.style.setProperty("--si-inline-accent", "#22c55e");
-  card.style.setProperty("--si-inline-accent-text", "#052e16");
+  card.style.setProperty("--si-inline-accent-text", "#ffffff");
 }
 
 /**
@@ -336,7 +336,7 @@ function addStyles(): void {
   style.textContent = `
 [${HOST_ATTRIBUTE}] { align-self: stretch; flex: 0 0 100% !important; min-width: 0; width: 100% !important; box-sizing: border-box; }
 [${CARD_ATTRIBUTE}] { align-self: stretch; flex: 0 0 100%; min-width: 0; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 7px; min-height: 42px; padding: 8px 11px; border: 1px solid var(--border-subtle, #383440); border-left: 3px solid var(--si-inline-accent); border-radius: 5px; background: var(--bg-canvas, #1b1920); color: var(--fg-primary, #f4f0ff); font: 13px/1.4 var(--font-sans, sans-serif); user-select: none; }
-[${CARD_ATTRIBUTE}] .si-inline-card__header { display: inline-flex; align-items: center; align-self: flex-start; min-width: 0; padding: 3px 6px; border-radius: 3px; background: var(--si-inline-accent); color: var(--si-inline-accent-text, #052e16); }
+[${CARD_ATTRIBUTE}] .si-inline-card__header { display: inline-flex; align-items: center; align-self: flex-start; min-width: 0; padding: 3px 6px; border-radius: 3px; background: var(--si-inline-accent); color: var(--si-inline-accent-text, #ffffff); }
 [${CARD_ATTRIBUTE}] .si-inline-card__badge { display: inline-flex; align-items: center; gap: 4px; min-width: 0; min-height: 22px; color: inherit; font-size: 13px; font-weight: 700; line-height: 1.25; }
 [${CARD_ATTRIBUTE}] .si-inline-card__icon { font-size: 14px; line-height: 1; }
 [${CARD_ATTRIBUTE}] .si-inline-card__title { overflow: hidden; color: inherit; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
