@@ -22,12 +22,13 @@ import {
   parseSceneReturnStackJson,
   stringifySceneReturnStack,
 } from "../domain/scene-return-stack";
+import { findScene } from "../domain/scene-registry";
 import {
   parseProgressJson,
   parseScenesLibraryJson,
   stringifyProgress,
 } from "../domain/serialize";
-import type { ScenesLibraryFile } from "../domain/types";
+import type { SceneDefinition, ScenesLibraryFile } from "../domain/types";
 import {
   abandonPlayerSessionWait,
   beginPlayerSessionWait,
@@ -46,8 +47,9 @@ import {
   EXTENSION_PACKAGE_ID,
   SCENE_INTERACTION_MODULE_ID,
 } from "../shared/module-ids";
-import { logDebug, logError, logWarn } from "../shared/logger";
+import { logDebug, logError, logInfo, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { SCENE_PASSTHROUGH_SHOW_OPTIONS } from "../store/passthrough-show-options";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
 import { notifySaveField } from "../store/save-sync";
@@ -172,18 +174,18 @@ type OpenSceneParams = {
 
 /**
  * 场景动作 openScene 的存档副作用。
- * 写 `sceneReturnStackJson` / `currentSceneId` / `isEditMode`。
+ * 写 `sceneReturnStackJson` / `currentSceneId` / `mainSceneId` / `isEditMode`。
  *
  * @param ctx - 扩展上下文
  * @param save - 存档 API
  * @param params - 打开参数
- * @returns 是否写入成功
+ * @returns 打开的场景 id；失败为 null
  */
 function applyOpenSceneSave(
   ctx: ExtensionContext,
   save: SaveAPI<SceneInteractionSaveMap>,
   params: OpenSceneParams,
-): boolean {
+): string | null {
   const lib = loadScenesLibrary(ctx);
   const key = normalizeKey(params.sceneIdOrName);
 
@@ -193,7 +195,7 @@ function applyOpenSceneSave(
       "openScene: 场景参数无效（请用「值」填写场景 id/名称，勿用未绑定变量）",
     );
 
-    return false;
+    return null;
   }
 
   const currentSceneId = String(save.get("currentSceneId") ?? "");
@@ -216,7 +218,7 @@ function applyOpenSceneSave(
       `openScene: 未找到场景「${key}」。当前库: ${formatSceneCatalog(lib)}`,
     );
 
-    return false;
+    return null;
   }
 
   try {
@@ -229,15 +231,19 @@ function applyOpenSceneSave(
     save.set("currentSceneId", result.nextSceneId);
     notifySaveField("currentSceneId");
 
+    /** 填写打开的场景即为本次交互主场景（多段交互可各自不同） */
+    save.set("mainSceneId", result.nextSceneId);
+    notifySaveField("mainSceneId");
+
     save.set("isEditMode", false);
     notifySaveField("isEditMode");
   } catch (err) {
     logError("scene-methods", "openScene: 写入存档失败", err);
 
-    return false;
+    return null;
   }
 
-  return true;
+  return result.nextSceneId;
 }
 
 type OpenSceneInteractionParams = {
@@ -248,20 +254,85 @@ type OpenSceneInteractionParams = {
 };
 
 /**
+ * 按候选键依次在场景库中解析定义。
+ *
+ * @param scenes - 场景库
+ * @param keys - 候选 id/名称（已 normalize 或原始均可）
+ * @returns 首个命中；皆无则 null
+ */
+function resolveSceneByKeys(
+  scenes: SceneDefinition[],
+  keys: unknown[],
+): SceneDefinition | null {
+  for (const raw of keys) {
+    const key = normalizeKey(raw);
+
+    if (key === null) {
+      continue;
+    }
+
+    const found = findScene(scenes, key);
+
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 解析「打开场景交互」在未填写 sceneIdOrName 时的目标场景。
+ *
+ * 优先级：存档本次主场景 mainSceneId → 编辑器 defaultSceneId →
+ * currentSceneId → 场景库首项。
+ *
+ * @param scenes - 场景库
+ * @param mainSceneIdRaw - save.mainSceneId
+ * @param defaultSceneIdRaw - settings.defaultSceneId
+ * @param currentSceneIdRaw - save.currentSceneId
+ * @returns 规范化后的场景定义；库空则为 null
+ */
+function resolveOpenInteractionFallbackScene(
+  scenes: SceneDefinition[],
+  mainSceneIdRaw: unknown,
+  defaultSceneIdRaw: unknown,
+  currentSceneIdRaw: unknown,
+): SceneDefinition | null {
+  if (scenes.length === 0) {
+    return null;
+  }
+
+  const resolved = resolveSceneByKeys(scenes, [
+    mainSceneIdRaw,
+    defaultSceneIdRaw,
+    currentSceneIdRaw,
+  ]);
+
+  if (resolved !== null) {
+    return resolved;
+  }
+
+  return scenes[0] ?? null;
+}
+
+/**
  * 阻塞打开的存档副作用（与场景内 openScene 动作同一套字段）。
  *
  * @param ctx - 扩展上下文
  * @param save - 存档 API
  * @param params - 打开参数
- * @returns 是否写入成功
+ * @returns 打开的场景 id；失败为 null
  */
 function applyOpenSceneInteractionSave(
   ctx: ExtensionContext,
   save: SaveAPI<SceneInteractionSaveMap>,
   params: OpenSceneInteractionParams,
-): boolean {
+): string | null {
   const lib = loadScenesLibrary(ctx);
   const key = normalizeKey(params.sceneIdOrName);
+  let openedId: string | null = null;
+  let openedName = "";
 
   if (key !== null) {
     const currentSceneId = String(save.get("currentSceneId") ?? "");
@@ -281,49 +352,68 @@ function applyOpenSceneInteractionSave(
     if (!result.ok || result.nextSceneId === null) {
       logError(
         "scene-methods",
-        `openSceneInteraction: 未找到场景: ${key}`,
+        `openSceneInteraction: 未找到场景「${key}」。当前库: ${formatSceneCatalog(lib)}`,
       );
 
-      return false;
+      return null;
     }
 
+    openedId = result.nextSceneId;
+    openedName = findScene(lib.scenes, openedId)?.name ?? openedId;
+
     try {
+      /**
+       * 填写的目标场景 = 本次交互主场景。
+       * 不压栈时清空返回栈，避免沿用上一段交互的「编辑器主场景」残留。
+       */
+      const nextStack = pushReturn ? result.nextStack : [];
+
       save.set(
         "sceneReturnStackJson",
-        stringifySceneReturnStack(result.nextStack),
+        stringifySceneReturnStack(nextStack),
       );
       notifySaveField("sceneReturnStackJson");
 
-      save.set("currentSceneId", result.nextSceneId);
+      save.set("currentSceneId", openedId);
       notifySaveField("currentSceneId");
+
+      save.set("mainSceneId", openedId);
+      notifySaveField("mainSceneId");
     } catch (err) {
       logError(
         "scene-methods",
-        "openSceneInteraction: 写入 currentSceneId / 返回栈失败",
+        "openSceneInteraction: 写入 currentSceneId / 主场景 / 返回栈失败",
         err,
       );
 
-      return false;
+      return null;
     }
   } else {
-    let sceneId = String(save.get("currentSceneId") ?? "").trim();
+    const fallback = resolveOpenInteractionFallbackScene(
+      lib.scenes,
+      save.get("mainSceneId"),
+      readAuthorSetting(ctx, "defaultSceneId"),
+      save.get("currentSceneId"),
+    );
 
-    if (sceneId.length === 0) {
-      sceneId = String(readAuthorSetting(ctx, "defaultSceneId") ?? "").trim();
-    }
-
-    if (sceneId.length === 0) {
+    if (fallback === null) {
       logError(
         "scene-methods",
-        "openSceneInteraction: 无当前场景且无默认场景",
+        "openSceneInteraction: 场景库为空，且未配置可解析的主场景",
       );
 
-      return false;
+      return null;
     }
 
+    openedId = fallback.id;
+    openedName = fallback.name;
+
     try {
-      save.set("currentSceneId", sceneId);
+      save.set("currentSceneId", openedId);
       notifySaveField("currentSceneId");
+
+      save.set("mainSceneId", openedId);
+      notifySaveField("mainSceneId");
     } catch (err) {
       logError(
         "scene-methods",
@@ -331,7 +421,7 @@ function applyOpenSceneInteractionSave(
         err,
       );
 
-      return false;
+      return null;
     }
   }
 
@@ -345,10 +435,17 @@ function applyOpenSceneInteractionSave(
       err,
     );
 
-    return false;
+    return null;
   }
 
-  return true;
+  logInfo("scene-methods", "openSceneInteraction: 将打开场景", {
+    param: key,
+    sceneId: openedId,
+    sceneName: openedName,
+    catalog: formatSceneCatalog(lib),
+  });
+
+  return openedId;
 }
 
 /**
@@ -388,13 +485,20 @@ export const openScene = method({
     exitPlayerSkipMode(ctx);
     const save = narrowSave(this.save);
 
-    if (!applyOpenSceneSave(ctx, save, params)) {
+    const openSceneId = applyOpenSceneSave(ctx, save, params);
+
+    if (openSceneId === null) {
       writeResult(ctx, params.resultVariable, false);
 
       return;
     }
 
-    const openProps = { playerPresentation: true as const };
+    const openProps = {
+      playerPresentation: true as const,
+      openSceneId,
+      openNonce: Date.now(),
+    };
+    setForcedOpenSceneId(openSceneId);
     setSceneInteractionRestoreProps(openProps);
     setPlayerOverlaySession(true);
     rememberSceneUiPath(
@@ -418,7 +522,7 @@ export const openScene = method({
   },
   runImmediately(ctx, params) {
     const save = narrowSave(this.save);
-    const ok = applyOpenSceneSave(ctx, save, params);
+    const ok = applyOpenSceneSave(ctx, save, params) !== null;
     writeResult(ctx, params.resultVariable, ok);
   },
 });
@@ -426,10 +530,11 @@ export const openScene = method({
 /**
  * 打开场景交互（阻塞）：显示玩家 modal UI，并 await 会话门闩直到关闭。
  *
- * @param params.sceneIdOrName - 可选；场景 id 或名称。省略时用 save.currentSceneId，
- *   再回退 settings.defaultSceneId（此分支不切换场景、不入栈）
+ * @param params.sceneIdOrName - 可选；场景 id 或名称。填写时打开该场景，并写入
+ *   存档 `mainSceneId` 作为**本次交互主场景**（各段交互可不同，不沿用编辑器全局主场景）。
+ *   留空时优先 save.mainSceneId → editor.defaultSceneId → current → 库首项。
  * @param params.returnTarget - 可选；覆盖压栈的返回目标（仅切换场景时生效）
- * @param params.pushReturn - 缺省 true；false 时只切场景、不改返回栈
+ * @param params.pushReturn - 缺省 true；false 时清空返回栈（以填写场景为新枢纽）
  * @param params.resultVariable - 可选；写入是否成功打开并完成等待
  *
  * @returns Promise<void>（SDK method run 无业务返回值）
@@ -438,8 +543,8 @@ export const openScene = method({
  *
  * @example
  * ```ts
- * // 剧本：打开默认/当前场景并阻塞，直到玩家点退出或 closeSceneInteraction
- * await openSceneInteraction.run(ctx, { resultVariable: "ok" });
+ * // 剧本：打开「散落的背包」并作为本次主场景，直到玩家退出
+ * await openSceneInteraction.run(ctx, { sceneIdOrName: "散落的背包" });
  * ```
  *
  * @remarks
@@ -450,11 +555,11 @@ export const openSceneInteraction = method({
   id: "open-scene-interaction",
   title: "打开场景交互（阻塞）",
   description:
-    "show modal UI 并阻塞；不声明 skip，快进走 run（不可跳过交互）",
+    "show modal UI 并阻塞；填写的场景会设为本次交互主场景",
   schema: {
     sceneIdOrName: {
       type: "string",
-      label: "场景 ID/名称",
+      label: "场景 ID/名称（填=打开并设为本次主场景）",
       required: false,
     },
     returnTarget: {
@@ -471,29 +576,45 @@ export const openSceneInteraction = method({
     /** 权威 slot proxy：后续 giveItem 等写入与调试器同一 VariableSystem */
     registerSlotSave(save, { authoritative: true });
 
-    if (!applyOpenSceneInteractionSave(ctx, save, params)) {
+    const openSceneId = applyOpenSceneInteractionSave(ctx, save, params);
+
+    if (openSceneId === null) {
       writeResult(ctx, params.resultVariable, false);
 
       return;
     }
 
+    /**
+     * openSceneId：ui.show props + 模块级强制目标双通道。
+     * 叠层复用时 Studio 可能不重灌 props，壳层仍读 getForcedOpenSceneId()。
+     */
     const openProps = {
       playerPresentation: true as const,
       playerSession: "modal" as const,
+      openSceneId,
+      openNonce: Date.now(),
     };
+
+    setForcedOpenSceneId(openSceneId);
 
     /**
      * 预览重启后可能留下无叠层的僵尸门闩：丢弃且不 resolve。
-     * 若叠层仍在则保留门闩，供下方 begin 复用（切勿 resolve，以免误推进剧本）。
+     * 叠层仍在则先 hide 再 show，强制按新 openSceneId 挂载（保留门闩）。
      */
     if (isPlayerSessionPending() && !isPlayerOverlaySessionActive()) {
       abandonPlayerSessionWait();
-    } else if (isPlayerSessionPending()) {
+    } else if (isPlayerSessionPending() && isPlayerOverlaySessionActive()) {
       logWarn(
         "continue-story",
-        "openSceneInteraction：已有阻塞门闩且叠层仍在，将复用（请确认未重复打开）",
-        { t: Date.now() },
+        "openSceneInteraction：叠层已在，将 hide→show 刷新目标场景",
+        { openSceneId, t: Date.now() },
       );
+
+      try {
+        await ctx.ui.hide(SCENE_INTERACTION_UI_ID);
+      } catch {
+        // 可能未真正挂载
+      }
     }
 
     setSceneInteractionRestoreProps(openProps);
@@ -531,7 +652,7 @@ export const openSceneInteraction = method({
    */
   runImmediately(ctx, params) {
     const save = narrowSave(this.save);
-    const ok = applyOpenSceneInteractionSave(ctx, save, params);
+    const ok = applyOpenSceneInteractionSave(ctx, save, params) !== null;
     writeResult(ctx, params.resultVariable, ok);
   },
 });
@@ -571,6 +692,7 @@ async function applyCloseSceneInteraction(
 
   endPlayerSessionWait();
   forceClearPlayerOverlaySession();
+  setForcedOpenSceneId(null);
   writeResult(ctx, resultVariable, true);
 }
 
@@ -586,6 +708,7 @@ function applyCloseSceneInteractionSaveOnly(
 ): void {
   endPlayerSessionWait();
   forceClearPlayerOverlaySession();
+  setForcedOpenSceneId(null);
   writeResult(ctx, resultVariable, true);
 }
 

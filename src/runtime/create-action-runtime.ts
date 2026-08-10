@@ -16,6 +16,7 @@ import {
 import type { ItemToastOverrides } from "../domain/item-toast-config";
 import { findItem } from "../domain/item-registry";
 import { openSceneWithReturn } from "../domain/scene-return-stack";
+import { setForcedOpenSceneId } from "../store/open-scene-target";
 import type {
   ElementMotion,
   InventoryState,
@@ -255,6 +256,8 @@ export function createActionRuntime(
 
       deps.setReturnStack(result.nextStack);
       deps.setCurrentSceneId(result.nextSceneId);
+      /** 同步开场强制目标，避免壳层仍用旧 forced 挡住场景内跳转 */
+      setForcedOpenSceneId(result.nextSceneId);
 
       return true;
     },

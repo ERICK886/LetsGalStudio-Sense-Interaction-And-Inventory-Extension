@@ -7,8 +7,8 @@
  * 编辑器程序（`@extension id: editor`）根组件：
  * - 编辑态：EditorShell
  * - 预览态：本程序内 PreviewShell（顶栏 + RuntimeShell，settings 沙箱；≠ 玩家 slot）
- * - 「运行预览」优先预览左侧当前选中场景
- * - 预览非主场景时预置返回栈（主场景 = defaultSceneId，否则场景库首项）
+ * - 「运行预览」始终以左侧当前编辑/选中场景为预览场景
+ * - 预览非编辑器主场景时预置返回栈（主场景 = defaultSceneId，否则场景库首项）
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,6 +22,7 @@ import { parseScenesLibraryJson } from "../domain/serialize";
 import { stringifySceneReturnStack } from "../domain/scene-return-stack";
 import { logError } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { createSettingsPreviewSave } from "../store/preview-save";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
@@ -237,6 +238,7 @@ function EditorAppContent(): React.ReactElement {
   const handleSetEditMode = useCallback(
     (enabled: boolean, options?: EnterPreviewOptions): void => {
       if (enabled) {
+        setForcedOpenSceneId(null);
         setMode("edit");
         setPreviewSave(null);
 
@@ -253,12 +255,25 @@ function EditorAppContent(): React.ReactElement {
 
         const mainSceneId = resolvePreviewMainSceneId(ctx, defaultSceneId);
 
-        const previewSceneId =
-          selectedId.length > 0
-            ? selectedId
-            : defaultSceneId.length > 0
-              ? defaultSceneId
-              : mainSceneId;
+        /** 预览目标 = 当前编辑选中场景；无选中时才回退库首项 / 编辑器主场景 */
+        let previewSceneId = selectedId;
+
+        if (previewSceneId.length === 0) {
+          previewSceneId = resolvePreviewMainSceneId(ctx, "");
+        }
+
+        if (previewSceneId.length === 0) {
+          previewSceneId = mainSceneId;
+        }
+
+        if (previewSceneId.length === 0) {
+          logError(
+            "editor-app",
+            "进入运行预览失败：场景库为空，且无当前选中场景",
+          );
+
+          return;
+        }
 
         const sceneReturnStackJson = buildPreviewReturnStackJson(
           previewSceneId,
@@ -266,14 +281,16 @@ function EditorAppContent(): React.ReactElement {
         );
 
         /**
-         * 沙箱落在 scene-interaction.settings；
-         * 强制写入本次要预览的场景，并在非主场景时预置返回主场景的栈。
+         * 强制目标 + 沙箱 current/main 均对齐当前编辑场景，
+         * 避免剧本残留的 forcedOpenSceneId / 编辑器主场景盖住预览。
          */
+        setForcedOpenSceneId(previewSceneId);
         setPreviewSave(
           createSettingsPreviewSave(
             ctx,
             {
               currentSceneId: previewSceneId,
+              mainSceneId: previewSceneId,
               sceneReturnStackJson,
               isEditMode: false,
             },
@@ -353,9 +370,13 @@ function EditorAppContent(): React.ReactElement {
   return (
     <ThemeProvider
       initialMode={themeMode}
-      rootBackground={mode === "preview" ? "transparent" : undefined}
       /**
-       * 预览虽透明底，但编辑器顶栏 /「编辑」按钮必须可点；
+       * 预览用不透明底：顶栏占高后场景 letterbox 两侧若透明会透出
+       * Studio 下层图；编辑态沿用主题默认底。
+       */
+      rootBackground={mode === "preview" ? "#141418" : undefined}
+      /**
+       * 编辑器顶栏 /「编辑」按钮必须可点；
        * 不可沿用玩家叠层的 pointer-events:none 默认。
        */
       rootPointerEvents="auto"
@@ -367,7 +388,7 @@ function EditorAppContent(): React.ReactElement {
           height: "100%",
           position: "relative",
           minHeight: 0,
-          background: mode === "preview" ? "transparent" : undefined,
+          background: mode === "preview" ? "#141418" : undefined,
           pointerEvents: "auto",
         }}
       >

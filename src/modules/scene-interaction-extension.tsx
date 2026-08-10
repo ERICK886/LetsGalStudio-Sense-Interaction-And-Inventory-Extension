@@ -93,6 +93,12 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
       default: "",
       label: "当前场景 ID",
     },
+    mainSceneId: {
+      type: "string",
+      persistence: "slot",
+      default: "",
+      label: "本次交互主场景 ID",
+    },
     sceneReturnStackJson: {
       type: "string",
       persistence: "slot",

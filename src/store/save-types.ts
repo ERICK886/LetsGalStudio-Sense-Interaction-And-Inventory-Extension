@@ -37,6 +37,12 @@ export type SceneInteractionSaveMap = {
   /** 当前打开的场景 ID（slot）；默认 `""` */
   currentSceneId: string;
 
+  /**
+   * 本次交互的主场景 ID（slot）；默认 `""`。
+   * 由「打开场景 / 打开场景交互」写入填写的目标场景；留空打开时优先于此，而非编辑器全局主场景。
+   */
+  mainSceneId: string;
+
   /** 场景返回栈 JSON 字符串（slot）；默认 `"[]"` */
   sceneReturnStackJson: string;
 } & Record<string, unknown>;

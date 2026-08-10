@@ -416,7 +416,7 @@ function renderDetails(
       return {
         summary: scene
           ? `打开「${scene}」并等待玩家退出`
-          : "打开当前/默认场景并阻塞剧情，直到退出",
+          : "打开本次/编辑器主场景并阻塞剧情，直到退出",
         chips,
       };
     }

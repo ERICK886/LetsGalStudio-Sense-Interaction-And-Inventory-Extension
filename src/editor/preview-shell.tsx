@@ -8,6 +8,9 @@
  * `save` 为扩展 settings 沙箱，与玩家 slot 隔离。
  * 快捷栏以内嵌 HudShell 叠层显示（勿 ui.show，以免顶掉编辑器预览容器）；
  * 场景交互体直接复用 `RuntimeShell`，与 `scene-interaction` 非 modal 玩家路径同壳。
+ *
+ * 预览根/body 用不透明近黑铺底：顶栏占高后 letterbox 两侧透明会透出
+ * Studio 下层场景图，故编辑器预览不能沿用玩家的全透明叠层。
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,6 +18,7 @@ import {
   useExtensionContext,
   type SaveAPI,
 } from "@avg-studio/sdk";
+import { LETTERBOX_COLOR_BLACK } from "../domain/letterbox";
 import { findScene } from "../domain/scene-registry";
 import type { SceneDefinition } from "../domain/types";
 import {
@@ -23,6 +27,7 @@ import {
 } from "../runtime/hud-foreign-cover";
 import { IconLabel } from "../shared/fa-icon";
 import { bindInventoryPersistence } from "../store/inventory-session";
+import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useSaveValue } from "../store/use-save-value";
@@ -35,6 +40,7 @@ import type { ThemeTokens } from "../theme/tokens";
 
 type RuntimeShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
+  openSceneId?: string;
   onContinueStory?: () => void | Promise<void>;
 }>;
 
@@ -140,10 +146,19 @@ export function PreviewShell({
 
   const [library] = useScenesLibrary();
   const [currentSceneId] = useSaveValue(save, "currentSceneId", ctx);
+  const previewSceneId =
+    typeof currentSceneId === "string" ? currentSceneId.trim() : "";
+
+  /** 与编辑器选中场景对齐，防止剧本残留强制目标干扰预览 */
+  useEffect(() => {
+    if (previewSceneId.length > 0) {
+      setForcedOpenSceneId(previewSceneId);
+    }
+  }, [previewSceneId]);
 
   const scene = useMemo(
-    () => resolveCurrentScene(library.scenes, currentSceneId),
-    [library.scenes, currentSceneId],
+    () => resolveCurrentScene(library.scenes, previewSceneId),
+    [library.scenes, previewSceneId],
   );
   const sceneTitle = scene?.name ?? "（无场景）";
 
@@ -211,7 +226,7 @@ export function PreviewShell({
         flexDirection: "column",
         minHeight: 0,
         position: "relative",
-        background: "transparent",
+        background: LETTERBOX_COLOR_BLACK,
         color: tokens.textPrimary,
         pointerEvents: "auto",
       }}
@@ -287,15 +302,21 @@ export function PreviewShell({
           minHeight: 0,
           position: "relative",
           /**
-           * 与玩家 RuntimeShell 根一致：空白穿透；
+           * 不透明铺底挡住 Studio 下层场景；指针仍穿透空白，
            * 交互点 / HUD / 返回钮各自 pointerEvents:auto。
            */
+          background: LETTERBOX_COLOR_BLACK,
           pointerEvents: "none",
+          overflow: "hidden",
         }}
       >
         {RuntimeShellComp ? (
           <RuntimeShellComp
+            key={`preview-${previewSceneId || "empty"}`}
             save={save}
+            openSceneId={
+              previewSceneId.length > 0 ? previewSceneId : undefined
+            }
             onContinueStory={handleContinueStory}
           />
         ) : null}

@@ -262,6 +262,11 @@ export function createSettingsPreviewSave(
       ? overrides.progressJson
       : DEFAULT_PROGRESS;
 
+  const mainSceneId =
+    typeof overrides.mainSceneId === "string"
+      ? overrides.mainSceneId.trim()
+      : currentSceneId;
+
   const store: SceneInteractionSaveMap = {
     inventoryJson,
     progressJson,
@@ -270,6 +275,7 @@ export function createSettingsPreviewSave(
         ? overrides.isEditMode
         : false,
     currentSceneId,
+    mainSceneId,
     sceneReturnStackJson,
   };
 

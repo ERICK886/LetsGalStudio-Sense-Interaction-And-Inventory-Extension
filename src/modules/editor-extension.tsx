@@ -43,7 +43,9 @@ export class EditorExtension extends Extension<EditorAppProps> {
       .enum("界面主题", ["light", "dark"] as const)
       .labels({ light: "浅色", dark: "深色" })
       .default("dark"),
-    defaultSceneId: s.string("默认场景 ID").default(""),
+    defaultSceneId: s
+      .string("主场景 ID（打开场景交互留空时优先）")
+      .default(""),
     scenesLibraryJson: s
       .string("场景库 JSON（自动维护）")
       .default('{"version":1,"scenes":[]}'),

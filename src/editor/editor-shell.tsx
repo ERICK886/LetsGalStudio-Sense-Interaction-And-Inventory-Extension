@@ -10,7 +10,7 @@
  * - 配方分区：配方列表、公式预览、配方属性（v0.2 Task 5）
  * - Ctrl/Cmd+Z / Ctrl+Y / Ctrl+Shift+Z 按当前分区撤销重做
  * - 中栏 scene-canvas-host：保证画布 letterbox 居中
- * - 「运行预览」携带左侧当前选中场景 id
+ * - 「运行预览」以左侧当前编辑/选中场景为预览场景
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,6 +44,7 @@ import {
   readSceneUiConfig,
   writeSceneUiConfig,
 } from "../store/scene-ui-settings";
+import { writeAuthorSetting } from "../store/author-settings";
 import { notifySettingsField } from "../store/settings-sync";
 import {
   subscribeUiHistoryTick,
@@ -262,6 +263,24 @@ export function EditorShell({
   const [itemsLibrary, setItemsLibrary] = useItemsLibrary();
   const [recipesLibrary, setRecipesLibrary] = useRecipesLibrary();
   const { size: designSize, setSize: setDesignSize } = useDesignSize();
+
+  /** 主场景 id（打开场景交互留空时优先打开） */
+  const [defaultSceneIdSetting] = ctx.settings.useValue<string>("defaultSceneId");
+  const defaultSceneId =
+    typeof defaultSceneIdSetting === "string" ? defaultSceneIdSetting : "";
+
+  /**
+   * 将场景设为主场景（写入 editor.defaultSceneId）。
+   *
+   * @param sceneId - 场景定义 id
+   */
+  const handleSetDefaultSceneId = useCallback(
+    (sceneId: string) => {
+      writeAuthorSetting(ctx, "defaultSceneId", sceneId.trim());
+      notifySettingsField("defaultSceneId");
+    },
+    [ctx],
+  );
 
   /**
    * 切换设计分辨率时，将背包 / HUD / 场景 UI 从旧画幅等比缩放到新画幅并写回。
@@ -1305,6 +1324,8 @@ export function EditorShell({
                   selectedSceneId={selectedSceneId}
                   onSelectScene={setSelectedSceneId}
                   onLibraryChange={commitLibrary}
+                  defaultSceneId={defaultSceneId}
+                  onSetDefaultSceneId={handleSetDefaultSceneId}
                 />
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>

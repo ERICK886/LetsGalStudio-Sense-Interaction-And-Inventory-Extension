@@ -53,6 +53,11 @@ import {
   getInventorySession,
   useInventorySession,
 } from "../store/inventory-session";
+import { readAuthorSetting } from "../store/author-settings";
+import {
+  getForcedOpenSceneId,
+  subscribeForcedOpenSceneId,
+} from "../store/open-scene-target";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
@@ -82,28 +87,54 @@ export interface RuntimeShellProps {
   save: SaveAPI<SceneInteractionSaveMap>;
 
   /**
+   * 方法 ui.show 直传的目标场景 id；优先于 save，避免首帧错场景。
+   */
+  openSceneId?: string;
+
+  /**
    * 「继续剧情」动作回调；缺省仅解除会话门闩。
    */
   onContinueStory?: () => void | Promise<void>;
 }
 
 /**
- * 根据 save.currentSceneId 与场景库解析当前场景；空 id 时回退首个场景。
+ * 根据 save.currentSceneId 与场景库解析当前场景。
+ *
+ * 优先级：currentSceneId → 开场强制 id（仅兜底）→ mainSceneId →
+ * 编辑器 defaultSceneId → 库首项。
+ * current 必须优先，否则 hotspot openScene 会被开场 forced id 锁死。
  *
  * @param scenes - 场景列表
  * @param currentSceneId - 存档中的场景 id
+ * @param mainSceneId - 存档本次交互主场景 id（可空）
+ * @param editorDefaultSceneId - 编辑器全局主场景 id（可空）
+ * @param forcedSceneId - 方法开场直传 id（可空；current 为空时才有意义）
  * @returns 场景定义或 null
  */
 function resolveCurrentScene(
   scenes: SceneDefinition[],
   currentSceneId: string,
+  mainSceneId = "",
+  editorDefaultSceneId = "",
+  forcedSceneId = "",
 ): SceneDefinition | null {
   if (scenes.length === 0) {
     return null;
   }
 
-  if (currentSceneId) {
-    const found = findScene(scenes, currentSceneId);
+  for (const key of [
+    currentSceneId,
+    forcedSceneId,
+    mainSceneId,
+    editorDefaultSceneId,
+  ]) {
+    const trimmed = typeof key === "string" ? key.trim() : "";
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    const found = findScene(scenes, trimmed);
 
     if (found !== undefined) {
       return found;
@@ -127,11 +158,23 @@ function resolveCurrentScene(
  */
 export function RuntimeShell({
   save,
+  openSceneId,
   onContinueStory,
 }: RuntimeShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
   const { size: designSize } = useDesignSize();
+  const [moduleForcedId, setModuleForcedId] = useState<string | null>(() =>
+    getForcedOpenSceneId(),
+  );
+
+  useEffect(() => subscribeForcedOpenSceneId(() => {
+    setModuleForcedId(getForcedOpenSceneId());
+  }), []);
+
+  const forcedOpenSceneId =
+    (typeof openSceneId === "string" ? openSceneId.trim() : "") ||
+    (moduleForcedId ?? "");
 
   const [library] = useScenesLibrary();
   const [itemsLibrary] = useItemsLibrary();
@@ -143,6 +186,7 @@ export function RuntimeShell({
     "currentSceneId",
     ctx,
   );
+  const [mainSceneId, setMainSceneId] = useSaveValue(save, "mainSceneId", ctx);
   const [returnStackJson, setReturnStackJson] = useSaveValue(
     save,
     "sceneReturnStackJson",
@@ -180,19 +224,62 @@ export function RuntimeShell({
   currentSceneIdRef.current = currentSceneId;
   returnStackJsonRef.current = returnStackJson;
 
+  const editorDefaultSceneId = String(
+    readAuthorSetting(ctx, "defaultSceneId") ?? "",
+  ).trim();
+
+  const safeCurrentSceneId =
+    typeof currentSceneId === "string" ? currentSceneId : "";
+  const safeMainSceneId = typeof mainSceneId === "string" ? mainSceneId : "";
+
   const scene = useMemo(
-    () => resolveCurrentScene(library.scenes, currentSceneId),
-    [library.scenes, currentSceneId],
+    () =>
+      resolveCurrentScene(
+        library.scenes,
+        safeCurrentSceneId,
+        safeMainSceneId,
+        editorDefaultSceneId,
+        forcedOpenSceneId,
+      ),
+    [
+      library.scenes,
+      safeCurrentSceneId,
+      safeMainSceneId,
+      editorDefaultSceneId,
+      forcedOpenSceneId,
+    ],
   );
 
   /**
-   * 存档 currentSceneId 为空但库有场景时，回写首个场景 id（便于剧本/重开一致性）。
+   * 仅在 current 为空时用开场 forced id 播种；
+   * 禁止用 forced 覆盖已有 current（否则场景内 openScene 会被立刻打回）。
    */
   useEffect(() => {
-    if (!currentSceneId && scene !== null) {
+    if (safeCurrentSceneId.length > 0) {
+      return;
+    }
+
+    if (forcedOpenSceneId.length > 0) {
+      setCurrentSceneId(forcedOpenSceneId);
+
+      if (safeMainSceneId.length === 0) {
+        setMainSceneId(forcedOpenSceneId);
+      }
+
+      return;
+    }
+
+    if (scene !== null) {
       setCurrentSceneId(scene.id);
     }
-  }, [currentSceneId, scene, setCurrentSceneId]);
+  }, [
+    forcedOpenSceneId,
+    safeCurrentSceneId,
+    safeMainSceneId,
+    scene,
+    setCurrentSceneId,
+    setMainSceneId,
+  ]);
 
   /**
    * toast 入队（ActionRuntime 回调）。

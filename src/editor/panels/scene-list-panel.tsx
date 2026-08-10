@@ -41,6 +41,19 @@ export interface SceneListPanelProps {
    * @param next - 新场景库
    */
   onLibraryChange: (next: ScenesLibraryFile) => void;
+
+  /**
+   * 主场景 id（settings.defaultSceneId）；空表示未设置。
+   * 「打开场景交互」留空时优先打开此场景。
+   */
+  defaultSceneId?: string;
+
+  /**
+   * 将某场景设为主场景（写入 defaultSceneId）。
+   *
+   * @param sceneId - 场景 id
+   */
+  onSetDefaultSceneId?: (sceneId: string) => void;
 }
 
 /**
@@ -140,9 +153,12 @@ export function SceneListPanel({
   selectedSceneId,
   onSelectScene,
   onLibraryChange,
+  defaultSceneId = "",
+  onSetDefaultSceneId,
 }: SceneListPanelProps): React.ReactElement {
   const { tokens } = useTheme();
   const [query, setQuery] = useState("");
+  const mainSceneId = defaultSceneId.trim();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -189,8 +205,20 @@ export function SceneListPanel({
       if (selectedSceneId === sceneId) {
         onSelectScene(nextScenes[0]?.id ?? null);
       }
+
+      if (mainSceneId === sceneId && onSetDefaultSceneId) {
+        const fallbackId = nextScenes[0]?.id ?? "";
+        onSetDefaultSceneId(fallbackId);
+      }
     },
-    [library.scenes, onLibraryChange, onSelectScene, selectedSceneId],
+    [
+      library.scenes,
+      mainSceneId,
+      onLibraryChange,
+      onSelectScene,
+      onSetDefaultSceneId,
+      selectedSceneId,
+    ],
   );
 
   return (
@@ -281,6 +309,7 @@ export function SceneListPanel({
         ) : (
           filtered.map((scene) => {
             const selected = scene.id === selectedSceneId;
+            const isMain = mainSceneId.length > 0 && scene.id === mainSceneId;
 
             return (
               <div
@@ -305,6 +334,24 @@ export function SceneListPanel({
                   >
                     {scene.name || "（未命名）"}
                   </span>
+                  {isMain ? (
+                    <span
+                      data-testid={`scene-list-main-badge-${scene.id}`}
+                      title="编辑器默认主场景：仅当方法未填名称且存档尚无本次主场景时使用"
+                      style={{
+                        flexShrink: 0,
+                        fontSize: 10,
+                        fontWeight: 650,
+                        color: "#0b1a18",
+                        background: tokens.accent,
+                        borderRadius: 4,
+                        padding: "1px 6px",
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      主场景
+                    </span>
+                  ) : null}
                   <span
                     style={{
                       color: tokens.textMuted,
@@ -319,6 +366,26 @@ export function SceneListPanel({
                     {scene.hotspots.length}
                   </span>
                 </button>
+                {onSetDefaultSceneId && !isMain ? (
+                  <button
+                    type="button"
+                    data-testid={`scene-list-set-main-${scene.id}`}
+                    aria-label={`将 ${scene.name} 设为主场景`}
+                    title="设为编辑器默认主场景（方法已填写名称时不会覆盖本次打开）"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetDefaultSceneId(scene.id);
+                    }}
+                    style={{
+                      ...toolButtonStyle(tokens),
+                      padding: "6px 8px",
+                      flexShrink: 0,
+                      fontSize: 11,
+                    }}
+                  >
+                    设为主
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   data-testid={`scene-list-delete-${scene.id}`}

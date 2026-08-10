@@ -48,6 +48,7 @@ import {
 import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { bindInventoryPersistence } from "../store/inventory-session";
+import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { createSettingsPreviewSave } from "../store/preview-save";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
@@ -65,15 +66,22 @@ export interface SceneInteractionAppProps extends ExtensionProps {
   save: SaveAPI<SceneInteractionSaveMap>;
   playerPresentation?: boolean;
   playerSession?: "modal";
+  /**
+   * 方法侧已解析的目标场景 id（经 ui.show 直传）。
+   * 优先于 save.currentSceneId，避免首帧回退到编辑器主场景。
+   */
+  openSceneId?: string;
 }
 
 type RuntimeShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
+  openSceneId?: string;
   onContinueStory?: () => void | Promise<void>;
 }>;
 
 type PlayerShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
+  openSceneId?: string;
   onRequestClose: () => void | Promise<void>;
 }>;
 
@@ -140,13 +148,17 @@ function SceneInteractionAppContent({
   save,
   playerPresentation,
   playerSession,
+  openSceneId,
 }: {
   save: SaveAPI<SceneInteractionSaveMap>;
   playerPresentation?: boolean;
   playerSession?: "modal";
+  openSceneId?: string;
 }): React.ReactElement {
   const ctx = useExtensionContext();
   const isPlayerModal = playerSession === "modal";
+  const forcedOpenSceneId =
+    typeof openSceneId === "string" ? openSceneId.trim() : "";
   /**
    * 玩家运行时：openScene(playerPresentation) / openSceneInteraction(modal)。
    * Studio 程序预览无此标记 → 走扩展 settings 沙箱，不写玩家 slot。
@@ -168,6 +180,7 @@ function SceneInteractionAppContent({
 
     return createSettingsPreviewSave(ctx, {
       currentSceneId: defaultSceneId,
+      mainSceneId: defaultSceneId,
       isEditMode: false,
     });
   }, [ctx, isPlayerRuntime, save]);
@@ -198,9 +211,17 @@ function SceneInteractionAppContent({
       setSceneInteractionRestoreProps({
         playerPresentation: true,
         playerSession: "modal",
+        ...(forcedOpenSceneId.length > 0
+          ? { openSceneId: forcedOpenSceneId }
+          : {}),
       });
     } else if (playerPresentation === true) {
-      setSceneInteractionRestoreProps({ playerPresentation: true });
+      setSceneInteractionRestoreProps({
+        playerPresentation: true,
+        ...(forcedOpenSceneId.length > 0
+          ? { openSceneId: forcedOpenSceneId }
+          : {}),
+      });
     }
 
     const epoch = markPlayerOverlaySession();
@@ -208,7 +229,7 @@ function SceneInteractionAppContent({
     return () => {
       clearPlayerOverlaySessionIfEpoch(epoch);
     };
-  }, [isPlayerModal, playerPresentation]);
+  }, [isPlayerModal, playerPresentation, forcedOpenSceneId]);
 
   /**
    * 仅玩家运行时叠快捷栏：全屏 + interactable:false，
@@ -309,6 +330,7 @@ function SceneInteractionAppContent({
 
     endPlayerSessionWait();
     forceClearPlayerOverlaySession();
+    setForcedOpenSceneId(null);
     logDebug("continue-story", "handlePlayerRequestClose 结束（已 endWait）", {
       sessionPending: isPlayerSessionPending(),
       t: Date.now(),
@@ -411,12 +433,20 @@ function SceneInteractionAppContent({
           />
         ) : isPlayerModal && PlayerShellComp ? (
           <PlayerShellComp
+            key={`player-${forcedOpenSceneId || "default"}`}
             save={effectiveSave}
+            openSceneId={
+              forcedOpenSceneId.length > 0 ? forcedOpenSceneId : undefined
+            }
             onRequestClose={handlePlayerRequestClose}
           />
         ) : RuntimeShellComp ? (
           <RuntimeShellComp
+            key={`runtime-${forcedOpenSceneId || "default"}`}
             save={effectiveSave}
+            openSceneId={
+              forcedOpenSceneId.length > 0 ? forcedOpenSceneId : undefined
+            }
             onContinueStory={handlePlayerRequestClose}
           />
         ) : null}
@@ -447,7 +477,7 @@ function SceneInteractionAppContent({
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,
 ): React.ReactElement {
-  const { save, playerPresentation, playerSession } = props;
+  const { save, playerPresentation, playerSession, openSceneId } = props;
 
   if (!save) {
     return (
@@ -463,6 +493,7 @@ export function SceneInteractionApp(
       save={save}
       playerPresentation={playerPresentation}
       playerSession={playerSession}
+      openSceneId={openSceneId}
     />
   );
 }
