@@ -12,7 +12,14 @@
  * 跳转片段时经 suspend-overlay-for-fragment 暂时 ui.hide，避免盖住对话框。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   useExtensionContext,
   type SaveAPI,
@@ -55,9 +62,15 @@ import {
 } from "../store/inventory-session";
 import { readAuthorSetting } from "../store/author-settings";
 import {
+  getReturnButtonVisibleOverride,
+  subscribeReturnButtonVisibleOverride,
+} from "../store/return-button-session";
+import {
   getForcedOpenSceneId,
+  getOpenSceneNonce,
   subscribeForcedOpenSceneId,
 } from "../store/open-scene-target";
+import { logDebug, logInfo } from "../shared/logger";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useScenesLibrary } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
@@ -65,7 +78,6 @@ import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
 import { useSceneUiConfig } from "../store/use-scene-ui-config";
 import { useTheme } from "../theme/theme-provider";
-import { logDebug } from "../shared/logger";
 import { createActionRuntime } from "./create-action-runtime";
 import { endPlayerSessionWait, isPlayerSessionPending } from "./player-session";
 import { RewardFlyLayer } from "./reward-fly-layer";
@@ -92,6 +104,16 @@ export interface RuntimeShellProps {
   openSceneId?: string;
 
   /**
+   * 方法开场代数；变化时强制覆盖 currentSceneId。
+   */
+  openNonce?: number;
+
+  /**
+   * 返回按钮可见性覆盖；`undefined`/`null` 跟随场景 UI 全局。
+   */
+  showReturnButton?: boolean | null;
+
+  /**
    * 「继续剧情」动作回调；缺省仅解除会话门闩。
    */
   onContinueStory?: () => void | Promise<void>;
@@ -100,16 +122,9 @@ export interface RuntimeShellProps {
 /**
  * 根据 save.currentSceneId 与场景库解析当前场景。
  *
- * 优先级：currentSceneId → 开场强制 id（仅兜底）→ mainSceneId →
- * 编辑器 defaultSceneId → 库首项。
- * current 必须优先，否则 hotspot openScene 会被开场 forced id 锁死。
- *
- * @param scenes - 场景列表
- * @param currentSceneId - 存档中的场景 id
- * @param mainSceneId - 存档本次交互主场景 id（可空）
- * @param editorDefaultSceneId - 编辑器全局主场景 id（可空）
- * @param forcedSceneId - 方法开场直传 id（可空；current 为空时才有意义）
- * @returns 场景定义或 null
+ * 默认优先级：current → forced → main → 编辑器 default → 库首项。
+ * `preferForced === true`（方法开场 nonce 未应用）时 forced 优先，
+ * 避免存档残留的旧场景盖住本次打开目标。
  */
 function resolveCurrentScene(
   scenes: SceneDefinition[],
@@ -117,17 +132,17 @@ function resolveCurrentScene(
   mainSceneId = "",
   editorDefaultSceneId = "",
   forcedSceneId = "",
+  preferForced = false,
 ): SceneDefinition | null {
   if (scenes.length === 0) {
     return null;
   }
 
-  for (const key of [
-    currentSceneId,
-    forcedSceneId,
-    mainSceneId,
-    editorDefaultSceneId,
-  ]) {
+  const keys = preferForced
+    ? [forcedSceneId, currentSceneId, mainSceneId, editorDefaultSceneId]
+    : [currentSceneId, forcedSceneId, mainSceneId, editorDefaultSceneId];
+
+  for (const key of keys) {
     const trimmed = typeof key === "string" ? key.trim() : "";
 
     if (trimmed.length === 0) {
@@ -159,6 +174,8 @@ function resolveCurrentScene(
 export function RuntimeShell({
   save,
   openSceneId,
+  openNonce = 0,
+  showReturnButton,
   onContinueStory,
 }: RuntimeShellProps): React.ReactElement {
   const { tokens } = useTheme();
@@ -167,14 +184,48 @@ export function RuntimeShell({
   const [moduleForcedId, setModuleForcedId] = useState<string | null>(() =>
     getForcedOpenSceneId(),
   );
+  const [moduleNonce, setModuleNonce] = useState(() => getOpenSceneNonce());
+  const [appliedOpenNonce, setAppliedOpenNonce] = useState(0);
+  /** 方法开场后，直到 current 追上目标前锁定显示，避免存档异步写回闪回旧场景 */
+  const [lockedMethodTarget, setLockedMethodTarget] = useState<string | null>(
+    null,
+  );
+  const [moduleReturnVisible, setModuleReturnVisible] = useState<
+    boolean | null
+  >(() => getReturnButtonVisibleOverride());
 
   useEffect(() => subscribeForcedOpenSceneId(() => {
     setModuleForcedId(getForcedOpenSceneId());
+    setModuleNonce(getOpenSceneNonce());
+  }), []);
+
+  useEffect(() => subscribeReturnButtonVisibleOverride(() => {
+    setModuleReturnVisible(getReturnButtonVisibleOverride());
   }), []);
 
   const forcedOpenSceneId =
     (typeof openSceneId === "string" ? openSceneId.trim() : "") ||
     (moduleForcedId ?? "");
+
+  const effectiveOpenNonce = Math.max(
+    typeof openNonce === "number" && openNonce > 0 ? openNonce : 0,
+    moduleNonce,
+  );
+
+  /** 方法开场尚未写入 current 时，解析优先 forced，避免残留主场景 */
+  const pendingMethodOpen =
+    effectiveOpenNonce > 0 &&
+    effectiveOpenNonce !== appliedOpenNonce &&
+    forcedOpenSceneId.length > 0;
+
+  const preferForced =
+    pendingMethodOpen ||
+    (lockedMethodTarget !== null && lockedMethodTarget.length > 0);
+
+  const returnButtonVisibleOverride =
+    typeof showReturnButton === "boolean"
+      ? showReturnButton
+      : moduleReturnVisible;
 
   const [library] = useScenesLibrary();
   const [itemsLibrary] = useItemsLibrary();
@@ -239,7 +290,8 @@ export function RuntimeShell({
         safeCurrentSceneId,
         safeMainSceneId,
         editorDefaultSceneId,
-        forcedOpenSceneId,
+        lockedMethodTarget ?? forcedOpenSceneId,
+        preferForced,
       ),
     [
       library.scenes,
@@ -247,14 +299,69 @@ export function RuntimeShell({
       safeMainSceneId,
       editorDefaultSceneId,
       forcedOpenSceneId,
+      lockedMethodTarget,
+      preferForced,
     ],
   );
 
   /**
-   * 仅在 current 为空时用开场 forced id 播种；
+   * 方法开场：nonce 变化时强制把 current/main 写成目标场景。
+   */
+  useLayoutEffect(() => {
+    if (!pendingMethodOpen) {
+      return;
+    }
+
+    logInfo("runtime-shell", "方法开场：强制应用目标场景", {
+      forcedOpenSceneId,
+      openNonce: effectiveOpenNonce,
+      prevCurrent: safeCurrentSceneId,
+      resolvedName: scene?.name ?? null,
+    });
+
+    setLockedMethodTarget(forcedOpenSceneId);
+    setCurrentSceneId(forcedOpenSceneId);
+    setMainSceneId(forcedOpenSceneId);
+    setAppliedOpenNonce(effectiveOpenNonce);
+  }, [
+    pendingMethodOpen,
+    forcedOpenSceneId,
+    effectiveOpenNonce,
+    safeCurrentSceneId,
+    scene?.name,
+    setCurrentSceneId,
+    setMainSceneId,
+  ]);
+
+  /** current 追上方法目标后解除锁定；场景内跳转改了 forced 也解除 */
+  useEffect(() => {
+    if (lockedMethodTarget === null) {
+      return;
+    }
+
+    if (safeCurrentSceneId === lockedMethodTarget) {
+      setLockedMethodTarget(null);
+
+      return;
+    }
+
+    if (
+      forcedOpenSceneId.length > 0 &&
+      forcedOpenSceneId !== lockedMethodTarget
+    ) {
+      setLockedMethodTarget(null);
+    }
+  }, [lockedMethodTarget, safeCurrentSceneId, forcedOpenSceneId]);
+
+  /**
+   * 仅在 current 为空且无方法开场时播种。
    * 禁止用 forced 覆盖已有 current（否则场景内 openScene 会被立刻打回）。
    */
   useEffect(() => {
+    if (preferForced) {
+      return;
+    }
+
     if (safeCurrentSceneId.length > 0) {
       return;
     }
@@ -273,6 +380,7 @@ export function RuntimeShell({
       setCurrentSceneId(scene.id);
     }
   }, [
+    preferForced,
     forcedOpenSceneId,
     safeCurrentSceneId,
     safeMainSceneId,
@@ -520,6 +628,7 @@ export function RuntimeShell({
         {/* 场景返回浮层按钮：栈顶存在有效目标且 ≠ 当前场景时显示 */}
         <SceneReturnButton
           config={sceneUi.sceneReturn}
+          visibleOverride={returnButtonVisibleOverride}
           stackJson={returnStackJson}
           currentSceneId={currentSceneId}
           scenes={library.scenes}

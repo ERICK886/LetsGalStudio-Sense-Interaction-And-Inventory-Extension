@@ -312,10 +312,11 @@ export interface UiButtonSkin {
 /**
  * 场景返回按钮外观与布局（挂于 SceneUiConfig.sceneReturn）。
  *
- * `enabled === false` 时运行时永不渲染返回按钮；栈逻辑仍可由动作/剧本驱动。
+ * `enabled === false` 时默认不渲染返回按钮；「打开场景交互」方法可用
+ * `showReturnButton` 参数按次强制显示/隐藏。栈逻辑仍可由动作/剧本驱动。
  */
 export interface SceneReturnButtonConfig extends UiButtonSkin {
-  /** 总开关；false 时永不显示 */
+  /** 全局总开关；false 时默认不显示（可被方法参数覆盖） */
   enabled: boolean;
   /** 设计分辨率下的矩形（与背包等节点一致使用 UiRect） */
   rect: UiRect;

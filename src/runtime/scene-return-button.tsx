@@ -56,6 +56,12 @@ export interface SceneReturnButtonProps {
   /** 返回按钮外观与布局预设（来自 `SceneUiConfig.sceneReturn`） */
   config: SceneReturnButtonConfig;
 
+  /**
+   * 会话级可见性覆盖：true/false 强制显示/隐藏；
+   * `undefined` / `null` 跟随 `config.enabled`。
+   */
+  visibleOverride?: boolean | null;
+
   /** 存档中的返回栈 JSON 字符串 */
   stackJson: string;
 
@@ -148,6 +154,7 @@ function mergeStyle(
  */
 export function SceneReturnButton({
   config,
+  visibleOverride = null,
   stackJson,
   currentSceneId,
   scenes,
@@ -165,11 +172,17 @@ export function SceneReturnButton({
       typeof viewportHeight === "number" && viewportHeight > 0 ? viewportHeight : 0,
   });
 
+  /** 会话覆盖优先，否则跟随场景 UI 全局 enabled */
+  const buttonEnabled =
+    typeof visibleOverride === "boolean"
+      ? visibleOverride
+      : config.enabled;
+
   /**
    * 解析返回栈并预览栈顶有效目标（与当前场景不同才可显示）。
    */
   const peek = useMemo(() => {
-    if (!config.enabled) {
+    if (!buttonEnabled) {
       return null as { stack: string[]; targetId: string } | null;
     }
 
@@ -186,7 +199,7 @@ export function SceneReturnButton({
     }
 
     return { stack, targetId };
-  }, [config.enabled, stackJson, scenes, currentSceneId]);
+  }, [buttonEnabled, stackJson, scenes, currentSceneId]);
 
   /**
    * 自测 host 尺寸：host 始终挂载，layout 阶段同步量一次，避免首帧 NaN scale。

@@ -412,6 +412,23 @@ function renderDetails(
       const scene = truncate(params.sceneIdOrName, 48);
       const pushReturn = params.pushReturn !== false;
       const chips = ["阻塞至退出", pushReturn ? "压入返回栈" : "不压栈"];
+      const returnBtnRaw = params.showReturnButton;
+      const returnBtnKey =
+        returnBtnRaw === undefined || returnBtnRaw === null
+          ? "follow"
+          : String(returnBtnRaw).trim().toLowerCase();
+
+      if (returnBtnKey === "hide" || returnBtnKey === "false" || returnBtnKey === "0") {
+        chips.push("隐藏返回按钮");
+      } else if (
+        returnBtnKey === "show" ||
+        returnBtnKey === "true" ||
+        returnBtnKey === "1"
+      ) {
+        chips.push("显示返回按钮");
+      } else {
+        chips.push("返回按钮跟随UI");
+      }
 
       return {
         summary: scene

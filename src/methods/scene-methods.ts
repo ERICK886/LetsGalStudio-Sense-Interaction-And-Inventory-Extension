@@ -49,7 +49,11 @@ import {
 } from "../shared/module-ids";
 import { logDebug, logError, logInfo, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
-import { setForcedOpenSceneId } from "../store/open-scene-target";
+import { setMethodOpenSceneTarget } from "../store/open-scene-target";
+import {
+  parseReturnButtonVisibleParam,
+  setReturnButtonVisibleOverride,
+} from "../store/return-button-session";
 import { SCENE_PASSTHROUGH_SHOW_OPTIONS } from "../store/passthrough-show-options";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
 import { notifySaveField } from "../store/save-sync";
@@ -250,6 +254,8 @@ type OpenSceneInteractionParams = {
   sceneIdOrName: string;
   returnTarget: string;
   pushReturn: boolean;
+  /** enum：follow | show | hide */
+  showReturnButton?: "follow" | "show" | "hide" | string;
   resultVariable: string;
 };
 
@@ -493,12 +499,13 @@ export const openScene = method({
       return;
     }
 
+    const openNonce = Date.now();
     const openProps = {
       playerPresentation: true as const,
       openSceneId,
-      openNonce: Date.now(),
+      openNonce,
     };
-    setForcedOpenSceneId(openSceneId);
+    setMethodOpenSceneTarget(openSceneId, openNonce);
     setSceneInteractionRestoreProps(openProps);
     setPlayerOverlaySession(true);
     rememberSceneUiPath(
@@ -535,6 +542,8 @@ export const openScene = method({
  *   留空时优先 save.mainSceneId → editor.defaultSceneId → current → 库首项。
  * @param params.returnTarget - 可选；覆盖压栈的返回目标（仅切换场景时生效）
  * @param params.pushReturn - 缺省 true；false 时清空返回栈（以填写场景为新枢纽）
+ * @param params.showReturnButton - 可选 enum：`follow` 跟随场景 UI；
+ *   `show` 强制显示；`hide` 强制隐藏（适合用交互点互相跳转、不要栈返回）
  * @param params.resultVariable - 可选；写入是否成功打开并完成等待
  *
  * @returns Promise<void>（SDK method run 无业务返回值）
@@ -543,8 +552,12 @@ export const openScene = method({
  *
  * @example
  * ```ts
- * // 剧本：打开「散落的背包」并作为本次主场景，直到玩家退出
- * await openSceneInteraction.run(ctx, { sceneIdOrName: "散落的背包" });
+ * // 打开背包交互且隐藏返回按钮，场景间用 openScene 动作互跳
+ * await openSceneInteraction.run(ctx, {
+ *   sceneIdOrName: "散落的背包",
+ *   pushReturn: false,
+ *   showReturnButton: "hide",
+ * });
  * ```
  *
  * @remarks
@@ -555,7 +568,7 @@ export const openSceneInteraction = method({
   id: "open-scene-interaction",
   title: "打开场景交互（阻塞）",
   description:
-    "show modal UI 并阻塞；填写的场景会设为本次交互主场景",
+    "show modal UI 并阻塞；可覆盖是否显示返回按钮",
   schema: {
     sceneIdOrName: {
       type: "string",
@@ -568,6 +581,17 @@ export const openSceneInteraction = method({
       required: false,
     },
     pushReturn: { type: "boolean", label: "压入返回栈", required: false },
+    showReturnButton: {
+      type: "enum",
+      label: "显示返回按钮",
+      default: "follow",
+      required: false,
+      options: [
+        { value: "follow", label: "跟随场景 UI" },
+        { value: "show", label: "显示" },
+        { value: "hide", label: "隐藏" },
+      ],
+    },
     resultVariable: { type: "string", label: "结果写入变量", required: false },
   },
   async run(ctx, params) {
@@ -584,18 +608,27 @@ export const openSceneInteraction = method({
       return;
     }
 
+    const showReturnButton = parseReturnButtonVisibleParam(
+      params.showReturnButton,
+    );
+
     /**
-     * openSceneId：ui.show props + 模块级强制目标双通道。
-     * 叠层复用时 Studio 可能不重灌 props，壳层仍读 getForcedOpenSceneId()。
+     * openSceneId / showReturnButton：ui.show props + 模块级会话双通道。
+     * openNonce 与 setMethodOpenSceneTarget 共用时间戳，壳层靠 nonce 强制覆盖残留 current。
      */
+    const openNonce = Date.now();
     const openProps = {
       playerPresentation: true as const,
       playerSession: "modal" as const,
       openSceneId,
-      openNonce: Date.now(),
+      openNonce,
+      ...(typeof showReturnButton === "boolean"
+        ? { showReturnButton }
+        : {}),
     };
 
-    setForcedOpenSceneId(openSceneId);
+    setMethodOpenSceneTarget(openSceneId, openNonce);
+    setReturnButtonVisibleOverride(showReturnButton);
 
     /**
      * 预览重启后可能留下无叠层的僵尸门闩：丢弃且不 resolve。
@@ -615,7 +648,18 @@ export const openSceneInteraction = method({
       } catch {
         // 可能未真正挂载
       }
+
+      /** 等一帧再 show，避免 hide/show 同帧导致 props 未刷新 */
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
+      });
     }
+
+    /** 权威 slot 再写一遍，防止 hide 期间存档读回旧 current */
+    writeSlotField("currentSceneId", openSceneId, save);
+    writeSlotField("mainSceneId", openSceneId, save);
 
     setSceneInteractionRestoreProps(openProps);
     setPlayerOverlaySession(true);
@@ -692,7 +736,8 @@ async function applyCloseSceneInteraction(
 
   endPlayerSessionWait();
   forceClearPlayerOverlaySession();
-  setForcedOpenSceneId(null);
+  setMethodOpenSceneTarget(null);
+  setReturnButtonVisibleOverride(null);
   writeResult(ctx, resultVariable, true);
 }
 
@@ -708,7 +753,8 @@ function applyCloseSceneInteractionSaveOnly(
 ): void {
   endPlayerSessionWait();
   forceClearPlayerOverlaySession();
-  setForcedOpenSceneId(null);
+  setMethodOpenSceneTarget(null);
+  setReturnButtonVisibleOverride(null);
   writeResult(ctx, resultVariable, true);
 }
 

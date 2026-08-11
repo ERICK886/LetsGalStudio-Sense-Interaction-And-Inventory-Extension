@@ -3,7 +3,7 @@
   "name": "场景交互及物品栏系统",
   "description": "多场景探索与物品栏：可视化编辑底图与交互点、物品库与合成配方；剧情中打开场景、点击拿物品，支持快捷栏 HUD、全屏背包。",
   "author": "池水三两升",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "entry": "dist/index.mjs",
   "sdkVersion": ">=1.9.2-beta"
 }

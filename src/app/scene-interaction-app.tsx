@@ -48,7 +48,8 @@ import {
 import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { bindInventoryPersistence } from "../store/inventory-session";
-import { setForcedOpenSceneId } from "../store/open-scene-target";
+import { setMethodOpenSceneTarget } from "../store/open-scene-target";
+import { setReturnButtonVisibleOverride } from "../store/return-button-session";
 import { createSettingsPreviewSave } from "../store/preview-save";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
@@ -71,17 +72,29 @@ export interface SceneInteractionAppProps extends ExtensionProps {
    * 优先于 save.currentSceneId，避免首帧回退到编辑器主场景。
    */
   openSceneId?: string;
+  /**
+   * 方法开场代数；变化时壳层强制覆盖残留 currentSceneId。
+   */
+  openNonce?: number;
+  /**
+   * 返回按钮可见性覆盖；未传则跟随场景 UI 全局。
+   */
+  showReturnButton?: boolean | null;
 }
 
 type RuntimeShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
   openSceneId?: string;
+  openNonce?: number;
+  showReturnButton?: boolean | null;
   onContinueStory?: () => void | Promise<void>;
 }>;
 
 type PlayerShellComponent = React.ComponentType<{
   save: SaveAPI<SceneInteractionSaveMap>;
   openSceneId?: string;
+  openNonce?: number;
+  showReturnButton?: boolean | null;
   onRequestClose: () => void | Promise<void>;
 }>;
 
@@ -149,16 +162,24 @@ function SceneInteractionAppContent({
   playerPresentation,
   playerSession,
   openSceneId,
+  openNonce = 0,
+  showReturnButton,
 }: {
   save: SaveAPI<SceneInteractionSaveMap>;
   playerPresentation?: boolean;
   playerSession?: "modal";
   openSceneId?: string;
+  openNonce?: number;
+  showReturnButton?: boolean | null;
 }): React.ReactElement {
   const ctx = useExtensionContext();
   const isPlayerModal = playerSession === "modal";
   const forcedOpenSceneId =
     typeof openSceneId === "string" ? openSceneId.trim() : "";
+  const forcedOpenNonce =
+    typeof openNonce === "number" && openNonce > 0 ? openNonce : 0;
+  const returnButtonOverride =
+    typeof showReturnButton === "boolean" ? showReturnButton : null;
   /**
    * 玩家运行时：openScene(playerPresentation) / openSceneInteraction(modal)。
    * Studio 程序预览无此标记 → 走扩展 settings 沙箱，不写玩家 slot。
@@ -214,12 +235,20 @@ function SceneInteractionAppContent({
         ...(forcedOpenSceneId.length > 0
           ? { openSceneId: forcedOpenSceneId }
           : {}),
+        ...(forcedOpenNonce > 0 ? { openNonce: forcedOpenNonce } : {}),
+        ...(typeof returnButtonOverride === "boolean"
+          ? { showReturnButton: returnButtonOverride }
+          : {}),
       });
     } else if (playerPresentation === true) {
       setSceneInteractionRestoreProps({
         playerPresentation: true,
         ...(forcedOpenSceneId.length > 0
           ? { openSceneId: forcedOpenSceneId }
+          : {}),
+        ...(forcedOpenNonce > 0 ? { openNonce: forcedOpenNonce } : {}),
+        ...(typeof returnButtonOverride === "boolean"
+          ? { showReturnButton: returnButtonOverride }
           : {}),
       });
     }
@@ -229,7 +258,7 @@ function SceneInteractionAppContent({
     return () => {
       clearPlayerOverlaySessionIfEpoch(epoch);
     };
-  }, [isPlayerModal, playerPresentation, forcedOpenSceneId]);
+  }, [isPlayerModal, playerPresentation, forcedOpenSceneId, forcedOpenNonce, returnButtonOverride]);
 
   /**
    * 仅玩家运行时叠快捷栏：全屏 + interactable:false，
@@ -330,7 +359,8 @@ function SceneInteractionAppContent({
 
     endPlayerSessionWait();
     forceClearPlayerOverlaySession();
-    setForcedOpenSceneId(null);
+    setMethodOpenSceneTarget(null);
+    setReturnButtonVisibleOverride(null);
     logDebug("continue-story", "handlePlayerRequestClose 结束（已 endWait）", {
       sessionPending: isPlayerSessionPending(),
       t: Date.now(),
@@ -433,20 +463,24 @@ function SceneInteractionAppContent({
           />
         ) : isPlayerModal && PlayerShellComp ? (
           <PlayerShellComp
-            key={`player-${forcedOpenSceneId || "default"}`}
+            key={`player-${forcedOpenSceneId || "default"}-${forcedOpenNonce || 0}`}
             save={effectiveSave}
             openSceneId={
               forcedOpenSceneId.length > 0 ? forcedOpenSceneId : undefined
             }
+            openNonce={forcedOpenNonce > 0 ? forcedOpenNonce : undefined}
+            showReturnButton={returnButtonOverride}
             onRequestClose={handlePlayerRequestClose}
           />
         ) : RuntimeShellComp ? (
           <RuntimeShellComp
-            key={`runtime-${forcedOpenSceneId || "default"}`}
+            key={`runtime-${forcedOpenSceneId || "default"}-${forcedOpenNonce || 0}`}
             save={effectiveSave}
             openSceneId={
               forcedOpenSceneId.length > 0 ? forcedOpenSceneId : undefined
             }
+            openNonce={forcedOpenNonce > 0 ? forcedOpenNonce : undefined}
+            showReturnButton={returnButtonOverride}
             onContinueStory={handlePlayerRequestClose}
           />
         ) : null}
@@ -477,7 +511,14 @@ function SceneInteractionAppContent({
 export function SceneInteractionApp(
   props: SceneInteractionAppProps,
 ): React.ReactElement {
-  const { save, playerPresentation, playerSession, openSceneId } = props;
+  const {
+    save,
+    playerPresentation,
+    playerSession,
+    openSceneId,
+    openNonce,
+    showReturnButton,
+  } = props;
 
   if (!save) {
     return (
@@ -494,6 +535,8 @@ export function SceneInteractionApp(
       playerPresentation={playerPresentation}
       playerSession={playerSession}
       openSceneId={openSceneId}
+      openNonce={openNonce}
+      showReturnButton={showReturnButton}
     />
   );
 }

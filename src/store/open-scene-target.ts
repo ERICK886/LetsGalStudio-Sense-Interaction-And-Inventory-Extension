@@ -2,11 +2,12 @@
  * open-scene-target.ts
  * 作者: 池水三两升
  * 日期: 2026-08-10
- * 版本: 0.1.0
+ * 版本: 0.2.0
  *
- * 打开场景交互时的强制目标场景 id（方法 → 壳层）。
- * 不依赖 Studio ui.show 是否把新 props 灌进已挂载树：
- * 叠层复用时仍能切到「散落的背包」而非残留的编辑器主场景。
+ * 打开场景交互时的强制目标场景（方法 → 壳层）。
+ *
+ * - `setMethodOpenSceneTarget`：剧本方法开场，递增 nonce，壳层必须覆盖存档残留
+ * - `setForcedOpenSceneId`：场景内跳转仅同步 id，不递增 nonce（避免锁死互跳）
  */
 
 import { notifySaveField, subscribeSaveField } from "./save-sync";
@@ -18,7 +19,38 @@ const TARGET_SYNC_KEY = "__openSceneTargetId";
 let forcedOpenSceneId: string | null = null;
 
 /**
- * 设置方法侧解析出的目标场景 id。
+ * 方法开场代数：壳层发现 nonce 变化时必须把 currentSceneId 写成 forced。
+ * 场景内 openScene 不递增，故不会盖住玩家跳转。
+ */
+let openSceneNonce = 0;
+
+/**
+ * 设置方法侧开场目标（递增 nonce，强制覆盖存档残留的旧 currentSceneId）。
+ *
+ * @param sceneId - 场景定义 id；空串 / null 清除
+ * @param nonce - 可选；与 ui.show props.openNonce 对齐；缺省用 Date.now()
+ */
+export function setMethodOpenSceneTarget(
+  sceneId: string | null,
+  nonce?: number,
+): void {
+  const next =
+    typeof sceneId === "string" && sceneId.trim().length > 0
+      ? sceneId.trim()
+      : null;
+
+  forcedOpenSceneId = next;
+  openSceneNonce =
+    next !== null
+      ? typeof nonce === "number" && nonce > 0
+        ? nonce
+        : Date.now()
+      : 0;
+  notifySaveField(TARGET_SYNC_KEY);
+}
+
+/**
+ * 同步强制目标 id（场景内跳转）；不递增 nonce。
  *
  * @param sceneId - 场景定义 id；空串 / null 清除
  */
@@ -44,7 +76,14 @@ export function getForcedOpenSceneId(): string | null {
 }
 
 /**
- * 订阅强制目标变化（供壳层 Hook 使用）。
+ * @returns 方法开场代数；0 表示无待应用的方法开场
+ */
+export function getOpenSceneNonce(): number {
+  return openSceneNonce;
+}
+
+/**
+ * 订阅强制目标 / nonce 变化（供壳层 Hook 使用）。
  *
  * @param listener - 变更回调
  * @returns 取消订阅

@@ -35,8 +35,9 @@ export function sceneReturnFields(): FieldSchema[] {
     {
       key: "enabled",
       kind: "boolean",
-      label: "启用返回按钮",
-      description: "关闭后运行时永不显示返回按钮",
+      label: "全局显示返回按钮",
+      description:
+        "场景 UI 总开关。关闭后默认不显示；「打开场景交互」方法仍可用参数单独强制显示/隐藏",
     },
     {
       kind: "section",
