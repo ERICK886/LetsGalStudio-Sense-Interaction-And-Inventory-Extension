@@ -23,7 +23,7 @@ import type {
   ItemDefinition,
   SceneDefinition,
 } from "../domain/types";
-import { logDebug, logError } from "../shared/logger";
+import { logDebug, logError, logInfo } from "../shared/logger";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 
 /**
@@ -399,14 +399,18 @@ export function createActionRuntime(
       fragmentId: string,
       chapterId?: string,
     ): Promise<void> {
-      logDebug("jump-fragment", "ActionRuntime.callFragment → deps", {
+      logInfo("jump-fragment", "ActionRuntime.callFragment：chapterId 传导", {
         fragmentId,
-        chapterId: chapterId ?? "(未指定)",
+        chapterId: chapterId ?? null,
+        hasChapterId:
+          typeof chapterId === "string" && chapterId.trim().length > 0,
+        chapterIdType: typeof chapterId,
         t: Date.now(),
       });
       await deps.callFragment(fragmentId, chapterId);
       logDebug("jump-fragment", "ActionRuntime.callFragment ← deps 返回", {
         fragmentId,
+        chapterId: chapterId ?? null,
         t: Date.now(),
       });
     },

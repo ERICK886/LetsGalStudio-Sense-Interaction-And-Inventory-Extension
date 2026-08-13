@@ -336,6 +336,10 @@ export interface ItemToastConfig {
   offsetY: number;
   gap: number;
   style: UiBoxStyle & UiTextStyle;
+  /**
+   * 获得物品时播放的 SE 资源 URI；空 / 未配置则不播放。
+   */
+  seSrc?: string;
 }
 
 /**

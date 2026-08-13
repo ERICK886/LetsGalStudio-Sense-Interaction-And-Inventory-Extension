@@ -249,9 +249,12 @@ async function runJumpFragmentReturnAction(
 ): Promise<void> {
   const fragmentId = normalizeActionId(action.fragmentId);
 
-  logDebug("jump-fragment", "动作入口：jumpFragmentReturn", {
+  logInfo("jump-fragment", "动作入口：jumpFragmentReturn（chapterId 传导）", {
     rawFragmentId: action.fragmentId,
-    rawChapterId: action.chapterId,
+    rawChapterId: action.chapterId ?? null,
+    rawHasChapterId:
+      typeof action.chapterId === "string" &&
+      action.chapterId.trim().length > 0,
     fragmentId,
   });
 
@@ -268,15 +271,17 @@ async function runJumpFragmentReturnAction(
 
   const chapterId = normalizeActionId(action.chapterId) ?? undefined;
 
-  logInfo("jump-fragment", "跳转片段（可跳回）：调用 flow.callFragment", {
+  logInfo("jump-fragment", "跳转片段（可跳回）：调用 runtime.callFragment", {
     type: "jumpFragmentReturn",
     fragmentId,
-    chapterId: chapterId ?? "(未指定)",
+    chapterId: chapterId ?? null,
+    hasChapterId:
+      typeof chapterId === "string" && chapterId.trim().length > 0,
   });
   logDebug("jump-fragment", "await runtime.callFragment 开始", {
     type: "jumpFragmentReturn",
     fragmentId,
-    chapterId: chapterId ?? "(未指定)",
+    chapterId: chapterId ?? null,
     t: Date.now(),
   });
 

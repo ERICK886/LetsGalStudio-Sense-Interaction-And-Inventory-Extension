@@ -51,6 +51,7 @@ import type {
   SceneDefinition,
   SceneProgress,
 } from "../domain/types";
+import { playResolvedSe } from "../shared/play-se";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import {
   useProgress,
@@ -447,6 +448,11 @@ export function PlayerShell({
       } = payload;
       const appearance = resolveItemToastAppearance(global, overrides);
 
+      playResolvedSe(
+        global.seSrc,
+        ctx.asset?.resolve?.bind(ctx.asset),
+      );
+
       setToastQueue((prev) =>
         enqueueToast(prev, {
           text,
@@ -457,7 +463,7 @@ export function PlayerShell({
         }),
       );
     },
-    [sceneUi],
+    [ctx.asset, sceneUi],
   );
 
   /**
@@ -488,6 +494,13 @@ export function PlayerShell({
 
   const handleCallFragment = useCallback(
     async (fragmentId: string, chapterId?: string): Promise<void> => {
+      logInfo("jump-fragment", "PlayerShell.handleCallFragment：chapterId 传导", {
+        fragmentId,
+        chapterId: chapterId ?? null,
+        hasChapterId:
+          typeof chapterId === "string" && chapterId.trim().length > 0,
+        chapterIdType: typeof chapterId,
+      });
       await callFragmentYieldingOverlay(
         ctx,
         fragmentId,

@@ -103,6 +103,9 @@ export function scaleItemToastConfig(
     offsetY: Math.round(cfg.offsetY * sy),
     gap: Math.max(0, Math.round(cfg.gap * s)),
     style,
+    ...(typeof cfg.seSrc === "string" && cfg.seSrc.trim().length > 0
+      ? { seSrc: cfg.seSrc.trim() }
+      : {}),
   };
 }
 
@@ -210,6 +213,11 @@ export function normalizeItemToastConfig(
     ...normalizeUiTextStyle(styleRaw, defaults.style),
   };
 
+  const seSrc =
+    typeof obj.seSrc === "string" && obj.seSrc.trim().length > 0
+      ? obj.seSrc.trim()
+      : undefined;
+
   return {
     version: 1,
     placement,
@@ -217,6 +225,7 @@ export function normalizeItemToastConfig(
     offsetY,
     gap,
     style,
+    ...(seSrc !== undefined ? { seSrc } : {}),
   };
 }
 

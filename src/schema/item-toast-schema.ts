@@ -1,11 +1,11 @@
 /**
  * item-toast-schema.ts
  * 作者: 池水三两升
- * 日期: 2026-08-08
- * 版本: 0.1.0
+ * 日期: 2026-08-14
+ * 版本: 0.1.1
  *
  * 获得物品 Toast（ItemToastConfig）属性表单 schema。
- * 仅含全局字段：相对位置、间距、偏移、盒样式与文本样式。
+ * 全局字段：获得 SE、相对位置、间距、偏移、盒样式与文本样式。
  */
 
 import type { FieldSchema } from "./types";
@@ -27,6 +27,14 @@ import { boxStyleFields, textStyleFields } from "./ui-style-fields";
  */
 export function itemToastGlobalFields(): FieldSchema[] {
   return [
+    {
+      key: "seSrc",
+      kind: "asset",
+      label: "获得音效（SE）",
+      accept: "audio",
+      showPreview: false,
+      placeholder: "留空则不播放",
+    },
     {
       key: "placement",
       kind: "enum",

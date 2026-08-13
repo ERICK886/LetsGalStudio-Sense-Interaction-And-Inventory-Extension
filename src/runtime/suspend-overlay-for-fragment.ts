@@ -41,6 +41,92 @@ import {
 const SCENE_UI_SHOW_OPTS = { ...SCENE_PASSTHROUGH_SHOW_OPTIONS };
 
 /**
+ * 是否为引擎「章节不存在」错误。
+ * 编辑器写入的 chapterId 在桌面出包后偶发对不上，需回退仅 fragmentId。
+ *
+ * @param err - 捕获的异常
+ */
+function isChapterMissingError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+
+  return msg.includes("章节不存在");
+}
+
+/**
+ * 调用 `ctx.flow.callFragment`；带 chapterId 若报章节不存在则回退仅 fragmentId。
+ *
+ * @param ctx - 扩展上下文
+ * @param fragmentId - 片段 id
+ * @param chapterId - 可选章节 id
+ */
+async function callFragmentWithChapterFallback(
+  ctx: ExtensionContext,
+  fragmentId: string,
+  chapterId: string | undefined,
+): Promise<void> {
+  if (
+    chapterId === undefined ||
+    chapterId.trim().length === 0
+  ) {
+    await ctx.flow.callFragment(fragmentId);
+
+    return;
+  }
+
+  try {
+    await ctx.flow.callFragment(fragmentId, { chapterId });
+  } catch (err) {
+    if (!isChapterMissingError(err)) {
+      throw err;
+    }
+
+    logWarn(
+      "jump-fragment",
+      "带 chapterId 调用失败（章节不存在），回退仅 fragmentId",
+      { fragmentId, chapterId, err },
+    );
+    await ctx.flow.callFragment(fragmentId);
+  }
+}
+
+/**
+ * 调用 `unsafe_goToFragment`；带 chapterId 若报章节不存在则回退仅 fragmentId。
+ *
+ * @param ctx - 扩展上下文
+ * @param fragmentId - 片段 id
+ * @param chapterId - 可选章节 id
+ */
+function goToFragmentWithChapterFallback(
+  ctx: ExtensionContext,
+  fragmentId: string,
+  chapterId: string | undefined,
+): void {
+  if (
+    chapterId === undefined ||
+    chapterId.trim().length === 0
+  ) {
+    ctx.flow.unsafe_goToFragment(fragmentId);
+
+    return;
+  }
+
+  try {
+    ctx.flow.unsafe_goToFragment(fragmentId, { chapterId });
+  } catch (err) {
+    if (!isChapterMissingError(err)) {
+      throw err;
+    }
+
+    logWarn(
+      "jump-fragment",
+      "带 chapterId goToFragment 失败（章节不存在），回退仅 fragmentId",
+      { fragmentId, chapterId, err },
+    );
+    ctx.flow.unsafe_goToFragment(fragmentId);
+  }
+}
+
+/**
  * 恢复场景交互 UI 时使用的 props（由 App 在挂载时写入）。
  */
 let sceneInteractionRestoreProps: Record<string, unknown> = {
@@ -534,15 +620,30 @@ export async function callFragmentYieldingOverlay(
      * 先启动嵌套 callFragment，再 ui.hide。
      * 宿主需要仍挂着的阻塞 method 上下文；先 hide 再 call 会出现 ~20ms 空返回。
      */
-    logDebug("jump-fragment", "可跳回：先启动 callFragment（hide 之前）", {
+    logInfo("jump-fragment", "可跳回：即将 ctx.flow.callFragment（chapterId 传导）", {
       fragmentId,
-      options,
+      chapterId: chapterId ?? null,
+      hasChapterId:
+        typeof chapterId === "string" && chapterId.trim().length > 0,
+      options: options ?? null,
+      optionsHasChapterId:
+        options !== undefined &&
+        typeof options.chapterId === "string" &&
+        options.chapterId.trim().length > 0,
       sessionPending,
       signalAbortedBefore,
       t: Date.now(),
     });
     const startedAt = Date.now();
-    const fragmentPromise = ctx.flow.callFragment(fragmentId, options);
+    /**
+     * 先启动嵌套 call（含章节回退），再 ui.hide。
+     * 桌面出包后编辑器 chapterId 可能失效，回退仅 fragmentId。
+     */
+    const fragmentPromise = callFragmentWithChapterFallback(
+      ctx,
+      fragmentId,
+      chapterId,
+    );
 
     if (hideBackpack) {
       logDebug("jump-fragment", "可跳回：hide 全屏背包", {
@@ -772,11 +873,10 @@ export function goToFragmentYieldingOverlay(
       });
       forceClearPlayerOverlaySession();
 
-      const options = chapterId ? { chapterId } : undefined;
-
-      ctx.flow.unsafe_goToFragment(fragmentId, options);
+      goToFragmentWithChapterFallback(ctx, fragmentId, chapterId);
       logDebug("jump-fragment", "不可跳回：unsafe_goToFragment 已调用", {
         fragmentId,
+        chapterId: chapterId ?? null,
         t: Date.now(),
       });
     }

@@ -55,6 +55,7 @@ import type {
 import { formatIngredientSummary } from "../runtime/craft-panel";
 import { ToastLayer } from "../runtime/toast-layer";
 import { UiOverlayLayer } from "../runtime/ui-overlay-layer";
+import { playResolvedSe } from "../shared/play-se";
 import { fitDesignToHost } from "../shared/scene-layout";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { useBackpackScreenConfig } from "../store/use-backpack-ui-config";
@@ -977,6 +978,8 @@ export function BackpackScreen({
       gap: CRAFT_SUCCESS_TOAST_GAP,
     });
 
+    playResolvedSe(sceneUi.itemToast.seSrc, resolve);
+
     setCraftToastQueue((prev) =>
       enqueueToast(prev, {
         text: "合成成功",
@@ -990,7 +993,15 @@ export function BackpackScreen({
         style: appearance.style,
       }),
     );
-  }, [detail.h, detail.w, detail.x, detail.y, sceneUi.itemToast, screenCfg.overlays]);
+  }, [
+    detail.h,
+    detail.w,
+    detail.x,
+    detail.y,
+    resolve,
+    sceneUi.itemToast,
+    screenCfg.overlays,
+  ]);
 
   const advanceCraftToast = useCallback((): void => {
     setCraftToastQueue((prev) => advanceToastQueue(prev));
