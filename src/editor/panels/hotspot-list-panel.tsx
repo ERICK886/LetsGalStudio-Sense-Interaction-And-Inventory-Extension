@@ -2,12 +2,30 @@
  * hotspot-list-panel.tsx
  * 作者: 池水三两升
  * 日期: 2026-08-08
- * 版本: 0.1.1
+ * 版本: 0.2.0
  *
- * 编辑器左栏下半：当前场景的交互点（hotspot）列表。
+ * 编辑器左栏下半：当前场景的交互点（hotspot）列表与图层排序。
  */
 
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { defaultHotspotHoverShadow } from "../../domain/hover-shadow";
 import { createId } from "../../domain/id";
 import { defaultElementMotion } from "../../domain/motion";
@@ -121,6 +139,128 @@ function toolButtonStyle(
 }
 
 /**
+ * 可拖拽的单个交互点行。拖拽仅绑定在手柄，避免影响选中与删除。
+ */
+function SortableHotspotRow({
+  hotspot,
+  selected,
+  onSelect,
+  onDelete,
+}: {
+  hotspot: HotspotElement;
+  selected: boolean;
+  onSelect: (hotspotId: string) => void;
+  onDelete: (hotspotId: string, event: React.MouseEvent) => void;
+}): React.ReactElement {
+  const { tokens } = useTheme();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: hotspot.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-testid={`hotspot-list-row-${hotspot.id}`}
+      data-dragging={isDragging ? "true" : "false"}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        position: "relative",
+        zIndex: isDragging ? 2 : undefined,
+        opacity: isDragging ? 0.58 : 1,
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    >
+      <button
+        type="button"
+        data-testid={`hotspot-list-drag-${hotspot.id}`}
+        aria-label={`拖动调整交互点 ${hotspot.name || "未命名"} 的图层顺序`}
+        title="拖动调整图层顺序"
+        {...attributes}
+        {...listeners}
+        style={{
+          appearance: "none",
+          width: 24,
+          minWidth: 24,
+          height: 30,
+          padding: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "none",
+          borderRadius: 5,
+          background: "transparent",
+          color: selected ? tokens.accent : tokens.textMuted,
+          cursor: isDragging ? "grabbing" : "grab",
+          touchAction: "none",
+        }}
+      >
+        <IconLabel icon="grip-vertical" iconSize={11} />
+      </button>
+
+      <button
+        type="button"
+        data-testid={`hotspot-list-item-${hotspot.id}`}
+        aria-selected={selected}
+        onClick={() => onSelect(hotspot.id)}
+        style={{
+          appearance: "none",
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 10px",
+          borderRadius: 6,
+          border: `1px solid ${selected ? tokens.accent : "transparent"}`,
+          background: selected ? `${tokens.accent}18` : "transparent",
+          color: tokens.textPrimary,
+          cursor: "pointer",
+          fontSize: FONT_SIZE_DEFAULT,
+          fontFamily: "inherit",
+          textAlign: "left",
+          boxSizing: "border-box",
+        }}
+      >
+        <IconLabel icon="location-dot" iconSize={11} />
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {hotspot.name || "（未命名）"}
+        </span>
+      </button>
+
+      <button
+        type="button"
+        data-testid={`hotspot-list-delete-${hotspot.id}`}
+        aria-label={`删除交互点 ${hotspot.name}`}
+        onClick={(event) => onDelete(hotspot.id, event)}
+        style={{
+          ...toolButtonStyle(tokens, { danger: true }),
+          padding: "6px 8px",
+          flexShrink: 0,
+        }}
+      >
+        <IconLabel icon="trash" />
+      </button>
+    </div>
+  );
+}
+
+/**
  * 当前场景交互点列表面板。
  *
  * @param props - HotspotListPanelProps
@@ -145,6 +285,18 @@ export function HotspotListPanel({
   placementActive = false,
 }: HotspotListPanelProps): React.ReactElement {
   const { tokens } = useTheme();
+  const hotspotIds = useMemo(
+    () => scene?.hotspots.map((hotspot) => hotspot.id) ?? [],
+    [scene?.hotspots],
+  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   /**
    * 新建：有放置回调则进入放置模式，否则直接落在中心。
@@ -192,6 +344,48 @@ export function HotspotListPanel({
       }
     },
     [scene, onSceneChange, onSelectHotspot, selectedHotspotId],
+  );
+
+  /**
+   * 开始拖拽时同步选中该交互点，便于立即查看属性与画布框。
+   */
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      onSelectHotspot(String(event.active.id));
+    },
+    [onSelectHotspot],
+  );
+
+  /**
+   * 写回 hotspots 数组顺序。编辑画布、运行时与 JSON 均沿用该顺序；
+   * 数组越靠后的交互点越晚绘制，因而位于更前方。
+   */
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (scene === null || event.over === null) {
+        return;
+      }
+
+      const activeId = String(event.active.id);
+      const overId = String(event.over.id);
+
+      if (activeId === overId) {
+        return;
+      }
+
+      const from = scene.hotspots.findIndex((hotspot) => hotspot.id === activeId);
+      const to = scene.hotspots.findIndex((hotspot) => hotspot.id === overId);
+
+      if (from < 0 || to < 0) {
+        return;
+      }
+
+      onSceneChange({
+        ...scene,
+        hotspots: arrayMove(scene.hotspots, from, to),
+      });
+    },
+    [scene, onSceneChange],
   );
 
   return (
@@ -277,67 +471,42 @@ export function HotspotListPanel({
             暂无交互点
           </div>
         ) : (
-          scene.hotspots.map((hs) => {
-            const selected = hs.id === selectedHotspotId;
-
-            return (
+          <>
+            {scene.hotspots.length > 1 ? (
               <div
-                key={hs.id}
-                style={{ display: "flex", alignItems: "center", gap: 4 }}
+                data-testid="hotspot-layer-order-hint"
+                style={{
+                  padding: "2px 4px 6px",
+                  color: tokens.textMuted,
+                  fontSize: 11,
+                  lineHeight: 1.4,
+                }}
               >
-                <button
-                  type="button"
-                  data-testid={`hotspot-list-item-${hs.id}`}
-                  aria-selected={selected}
-                  onClick={() => onSelectHotspot(hs.id)}
-                  style={{
-                    appearance: "none",
-                    flex: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    border: `1px solid ${
-                      selected ? tokens.accent : "transparent"
-                    }`,
-                    background: selected ? `${tokens.accent}18` : "transparent",
-                    color: tokens.textPrimary,
-                    cursor: "pointer",
-                    fontSize: FONT_SIZE_DEFAULT,
-                    fontFamily: "inherit",
-                    textAlign: "left",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <IconLabel icon="location-dot" iconSize={11} />
-                  <span
-                    style={{
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {hs.name || "（未命名）"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  data-testid={`hotspot-list-delete-${hs.id}`}
-                  aria-label={`删除交互点 ${hs.name}`}
-                  onClick={(e) => handleDelete(hs.id, e)}
-                  style={{
-                    ...toolButtonStyle(tokens, { danger: true }),
-                    padding: "6px 8px",
-                    flexShrink: 0,
-                  }}
-                >
-                  <IconLabel icon="trash" />
-                </button>
+                拖拽排序图层 · 越靠下越靠前
               </div>
-            );
-          })
+            ) : null}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={hotspotIds}
+                strategy={verticalListSortingStrategy}
+              >
+                {scene.hotspots.map((hotspot) => (
+                  <SortableHotspotRow
+                    key={hotspot.id}
+                    hotspot={hotspot}
+                    selected={hotspot.id === selectedHotspotId}
+                    onSelect={onSelectHotspot}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          </>
         )}
       </div>
     </div>
