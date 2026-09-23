@@ -77,6 +77,8 @@ import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useDesignSize } from "../store/use-design-size";
 import { useSaveValue } from "../store/use-save-value";
 import { useSceneUiConfig } from "../store/use-scene-ui-config";
+import { readAutoShowHud } from "../store/hud-settings";
+import { useAutoShowHud } from "../store/use-auto-show-hud";
 import { FONT_SIZE_DEFAULT, useTheme } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
 import { createActionRuntime } from "./create-action-runtime";
@@ -217,6 +219,7 @@ export function PlayerShell({
 }: PlayerShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const autoShowHud = useAutoShowHud(ctx);
   const { size: designSize } = useDesignSize();
   const [moduleForcedId, setModuleForcedId] = useState<string | null>(() =>
     getForcedOpenSceneId(),
@@ -287,6 +290,13 @@ export function PlayerShell({
   const [rewardFlyQueue, setRewardFlyQueue] = useState<RewardFlyQueueState>(
     () => emptyRewardFlyQueue(),
   );
+
+  /** 关闭快捷栏时立即停止当前动画并丢弃等待队列。 */
+  useEffect(() => {
+    if (!autoShowHud) {
+      setRewardFlyQueue(emptyRewardFlyQueue());
+    }
+  }, [autoShowHud]);
 
   /** 场景 UI 预设（itemToast + hotspotHover），订阅 editor.sceneUiJson 写入 */
   const sceneUi = useSceneUiConfig();
@@ -478,9 +488,12 @@ export function PlayerShell({
       displayName: string;
       slotIndex: number;
     }): void => {
+      if (!readAutoShowHud(ctx)) {
+        return;
+      }
       setRewardFlyQueue((prev) => enqueueRewardFly(prev, payload));
     },
-    [],
+    [ctx],
   );
 
   /**
@@ -697,10 +710,12 @@ export function PlayerShell({
         />
       </div>
 
-      <RewardFlyLayer
-        queue={rewardFlyQueue}
-        onAdvance={handleRewardFlyAdvance}
-      />
+      {autoShowHud ? (
+        <RewardFlyLayer
+          queue={rewardFlyQueue}
+          onAdvance={handleRewardFlyAdvance}
+        />
+      ) : null}
 
       {/* 浮层退出：不占用预览顶栏区域 */}
       <div

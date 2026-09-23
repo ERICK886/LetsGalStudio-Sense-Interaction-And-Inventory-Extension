@@ -1021,7 +1021,7 @@ export function UiEditorPanel(): React.ReactElement {
                 <Checkbox.Label>自动显示背包快捷栏</Checkbox.Label>
             </Checkbox.Root>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
-              关闭后场景交互不再自动显示；剧本方法仍可手动打开。
+              关闭后场景交互不再自动显示，也不会播放物品飞入快捷栏动画；剧本方法仍可手动打开。
             </chakra.span>
           </chakra.div>
         ) : null}
