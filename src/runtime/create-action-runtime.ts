@@ -8,6 +8,7 @@
  */
 
 import type { ActionRuntime } from "../domain/actions";
+import { applySceneVariableAction } from "../domain/variable-action";
 import {
   consumeItemFromInventory,
   getQuickbarEntries,
@@ -42,6 +43,10 @@ export interface CreateActionRuntimeDeps {
    * 当前物品库列表（用于 giveItem 按 id 查找）。
    */
   getItems: () => ItemDefinition[];
+
+  /** Studio 游戏变量读写，使用 SDK 以保持存档和 variable:changed 事件。 */
+  getVariable: (name: string) => string | number | boolean | null | undefined;
+  setVariable: (name: string, value: string | number | boolean | null) => void;
 
   /**
    * 读取当前库存快照。
@@ -330,6 +335,10 @@ export function createActionRuntime(
       deps.setInventory(result.state);
 
       return { ok: true };
+    },
+
+    editVariable(action): void {
+      applySceneVariableAction(action, deps.getVariable, deps.setVariable, warnImpl);
     },
 
     /**

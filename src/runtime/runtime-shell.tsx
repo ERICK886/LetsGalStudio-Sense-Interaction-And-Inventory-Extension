@@ -515,6 +515,8 @@ export function RuntimeShell({
       createActionRuntime({
         getScenes: () => scenesRef.current,
         getItems: () => itemsRef.current,
+        getVariable: (name) => ctx.variables.get(name),
+        setVariable: (name, value) => ctx.variables.set(name, value),
         /** 读模块会话，避免 inventoryRef 尚未随 React 重渲染更新时用空库存覆盖 */
         getInventory: () => getInventorySession(),
         setInventory,
@@ -545,6 +547,7 @@ export function RuntimeShell({
       handleEnqueueToast,
       handleEnqueueRewardFly,
       ctx.asset,
+      ctx.variables,
       handleCallFragment,
       handleGoToFragment,
       handleContinueStory,

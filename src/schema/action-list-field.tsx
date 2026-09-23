@@ -6,7 +6,7 @@ import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
  * 版本: 0.3.0
  *
  * 交互点动作列表编辑控件：增删改排序 SceneAction[]。
- * 支持 openScene / giveItem / removeItem / 跳转片段 / continueStory。
+ * 支持 openScene / giveItem / removeItem / editVariable / 跳转片段 / continueStory。
  * giveItem：Toast 外观覆盖；片段动作：从工程 story 选择片段（显示名称）。
  */
 
@@ -32,6 +32,7 @@ import { ColorPicker } from "./color-picker";
 import { DeferredNumberInput } from "./deferred-number-input";
 import { FormRenderer } from "./form-renderer";
 import { FragmentSelectField } from "./fragment-select-field";
+import { VariableActionField } from "./variable-action-field";
 import { motionSection } from "./motion-section";
 
 /**
@@ -64,6 +65,7 @@ const ACTION_TYPE_OPTIONS: ReadonlyArray<{
   { value: "openScene", label: "打开场景" },
   { value: "giveItem", label: "给予物品" },
   { value: "removeItem", label: "扣除物品" },
+  { value: "editVariable", label: "编辑变量" },
   { value: "jumpFragmentReturn", label: "跳转片段（可跳回）" },
   { value: "jumpFragmentGoto", label: "跳转片段（不可跳回）" },
   { value: "continueStory", label: "继续剧情" },
@@ -115,6 +117,14 @@ function createActionOfType(
         type: "removeItem",
         itemId: items[0]?.id ?? "",
         amount: 1,
+      };
+
+    case "editVariable":
+      return {
+        type: "editVariable",
+        target: "",
+        assignment: "=",
+        operand: { kind: "number", value: "0" },
       };
 
     case "jumpFragmentReturn":
@@ -930,6 +940,15 @@ function ActionCard({
         </>
       ) : null}
 
+      {action.type === "editVariable" ? (
+        <VariableActionField
+          action={action}
+          index={index}
+          tokens={tokens}
+          onChange={onReplace}
+        />
+      ) : null}
+
       {action.type === "continueStory" ? (
         <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
           关闭场景交互并解除「打开场景交互」阻塞，剧本从下一节点继续。
@@ -1079,7 +1098,7 @@ export function ActionListField({
             color: tokens.textMuted,
           }}
         >
-          暂无动作。点击「添加」配置打开场景 / 给予物品 / 跳转片段。
+          暂无动作。点击「添加」配置场景、物品、变量或剧情动作。
         </chakra.p>
       ) : (
         <chakra.div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

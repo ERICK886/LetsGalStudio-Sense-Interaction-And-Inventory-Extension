@@ -262,6 +262,16 @@ function normalizeToastStyle(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+/** 规范化变量动作右值，保留合法常量和游戏变量引用。 */
+function normalizeSceneVariableOperand(raw: unknown): Extract<SceneAction, { type: "editVariable" }>["operand"] {
+  if (!raw || typeof raw !== "object") return { kind: "number", value: "0" };
+  const obj = raw as Record<string, unknown>;
+  const kind = ["number", "string", "boolean", "variable"].includes(String(obj.kind))
+    ? obj.kind as "number" | "string" | "boolean" | "variable"
+    : "number";
+  return { kind, value: typeof obj.value === "string" ? obj.value : "0" };
+}
+
 /**
  * 规范化单条场景动作。
  *
@@ -342,6 +352,29 @@ function normalizeSceneAction(raw: unknown): SceneAction | null {
         itemId: typeof obj.itemId === "string" ? obj.itemId : "",
         amount: normalizeGiveItemAmount(obj.amount),
       };
+    }
+
+    case "editVariable": {
+      const operand = normalizeSceneVariableOperand(obj.operand);
+      const assignment = ["=", "+=", "-=", "*=", "/="].includes(String(obj.assignment))
+        ? obj.assignment as Extract<SceneAction, { type: "editVariable" }>["assignment"]
+        : "=";
+      const action: Extract<SceneAction, { type: "editVariable" }> = {
+        type: "editVariable",
+        target: typeof obj.target === "string" ? obj.target : "",
+        assignment,
+        operand,
+      };
+      if (obj.binary && typeof obj.binary === "object") {
+        const binary = obj.binary as Record<string, unknown>;
+        if (["+", "-", "*", "/"].includes(String(binary.operator))) {
+          action.binary = {
+            operator: binary.operator as NonNullable<typeof action.binary>["operator"],
+            operand: normalizeSceneVariableOperand(binary.operand),
+          };
+        }
+      }
+      return action;
     }
 
     case "continueStory":

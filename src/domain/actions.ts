@@ -6,7 +6,7 @@
  *
  * 场景动作链执行器：按序调用 ActionRuntime，单步失败 warn 后继续；
  * 例外：removeItem 失败则中心提示并中断后续动作。
- * 支持 openScene / giveItem / removeItem / 跳转片段 / continueStory。
+ * 支持 openScene / giveItem / removeItem / editVariable / 跳转片段 / continueStory。
  */
 import { logDebug, logInfo, logWarn } from "../shared/logger";
 import type { ItemToastOverrides } from "./item-toast-config";
@@ -53,6 +53,9 @@ export interface ActionRuntime {
   ):
     | { ok: true }
     | { ok: false; displayName: string; reason: string };
+
+  /** 按作者配置修改 Studio 游戏变量。 */
+  editVariable(action: Extract<SceneAction, { type: "editVariable" }>): void;
 
   /**
    * 入队一条获得物品轻提示。
@@ -418,6 +421,10 @@ async function runSceneAction(
 
       case "removeItem":
         return runRemoveItemAction(action, hotspotId, runtime);
+
+      case "editVariable":
+        runtime.editVariable(action);
+        return "ok";
 
       case "jumpFragmentReturn":
         await runJumpFragmentReturnAction(action, runtime);

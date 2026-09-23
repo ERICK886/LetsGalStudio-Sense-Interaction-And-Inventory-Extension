@@ -129,6 +129,15 @@ export type ToastPlacement =
   | "right"
   | "center";
 
+/** 场景变量动作的右值：常量或当前游戏变量。 */
+export interface SceneVariableOperand {
+  kind: "number" | "string" | "boolean" | "variable";
+  value: string;
+}
+
+export type SceneVariableAssignment = "=" | "+=" | "-=" | "*=" | "/=";
+export type SceneVariableBinaryOperator = "+" | "-" | "*" | "/";
+
 export type SceneAction =
   | { type: "none" }
   | {
@@ -156,6 +165,17 @@ export type SceneAction =
       type: "removeItem";
       itemId: string;
       amount: number;
+    }
+  /** 修改 Studio 游戏变量；先计算右值，再按赋值运算符写回。 */
+  | {
+      type: "editVariable";
+      target: string;
+      assignment: SceneVariableAssignment;
+      operand: SceneVariableOperand;
+      binary?: {
+        operator: SceneVariableBinaryOperator;
+        operand: SceneVariableOperand;
+      };
     }
   /** 跳转剧本片段（可跳回）：flow.callFragment */
   | {
