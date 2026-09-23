@@ -40,6 +40,7 @@ import { BACKPACK_HUD_MODULE_ID } from "../shared/module-ids";
 export class BackpackHudExtension extends Extension<BackpackHudAppProps> {
   static settings = settings((s) => ({
     inventoryHudJson: s.string("物品栏外观 JSON").default(""),
+    autoShowHud: s.boolean("场景交互时自动显示背包快捷栏").default(true),
     itemToastJson: s.string("获得物品提示 JSON").default(""),
   }));
 

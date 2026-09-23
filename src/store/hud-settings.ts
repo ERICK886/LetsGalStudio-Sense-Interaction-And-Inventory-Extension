@@ -19,6 +19,14 @@ import { logError } from "../shared/logger";
 /** 快捷栏 HUD 外观 JSON */
 export const INVENTORY_HUD_JSON_KEY = "inventoryHudJson";
 
+/** 场景交互打开时是否自动显示背包快捷栏；旧项目默认启用。 */
+export const AUTO_SHOW_HUD_KEY = "autoShowHud";
+
+/** 缺少开关字段的旧项目沿用原有自动显示行为。 */
+export function readAutoShowHud(ctx: ExtensionContext): boolean {
+  return readHudSetting(ctx, AUTO_SHOW_HUD_KEY) !== false;
+}
+
 /** 全屏背包布局 JSON */
 export const BACKPACK_SCREEN_JSON_KEY = "backpackScreenJson";
 

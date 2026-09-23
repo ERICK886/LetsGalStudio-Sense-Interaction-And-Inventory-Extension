@@ -30,6 +30,7 @@ import { IconLabel } from "../shared/fa-icon";
 import { bindInventoryPersistence } from "../store/inventory-session";
 import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { useScenesLibrary } from "../store/scenes-persistence";
+import { useAutoShowHud } from "../store/use-auto-show-hud";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { useSaveValue } from "../store/use-save-value";
 import {
@@ -144,6 +145,7 @@ export function PreviewShell({
 }: PreviewShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const autoShowHud = useAutoShowHud(ctx);
 
   const [library] = useScenesLibrary();
   const [currentSceneId] = useSaveValue(save, "currentSceneId", ctx);
@@ -188,14 +190,18 @@ export function PreviewShell({
 
     (async () => {
       try {
-        const [runtimeMod, hudMod] = await Promise.all([
-          import("../runtime/runtime-shell"),
-          import("../backpack/hud-shell"),
-        ]);
-
+        const runtimeMod = await import("../runtime/runtime-shell");
         if (!cancelled) {
           setRuntimeShellComp(() => runtimeMod.RuntimeShell);
-          setHudShellComp(() => hudMod.HudShell);
+        }
+
+        if (autoShowHud) {
+          const hudMod = await import("../backpack/hud-shell");
+          if (!cancelled) {
+            setHudShellComp(() => hudMod.HudShell);
+          }
+        } else if (!cancelled) {
+          setHudShellComp(null);
         }
       } catch (err) {
         console.warn("[editor-preview]", "加载 RuntimeShell / HudShell 失败", err);
@@ -205,7 +211,7 @@ export function PreviewShell({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [autoShowHud]);
 
   /**
    * 编辑器预览无阻塞剧情会话；「继续剧情」空操作。
@@ -322,7 +328,7 @@ export function PreviewShell({
           />
         ) : null}
 
-        {HudShellComp && !hudCovered ? (
+        {autoShowHud && HudShellComp && !hudCovered ? (
           <div
             data-testid="preview-hud-overlay"
             style={{

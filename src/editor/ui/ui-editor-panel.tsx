@@ -65,11 +65,13 @@ import { FormRenderer } from "../../schema/form-renderer";
 import { createHistory } from "../../store/history";
 import {
   BACKPACK_SCREEN_JSON_KEY,
+  AUTO_SHOW_HUD_KEY,
   INVENTORY_HUD_JSON_KEY,
   readHudSetting,
   writeHudSetting,
 } from "../../store/hud-settings";
 import { notifySettingsField } from "../../store/settings-sync";
+import { useAutoShowHud } from "../../store/use-auto-show-hud";
 import {
   notifyUiHistoryTick,
   registerUiHistoryBridge,
@@ -340,6 +342,7 @@ function applyBagAlign(
 export function UiEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
+  const autoShowHud = useAutoShowHud(ctx);
   const { size: designSize } = useDesignSize();
 
   const [sub, setSub] = useState<UiSubSection>("hud");
@@ -386,6 +389,14 @@ export function UiEditorPanel(): React.ReactElement {
       notifyUiHistoryTick();
     }
   }, [bag]);
+
+  const handleAutoShowHudChange = useCallback(
+    (enabled: boolean): void => {
+      writeHudSetting(ctx, AUTO_SHOW_HUD_KEY, enabled);
+      notifySettingsField(AUTO_SHOW_HUD_KEY);
+    },
+    [ctx],
+  );
 
   const writeHudOnly = useCallback(
     (normalized: InventoryHudConfig): void => {
@@ -984,6 +995,41 @@ export function UiEditorPanel(): React.ReactElement {
         {tabBtn("hud", "快捷栏 HUD", "grip")}
         {tabBtn("backpack", "全屏背包", "bag-shopping")}
         {tabBtn("sceneUi", "场景 UI", "clapperboard")}
+        {sub === "hud" ? (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              marginTop: 12,
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: tokens.textPrimary,
+                fontSize: FONT_SIZE_DEFAULT,
+                cursor: "pointer",
+              }}
+            >
+              <chakra.input
+                type="checkbox"
+                data-testid="ui-editor-auto-show-hud"
+                checked={autoShowHud}
+                onChange={(event) =>
+                  handleAutoShowHudChange(event.target.checked)
+                }
+                style={{ width: 16, height: 16, margin: 0, accentColor: tokens.accent }}
+              />
+              自动显示背包快捷栏
+            </label>
+            <span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
+              关闭后场景交互不再自动显示；剧本方法仍可手动打开。
+            </span>
+          </div>
+        ) : null}
         <p
           style={{
             marginTop: 12,

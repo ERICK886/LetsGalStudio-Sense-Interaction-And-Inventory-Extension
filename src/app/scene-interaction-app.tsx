@@ -47,6 +47,7 @@ import {
 } from "../store/hud-ui-show";
 import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import { useAutoShowHud } from "../store/use-auto-show-hud";
 import { bindInventoryPersistence } from "../store/inventory-session";
 import { setMethodOpenSceneTarget } from "../store/open-scene-target";
 import { setReturnButtonVisibleOverride } from "../store/return-button-session";
@@ -187,6 +188,7 @@ function SceneInteractionAppContent({
   const isPlayerRuntime =
     isPlayerModal || playerPresentation === true;
 
+  const autoShowHud = useAutoShowHud(ctx);
   const themeRaw = readAuthorSetting(ctx, "theme");
   const themeMode: ThemeMode = themeRaw === "light" ? "light" : "dark";
 
@@ -266,7 +268,7 @@ function SceneInteractionAppContent({
    * Studio 程序预览勿 ui.show，以免顶掉当前容器导致场景消失。
    */
   useEffect(() => {
-    if (!isPlayerRuntime) {
+    if (!isPlayerRuntime || !autoShowHud) {
       return;
     }
 
@@ -309,7 +311,7 @@ function SceneInteractionAppContent({
         // 忽略
       });
     };
-  }, [ctx, isPlayerRuntime]);
+  }, [ctx, isPlayerRuntime, autoShowHud]);
 
   const handlePlayerRequestClose = useCallback(async (): Promise<void> => {
     const sessionPending = isPlayerSessionPending();
@@ -408,7 +410,7 @@ function SceneInteractionAppContent({
         /**
          * 程序预览：同树内嵌 HUD（设计绝对坐标），避免 ui.show 顶掉场景。
          */
-        if (!isPlayerRuntime) {
+        if (!isPlayerRuntime && autoShowHud) {
           const hudMod = await import("../backpack/hud-shell");
 
           if (!cancelled) {
@@ -433,7 +435,7 @@ function SceneInteractionAppContent({
     return () => {
       cancelled = true;
     };
-  }, [isPlayerModal, isPlayerRuntime]);
+  }, [isPlayerModal, isPlayerRuntime, autoShowHud]);
 
   const shellReady = isPlayerModal
     ? PlayerShellComp != null
@@ -485,7 +487,7 @@ function SceneInteractionAppContent({
           />
         ) : null}
 
-        {!isPlayerRuntime && HudShellComp && !hudCovered ? (
+        {!isPlayerRuntime && autoShowHud && HudShellComp && !hudCovered ? (
           <div
             data-testid="scene-interaction-preview-hud"
             style={{
