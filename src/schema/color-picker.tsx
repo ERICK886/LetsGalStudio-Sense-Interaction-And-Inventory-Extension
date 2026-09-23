@@ -2,7 +2,7 @@ import {
   Box, ColorPicker as ChakraColorPicker, Flex, Input, NativeSelect,
   Portal, Text, parseColor,
 } from "@chakra-ui/react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../theme/theme-provider";
 import type { ThemeTokens } from "../theme/tokens";
 
@@ -77,6 +77,15 @@ function serializeColor(color: PickerColor, allowAlpha: boolean): string {
   }, allowAlpha);
 }
 
+/** 缩放的 Studio 预览中，弹层须挂在编辑器根节点内。 */
+function useEditorPortal() {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setContainer(document.querySelector<HTMLElement>("[data-extension-editor-root]"));
+  }, []);
+  return useMemo(() => ({ current: container }), [container]);
+}
+
 /** 使用与 light-engine 公共颜色字段相同的 Chakra ColorPicker 交互结构。 */
 export function ColorPicker({
   value, onChange, allowAlpha = false, label, disabled = false,
@@ -92,6 +101,7 @@ export function ColorPicker({
   const [hexFocused, setHexFocused] = useState(false);
   const pointerEditing = useRef(false);
   const cancelHexBlur = useRef(false);
+  const portalRef = useEditorPortal();
 
   useEffect(() => {
     if (open && pointerEditing.current) return;
@@ -137,7 +147,7 @@ export function ColorPicker({
         format={mode}
         size="xs"
         disabled={disabled}
-        positioning={{ strategy: "fixed", placement: "bottom-start", flip: true, slide: true }}
+        positioning={{ strategy: "absolute", placement: "bottom-start", flip: true, slide: true }}
         onOpenChange={(details) => setOpen(details.open)}
         onValueChange={(details) => updateColor(details.value)}
         onValueChangeEnd={() => finishPointer()}
@@ -202,7 +212,7 @@ export function ColorPicker({
             }}
           />
         </ChakraColorPicker.Control>
-        <Portal>
+        <Portal container={portalRef}>
           <ChakraColorPicker.Positioner zIndex={10000}>
             <ChakraColorPicker.Content
               aria-label={(ariaLabel ?? "颜色") + "面板"}

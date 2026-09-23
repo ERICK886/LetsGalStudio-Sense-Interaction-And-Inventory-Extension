@@ -1,6 +1,6 @@
 import { Portal, Select, createListCollection } from "@chakra-ui/react";
 import * as React from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../../theme/theme-provider";
 
 interface Option {
@@ -82,6 +82,13 @@ export function EditorSelect({
   const selectedValue = value === "" && options.some((option) => option.value === "")
     ? EMPTY_VALUE : value;
   const selected = collection.has(selectedValue) ? [selectedValue] : [];
+  // Studio 的扩展预览舞台会缩放；定位层须与触发器留在同一坐标系。
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setContainer(document.querySelector<HTMLElement>("[data-extension-editor-root]"));
+  }, []);
+  const portalRef = useMemo(() => ({ current: container }), [container]);
+
   return (
     <Select.Root
       collection={collection}
@@ -89,7 +96,7 @@ export function EditorSelect({
       disabled={disabled}
       lazyMount
       unmountOnExit
-      positioning={{ strategy: "fixed", placement: "bottom-start", sameWidth: true }}
+      positioning={{ strategy: "absolute", placement: "bottom-start", sameWidth: true }}
       w={style?.width ?? "100%"}
       flex={style?.flex}
       minW={style?.minWidth}
@@ -128,7 +135,7 @@ export function EditorSelect({
           <Select.Indicator color={tokens.textMuted} />
         </Select.Trigger>
       </Select.Control>
-      <Portal>
+      <Portal container={portalRef}>
         <Select.Positioner>
           <Select.Content
             zIndex={10000}
