@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * resize-handles.tsx
  * 作者: 池水三两升
@@ -344,14 +345,14 @@ export function ResizeHandles({
         };
 
   return (
-    <div
+    <chakra.div
       ref={frameRef}
       data-testid="resize-handles"
       data-layout={layout}
       style={frameStyle}
     >
       {HANDLES.map((id) => (
-        <div
+        <chakra.div
           key={id}
           data-testid={`resize-handle-${id}`}
           data-handle={id}
@@ -362,6 +363,6 @@ export function ResizeHandles({
           onPointerCancel={onPointerUp}
         />
       ))}
-    </div>
+    </chakra.div>
   );
 }

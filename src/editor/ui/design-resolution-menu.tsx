@@ -118,7 +118,7 @@ export function DesignResolutionMenu({
   };
 
   return (
-    <div ref={rootRef} style={{ position: "relative" }}>
+    <chakra.div ref={rootRef} style={{ position: "relative" }}>
       <chakra.button
         type="button"
         data-testid="design-resolution-trigger"
@@ -132,7 +132,7 @@ export function DesignResolutionMenu({
       </chakra.button>
 
       {open ? (
-        <div
+        <chakra.div
           role="listbox"
           data-testid="design-resolution-menu"
           style={{
@@ -213,12 +213,12 @@ export function DesignResolutionMenu({
           >
             <IconLabel icon="sliders">自定义…</IconLabel>
           </chakra.button>
-        </div>
+        </chakra.div>
       ) : null}
 
       {customOpen ? (
         <>
-          <div
+          <chakra.div
             data-testid="design-resolution-custom-backdrop"
             onClick={() => setCustomOpen(false)}
             style={{
@@ -228,7 +228,7 @@ export function DesignResolutionMenu({
               background: "rgba(0,0,0,0.45)",
             }}
           />
-          <div
+          <chakra.div
             role="dialog"
             aria-labelledby={titleId}
             style={{
@@ -246,17 +246,17 @@ export function DesignResolutionMenu({
               boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
             }}
           >
-            <div
+            <chakra.div
               id={titleId}
               style={{ fontWeight: 650, marginBottom: 14, fontSize: 14 }}
             >
               自定义设计分辨率
-            </div>
-            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-              <label style={{ flex: 1, fontSize: FONT_SIZE_DEFAULT }}>
-                <div style={{ marginBottom: 4, color: tokens.textMuted }}>
+            </chakra.div>
+            <chakra.div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+              <chakra.label style={{ flex: 1, fontSize: FONT_SIZE_DEFAULT }}>
+                <chakra.div style={{ marginBottom: 4, color: tokens.textMuted }}>
                   宽（{DESIGN_SIZE_MIN}–{DESIGN_SIZE_MAX}）
-                </div>
+                </chakra.div>
                 <chakra.input
                   data-testid="design-resolution-custom-width"
                   type="number"
@@ -273,11 +273,11 @@ export function DesignResolutionMenu({
                     fontFamily: "inherit",
                   }}
                 />
-              </label>
-              <label style={{ flex: 1, fontSize: FONT_SIZE_DEFAULT }}>
-                <div style={{ marginBottom: 4, color: tokens.textMuted }}>
+              </chakra.label>
+              <chakra.label style={{ flex: 1, fontSize: FONT_SIZE_DEFAULT }}>
+                <chakra.div style={{ marginBottom: 4, color: tokens.textMuted }}>
                   高（{DESIGN_SIZE_MIN}–{DESIGN_SIZE_MAX}）
-                </div>
+                </chakra.div>
                 <chakra.input
                   data-testid="design-resolution-custom-height"
                   type="number"
@@ -294,9 +294,9 @@ export function DesignResolutionMenu({
                     fontFamily: "inherit",
                   }}
                 />
-              </label>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              </chakra.label>
+            </chakra.div>
+            <chakra.div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <chakra.button
                 type="button"
                 onClick={() => setCustomOpen(false)}
@@ -317,10 +317,10 @@ export function DesignResolutionMenu({
               >
                 保存
               </chakra.button>
-            </div>
-          </div>
+            </chakra.div>
+          </chakra.div>
         </>
       ) : null}
-    </div>
+    </chakra.div>
   );
 }

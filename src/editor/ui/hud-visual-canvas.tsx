@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * hud-visual-canvas.tsx
  * 作者: 池水三两升
@@ -714,7 +715,7 @@ export function HudVisualCanvas({
   const slotBoxCss = applyUiBoxStyle(layout.slotStyle);
 
   return (
-    <div
+    <chakra.div
       data-testid="hud-visual-canvas"
       style={{
         display: "flex",
@@ -727,7 +728,7 @@ export function HudVisualCanvas({
         background: tokens.bgSunken,
       }}
     >
-      <div
+      <chakra.div
         style={{
           width: 168,
           flexShrink: 0,
@@ -740,9 +741,9 @@ export function HudVisualCanvas({
           onSelect={(id, { shiftKey }) => onSelectNode(id, shiftKey)}
           onReorder={handleReorderNodes}
         />
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         ref={hostRef}
         data-testid="hud-visual-host"
         style={{
@@ -755,7 +756,7 @@ export function HudVisualCanvas({
         }}
       >
         {hostSize.w > 0 && hostSize.h > 0 ? (
-          <div
+          <chakra.div
             data-testid="hud-visual-frame"
             style={{
               position: "absolute",
@@ -767,7 +768,7 @@ export function HudVisualCanvas({
               overflow: "hidden",
             }}
           >
-            <div
+            <chakra.div
               data-testid="hud-visual-stage"
               onPointerDown={onStagePointerDown}
               style={{
@@ -782,7 +783,7 @@ export function HudVisualCanvas({
                   "linear-gradient(160deg, #0c1218 0%, #151c24 50%, #0a1016 100%)",
               }}
             >
-              <div
+              <chakra.div
                 style={{
                   position: "absolute",
                   left: 16,
@@ -794,13 +795,13 @@ export function HudVisualCanvas({
                 }}
               >
                 HUD · 方向键微调 · Shift+10px · Shift+多选 · Esc 取消
-              </div>
+              </chakra.div>
 
               {/*
                 槽组透明 hit 层：位于各槽之下，覆盖 slotsBoundingRect，
                 点击槽间隙亦可选中 / 拖拽 quickbarRoot。
               */}
-              <div
+              <chakra.div
                 data-testid="hud-visual-slots-hit"
                 onPointerDown={beginDragQuickbar}
                 style={{
@@ -819,7 +820,7 @@ export function HudVisualCanvas({
               />
 
               {layout.slots.map((slot, index) => (
-                <div
+                <chakra.div
                   key={`slot-${index}`}
                   data-testid="hud-visual-slot"
                   data-slot-index={index}
@@ -924,10 +925,10 @@ export function HudVisualCanvas({
                   />
                 );
               })}
-            </div>
-          </div>
+            </chakra.div>
+          </chakra.div>
         ) : null}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

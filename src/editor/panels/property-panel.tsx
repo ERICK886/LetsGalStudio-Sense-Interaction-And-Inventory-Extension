@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * property-panel.tsx
  * 作者: 池水三两升
@@ -28,6 +29,7 @@ import type {
 import { ActionListField } from "../../schema/action-list-field";
 import { FormRenderer } from "../../schema/form-renderer";
 import { hotspotFields } from "../../schema/hotspot-schema";
+import { HotspotConditionEditor } from "./hotspot-condition-editor";
 import { inventoryHudGlobalFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
 import {
@@ -274,8 +276,8 @@ export function PropertyPanel({
   );
 
   return (
-    <div data-testid="property-panel" style={panelShellStyle(tokens)}>
-      <div
+    <chakra.div data-testid="property-panel" style={panelShellStyle(tokens)}>
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -284,7 +286,7 @@ export function PropertyPanel({
           flexShrink: 0,
         }}
       >
-        <span
+        <chakra.span
           style={{
             fontSize: FONT_SIZE_TITLE,
             fontWeight: 650,
@@ -292,10 +294,10 @@ export function PropertyPanel({
           }}
         >
           {panelTitle}
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           overflowY: "auto",
@@ -304,8 +306,8 @@ export function PropertyPanel({
         }}
       >
         {scene === null && (
-          <div data-testid="property-panel-hud-editor">
-            <p
+          <chakra.div data-testid="property-panel-hud-editor">
+            <chakra.p
               style={{
                 margin: "0 0 12px",
                 color: tokens.textMuted,
@@ -314,7 +316,7 @@ export function PropertyPanel({
               }}
             >
               未选场景时可编辑快捷栏全局外观（强调色等）。节点位置与样式请到左侧「UI」分区在画布中选中后编辑。也可从左侧选择场景编辑场景属性。
-            </p>
+            </chakra.p>
             <FormRenderer
               schema={inventoryHudGlobalFields()}
               value={hudFormValue as InventoryHudConfig & Record<string, unknown>}
@@ -322,7 +324,7 @@ export function PropertyPanel({
                 handleHudChange(next as InventoryHudConfig);
               }}
             />
-          </div>
+          </chakra.div>
         )}
 
         {formScene !== null && formHotspot === null && (
@@ -344,6 +346,12 @@ export function PropertyPanel({
                 handleHotspotChange(next as HotspotElement);
               }}
             />
+            <HotspotConditionEditor
+              value={formHotspot.visibleIf}
+              onChange={(visibleIf) => {
+                handleHotspotChange({ ...formHotspot, visibleIf });
+              }}
+            />
             <ActionListField
               value={formHotspot.actions}
               onChange={(actions) => {
@@ -354,7 +362,7 @@ export function PropertyPanel({
             />
           </>
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

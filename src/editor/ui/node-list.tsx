@@ -176,7 +176,7 @@ function SortableRow({
           }}
         />
       ) : (
-        <span style={{ width: 12, flexShrink: 0, display: "inline-block" }} />
+        <chakra.span style={{ width: 12, flexShrink: 0, display: "inline-block" }} />
       )}
       {item.icon ? (
         <FaIcon
@@ -189,7 +189,7 @@ function SortableRow({
           }}
         />
       ) : null}
-      <span
+      <chakra.span
         style={{
           flex: 1,
           overflow: "hidden",
@@ -198,7 +198,7 @@ function SortableRow({
         }}
       >
         {item.label}
-      </span>
+      </chakra.span>
     </chakra.button>
   );
 }
@@ -261,7 +261,7 @@ export function NodeList({
 
   const listBody =
     items.length === 0 ? (
-      <div
+      <chakra.div
         data-testid="node-list-empty"
         style={{
           padding: 16,
@@ -271,7 +271,7 @@ export function NodeList({
         }}
       >
         暂无节点
-      </div>
+      </chakra.div>
     ) : (
       items.map((item) => (
         <SortableRow
@@ -285,7 +285,7 @@ export function NodeList({
     );
 
   return (
-    <div
+    <chakra.div
       data-testid="node-list"
       data-dragging={activeId ? "true" : "false"}
       style={{
@@ -298,7 +298,7 @@ export function NodeList({
         borderRight: `1px solid ${tokens.border}`,
       }}
     >
-      <div
+      <chakra.div
         style={{
           padding: "10px 12px",
           borderBottom: `1px solid ${tokens.border}`,
@@ -308,9 +308,9 @@ export function NodeList({
         }}
       >
         节点
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           padding: "4px 12px 8px",
           fontSize: 11,
@@ -320,9 +320,9 @@ export function NodeList({
         }}
       >
         {canReorder ? "拖拽排序叠放；Shift+单击多选" : "Shift+单击多选"}
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           minHeight: 0,
@@ -348,7 +348,7 @@ export function NodeList({
         ) : (
           listBody
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

@@ -163,8 +163,8 @@ export function FragmentSelectField(
     !options.some((opt) => opt.fragmentId === fragmentId);
 
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 11, color: tokens.textMuted }}>目标片段</span>
+    <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>目标片段</chakra.span>
       <chakra.select
         aria-label={`动作 ${index + 1} 目标片段`}
         data-testid={`action-fragment-${index}`}
@@ -181,20 +181,20 @@ export function FragmentSelectField(
           );
         }}
       >
-        <option value="">
+        <chakra.option value="">
           {loading ? "（加载片段列表…）" : "（请选择片段）"}
-        </option>
+        </chakra.option>
         {missingSelected ? (
-          <option value={fragmentId}>
+          <chakra.option value={fragmentId}>
             {fragmentId}（未在工程中找到）
-          </option>
+          </chakra.option>
         ) : null}
         {options.map((opt) => (
-          <option key={`${opt.chapterId}:${opt.fragmentId}`} value={opt.fragmentId}>
+          <chakra.option key={`${opt.chapterId}:${opt.fragmentId}`} value={opt.fragmentId}>
             {opt.label}
-          </option>
+          </chakra.option>
         ))}
       </chakra.select>
-    </label>
+    </chakra.label>
   );
 }

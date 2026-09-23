@@ -112,7 +112,7 @@ function FieldLabel({
   htmlFor?: string;
 }): React.ReactElement {
   return (
-    <label
+    <chakra.label
       htmlFor={htmlFor}
       style={{
         fontSize: FONT_SIZE_DEFAULT,
@@ -121,7 +121,7 @@ function FieldLabel({
       }}
     >
       {label}
-    </label>
+    </chakra.label>
   );
 }
 
@@ -144,9 +144,9 @@ function FieldHint({
   }
 
   return (
-    <span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.35 }}>
+    <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.35 }}>
       {text}
-    </span>
+    </chakra.span>
   );
 }
 
@@ -182,7 +182,7 @@ function renderStringField<T extends Record<string, unknown>>(
   };
 
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+    <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       {field.multiline ? (
         <chakra.textarea {...common} rows={3} />
@@ -190,7 +190,7 @@ function renderStringField<T extends Record<string, unknown>>(
         <chakra.input type="text" {...common} />
       )}
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -284,7 +284,7 @@ function SchemaNumberField<T extends Record<string, unknown>>(props: {
   };
 
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+    <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       <chakra.input
         id={id}
@@ -313,7 +313,7 @@ function SchemaNumberField<T extends Record<string, unknown>>(props: {
         }}
       />
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -362,7 +362,7 @@ function renderBooleanField<T extends Record<string, unknown>>(
   const id = `field-${field.key}`;
 
   return (
-    <div
+    <chakra.div
       style={{
         ...fieldWrapStyle(),
         flexDirection: "row",
@@ -381,7 +381,7 @@ function renderBooleanField<T extends Record<string, unknown>>(
       />
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -405,7 +405,7 @@ function renderEnumField<T extends Record<string, unknown>>(
   const id = `field-${field.key}`;
 
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+    <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       <chakra.select
         id={id}
@@ -416,13 +416,13 @@ function renderEnumField<T extends Record<string, unknown>>(
         }}
       >
         {field.options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <chakra.option key={opt.value} value={opt.value}>
             {opt.label}
-          </option>
+          </chakra.option>
         ))}
       </chakra.select>
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -461,7 +461,7 @@ function AssetFieldThumb({
   }
 
   return (
-    <img
+    <chakra.img
       src={url}
       alt=""
       style={{
@@ -499,7 +499,7 @@ function renderAssetField<T extends Record<string, unknown>>(
     field.showPreview !== false && (field.accept ?? "image") === "image";
 
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+    <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       <chakra.input
         id={id}
@@ -515,7 +515,7 @@ function renderAssetField<T extends Record<string, unknown>>(
         <AssetFieldThumb uri={str} tokens={tokens} />
       ) : null}
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -538,7 +538,7 @@ function renderColorField<T extends Record<string, unknown>>(
   const stored = typeof raw === "string" ? raw : "";
 
   return (
-    <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
+    <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={`field-${field.key}`} />
       <ColorPicker
         value={stored}
@@ -551,7 +551,7 @@ function renderColorField<T extends Record<string, unknown>>(
         }}
       />
       <FieldHint text={field.description} tokens={tokens} />
-    </div>
+    </chakra.div>
   );
 }
 
@@ -571,7 +571,7 @@ function renderSectionField<T extends Record<string, unknown>>(
   tokens: ThemeTokens,
 ): React.ReactElement {
   return (
-    <section
+    <chakra.section
       data-testid={`schema-section-${field.id}`}
       style={{
         marginBottom: 14,
@@ -579,7 +579,7 @@ function renderSectionField<T extends Record<string, unknown>>(
         borderBottom: `1px solid ${tokens.border}`,
       }}
     >
-      <h3
+      <chakra.h3
         style={{
           margin: "0 0 8px",
           fontSize: FONT_SIZE_TITLE,
@@ -588,9 +588,9 @@ function renderSectionField<T extends Record<string, unknown>>(
         }}
       >
         {field.title}
-      </h3>
+      </chakra.h3>
       {field.description ? (
-        <p
+        <chakra.p
           style={{
             margin: "0 0 8px",
             fontSize: 11,
@@ -599,10 +599,10 @@ function renderSectionField<T extends Record<string, unknown>>(
           }}
         >
           {field.description}
-        </p>
+        </chakra.p>
       ) : null}
       {renderFields(field.children, value, onChange)}
-    </section>
+    </chakra.section>
   );
 }
 
@@ -623,7 +623,7 @@ function renderGridField<T extends Record<string, unknown>>(
   const gap = field.gap ?? 8;
 
   return (
-    <div
+    <chakra.div
       data-testid={`schema-grid-${field.id}`}
       style={{
         display: "grid",
@@ -633,7 +633,7 @@ function renderGridField<T extends Record<string, unknown>>(
       }}
     >
       {renderFields(field.children, value, onChange)}
-    </div>
+    </chakra.div>
   );
 }
 
@@ -758,8 +758,8 @@ export function FormRenderer<T extends Record<string, unknown>>({
   onChange,
 }: FormRendererProps<T>): React.ReactElement {
   return (
-    <div data-testid="form-renderer" style={{ display: "block" }}>
+    <chakra.div data-testid="form-renderer" style={{ display: "block" }}>
       {renderFields(schema, value, onChange)}
-    </div>
+    </chakra.div>
   );
 }

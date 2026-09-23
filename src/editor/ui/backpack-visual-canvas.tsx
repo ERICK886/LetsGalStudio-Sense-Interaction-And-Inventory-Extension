@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * backpack-visual-canvas.tsx
  * 作者: 池水三两升
@@ -924,7 +925,7 @@ export function BackpackVisualCanvas({
   const detailPad = layout.detailPanel.padding;
 
   return (
-    <div
+    <chakra.div
       data-testid="backpack-visual-canvas"
       style={{
         display: "flex",
@@ -937,7 +938,7 @@ export function BackpackVisualCanvas({
         background: tokens.bgSunken,
       }}
     >
-      <div
+      <chakra.div
         style={{
           width: 168,
           flexShrink: 0,
@@ -950,9 +951,9 @@ export function BackpackVisualCanvas({
           onSelect={(id, { shiftKey }) => onSelectNode(id, shiftKey)}
           onReorder={handleReorderNodes}
         />
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         ref={hostRef}
         data-testid="backpack-visual-host"
         style={{
@@ -965,7 +966,7 @@ export function BackpackVisualCanvas({
         }}
       >
         {hostSize.w > 0 && hostSize.h > 0 ? (
-          <div
+          <chakra.div
             data-testid="backpack-visual-frame"
             style={{
               position: "absolute",
@@ -977,7 +978,7 @@ export function BackpackVisualCanvas({
               overflow: "hidden",
             }}
           >
-            <div
+            <chakra.div
               data-testid="backpack-visual-stage"
               onPointerDown={onStagePointerDown}
               style={{
@@ -994,7 +995,7 @@ export function BackpackVisualCanvas({
                   '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
               }}
             >
-              <div
+              <chakra.div
                 style={{
                   position: "absolute",
                   left: 16,
@@ -1007,7 +1008,7 @@ export function BackpackVisualCanvas({
                 }}
               >
                 背包 · 方向键微调 · Shift+10px · Shift+多选 · Esc 取消
-              </div>
+              </chakra.div>
               <UiOverlayLayer
                 overlays={displayConfig.overlays ?? []}
                 editorMode
@@ -1039,7 +1040,7 @@ export function BackpackVisualCanvas({
               />
 
               {/* itemGrid */}
-              <div
+              <chakra.div
                 data-testid="backpack-visual-grid"
                 onPointerDown={(event) => beginDragRect("itemGrid", event)}
                 style={{
@@ -1077,7 +1078,7 @@ export function BackpackVisualCanvas({
                     (selected ? `${accent}22` : "rgba(255,255,255,0.03)");
 
                   return (
-                    <div
+                    <chakra.div
                       key={`cell-${i}`}
                       style={{
                         aspectRatio: "1 / 1",
@@ -1094,7 +1095,7 @@ export function BackpackVisualCanvas({
                         ...(selected ? gridSelectedCss : gridCellCss),
                       }}
                     >
-                      <div
+                      <chakra.div
                         style={{
                           flex: 1,
                           minHeight: 0,
@@ -1102,7 +1103,7 @@ export function BackpackVisualCanvas({
                           placeItems: "center",
                         }}
                       >
-                        <span
+                        <chakra.span
                           aria-hidden
                           style={{
                             width: iconMaxSize,
@@ -1114,8 +1115,8 @@ export function BackpackVisualCanvas({
                             flexShrink: 0,
                           }}
                         />
-                      </div>
-                      <div
+                      </chakra.div>
+                      <chakra.div
                         style={{
                           lineHeight: 1.25,
                           textAlign: "center",
@@ -1126,14 +1127,14 @@ export function BackpackVisualCanvas({
                         }}
                       >
                         {selected ? "物品" : ""}
-                      </div>
-                    </div>
+                      </chakra.div>
+                    </chakra.div>
                   );
                 })}
-              </div>
+              </chakra.div>
 
               {/* detailPanel */}
-              <div
+              <chakra.div
                 data-testid="backpack-visual-detail"
                 onPointerDown={(event) => beginDragRect("detailPanel", event)}
                 style={{
@@ -1155,7 +1156,7 @@ export function BackpackVisualCanvas({
                   ...detailCss,
                 }}
               >
-                <div
+                <chakra.div
                   style={{
                     height: heroHeight,
                     maxHeight: "34%",
@@ -1164,48 +1165,48 @@ export function BackpackVisualCanvas({
                     ...detailHeroCss,
                   }}
                 />
-                <div
+                <chakra.div
                   style={{
                     pointerEvents: "none",
                     ...detailTitleCss,
                   }}
                 >
                   物品名称
-                </div>
-                <div
+                </chakra.div>
+                <chakra.div
                   style={{
                     pointerEvents: "none",
                     ...detailMetaCss,
                   }}
                 >
                   持有 ×1
-                </div>
-                <div
+                </chakra.div>
+                <chakra.div
                   style={{
                     pointerEvents: "none",
                     ...detailDescriptionCss,
                   }}
                 >
                   详情预览区
-                </div>
-                <div
+                </chakra.div>
+                <chakra.div
                   style={{
                     pointerEvents: "none",
                     lineHeight: 1.6,
                     ...detailIngredientsCss,
                   }}
                 >
-                  <div
+                  <chakra.div
                     style={{
                       marginBottom: 4,
                       ...detailIngredientsLabelCss,
                     }}
                   >
                     {ingredientsHeading}
-                  </div>
+                  </chakra.div>
                   原料预览 ×1
-                </div>
-              </div>
+                </chakra.div>
+              </chakra.div>
 
               {selectedNodeIds.map((nodeId) => {
                 const rect = selectionRectFor(nodeId);
@@ -1258,10 +1259,10 @@ export function BackpackVisualCanvas({
                   />
                 );
               })}
-            </div>
-          </div>
+            </chakra.div>
+          </chakra.div>
         ) : null}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

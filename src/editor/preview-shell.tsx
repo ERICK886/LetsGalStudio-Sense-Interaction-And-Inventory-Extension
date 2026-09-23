@@ -224,7 +224,7 @@ export function PreviewShell({
   }, []);
 
   return (
-    <div
+    <chakra.div
       data-testid="preview-shell"
       style={{
         width: "100%",
@@ -238,7 +238,7 @@ export function PreviewShell({
         pointerEvents: "auto",
       }}
     >
-      <header
+      <chakra.header
         data-testid="preview-top-bar"
         style={{
           display: "flex",
@@ -254,7 +254,7 @@ export function PreviewShell({
           zIndex: 2,
         }}
       >
-        <div
+        <chakra.div
           style={{
             display: "flex",
             alignItems: "center",
@@ -262,7 +262,7 @@ export function PreviewShell({
             marginRight: 4,
           }}
         >
-          <span
+          <chakra.span
             aria-hidden
             style={{
               width: 8,
@@ -272,7 +272,7 @@ export function PreviewShell({
               boxShadow: `0 0 0 3px ${tokens.accent}33`,
             }}
           />
-          <span
+          <chakra.span
             style={{
               fontSize: FONT_SIZE_TITLE,
               fontWeight: 650,
@@ -281,8 +281,8 @@ export function PreviewShell({
             }}
           >
             运行预览
-          </span>
-        </div>
+          </chakra.span>
+        </chakra.div>
 
         <chakra.button
           type="button"
@@ -293,16 +293,16 @@ export function PreviewShell({
           <IconLabel icon="pen-to-square">编辑</IconLabel>
         </chakra.button>
 
-        <div style={{ flex: 1 }} />
+        <chakra.div style={{ flex: 1 }} />
 
-        <span
+        <chakra.span
           style={{ fontSize: FONT_SIZE_DEFAULT, color: tokens.textMuted }}
         >
           {sceneTitle}
-        </span>
-      </header>
+        </chakra.span>
+      </chakra.header>
 
-      <div
+      <chakra.div
         data-testid="preview-body"
         style={{
           flex: 1,
@@ -329,7 +329,7 @@ export function PreviewShell({
         ) : null}
 
         {autoShowHud && HudShellComp && !hudCovered ? (
-          <div
+          <chakra.div
             data-testid="preview-hud-overlay"
             style={{
               position: "absolute",
@@ -339,9 +339,9 @@ export function PreviewShell({
             }}
           >
             <HudShellComp compactHost={false} />
-          </div>
+          </chakra.div>
         ) : null}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

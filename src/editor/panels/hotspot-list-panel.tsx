@@ -164,7 +164,7 @@ function SortableHotspotRow({
   } = useSortable({ id: hotspot.id });
 
   return (
-    <div
+    <chakra.div
       ref={setNodeRef}
       data-testid={`hotspot-list-row-${hotspot.id}`}
       data-dragging={isDragging ? "true" : "false"}
@@ -231,7 +231,7 @@ function SortableHotspotRow({
         }}
       >
         <IconLabel icon="location-dot" iconSize={11} />
-        <span
+        <chakra.span
           style={{
             flex: 1,
             minWidth: 0,
@@ -241,7 +241,7 @@ function SortableHotspotRow({
           }}
         >
           {hotspot.name || "（未命名）"}
-        </span>
+        </chakra.span>
       </chakra.button>
 
       <chakra.button
@@ -257,7 +257,7 @@ function SortableHotspotRow({
       >
         <IconLabel icon="trash" />
       </chakra.button>
-    </div>
+    </chakra.div>
   );
 }
 
@@ -390,7 +390,7 @@ export function HotspotListPanel({
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="hotspot-list-panel"
       style={{
         display: "flex",
@@ -402,7 +402,7 @@ export function HotspotListPanel({
         borderTop: `1px solid ${tokens.border}`,
       }}
     >
-      <div
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -412,7 +412,7 @@ export function HotspotListPanel({
           flexShrink: 0,
         }}
       >
-        <span
+        <chakra.span
           style={{
             flex: 1,
             fontSize: FONT_SIZE_TITLE,
@@ -420,7 +420,7 @@ export function HotspotListPanel({
           }}
         >
           交互点
-        </span>
+        </chakra.span>
         <chakra.button
           type="button"
           data-testid="hotspot-list-add"
@@ -436,9 +436,9 @@ export function HotspotListPanel({
             {placementActive ? "点击画布…" : "新建"}
           </IconLabel>
         </chakra.button>
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           minHeight: 0,
@@ -450,7 +450,7 @@ export function HotspotListPanel({
         }}
       >
         {scene === null ? (
-          <div
+          <chakra.div
             style={{
               padding: 16,
               color: tokens.textMuted,
@@ -459,9 +459,9 @@ export function HotspotListPanel({
             }}
           >
             请先选择场景
-          </div>
+          </chakra.div>
         ) : scene.hotspots.length === 0 ? (
-          <div
+          <chakra.div
             style={{
               padding: 16,
               color: tokens.textMuted,
@@ -470,11 +470,11 @@ export function HotspotListPanel({
             }}
           >
             暂无交互点
-          </div>
+          </chakra.div>
         ) : (
           <>
             {scene.hotspots.length > 1 ? (
-              <div
+              <chakra.div
                 data-testid="hotspot-layer-order-hint"
                 style={{
                   padding: "2px 4px 6px",
@@ -484,7 +484,7 @@ export function HotspotListPanel({
                 }}
               >
                 拖拽排序图层 · 越靠下越靠前
-              </div>
+              </chakra.div>
             ) : null}
             <DndContext
               sensors={sensors}
@@ -509,7 +509,7 @@ export function HotspotListPanel({
             </DndContext>
           </>
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

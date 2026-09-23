@@ -133,7 +133,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="hotspot-label-editor-panel"
       style={{
         display: "flex",
@@ -142,7 +142,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
         minHeight: 0,
       }}
     >
-      <main
+      <chakra.main
         data-testid="hotspot-label-preview-area"
         style={{
           flex: 1,
@@ -158,7 +158,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           padding: 24,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -166,9 +166,9 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           }}
         >
           预览
-        </div>
-        <div style={previewStyle}>交互点提示</div>
-        <p
+        </chakra.div>
+        <chakra.div style={previewStyle}>交互点提示</chakra.div>
+        <chakra.p
           style={{
             margin: 0,
             fontSize: FONT_SIZE_DEFAULT,
@@ -179,10 +179,10 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           }}
         >
           未关闭「跟随全局提示样式」的交互点将使用此外观。
-        </p>
-      </main>
+        </chakra.p>
+      </chakra.main>
 
-      <aside
+      <chakra.aside
         data-testid="hotspot-label-form-aside"
         style={{
           width: 300,
@@ -196,7 +196,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           gap: 12,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -204,7 +204,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           }}
         >
           编辑目标：全局
-        </div>
+        </chakra.div>
 
         <chakra.button
           type="button"
@@ -233,7 +233,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           value={formValue}
           onChange={handleChange}
         />
-      </aside>
-    </div>
+      </chakra.aside>
+    </chakra.div>
   );
 }

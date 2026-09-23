@@ -8,6 +8,7 @@
  */
 
 import type { HotspotElement, SceneProgress } from "./types";
+import { evaluateHotspotConditionGroup } from "./hotspot-condition";
 
 /**
  * 判断交互点在当前进度下是否应对玩家可见。
@@ -19,6 +20,7 @@ import type { HotspotElement, SceneProgress } from "./types";
  *
  * @param hotspot - 交互点定义
  * @param progress - 当前场景进度（consumed / visibility）
+ * @param getVariable - 游戏变量读取器；场景运行时由 SDK 提供
  * @returns true 表示应渲染并可交互
  *
  * @example
@@ -31,6 +33,7 @@ import type { HotspotElement, SceneProgress } from "./types";
 export function isHotspotVisible(
   hotspot: HotspotElement,
   progress: SceneProgress,
+  getVariable: (name: string) => unknown = () => undefined,
 ): boolean {
   if (hotspot.once && progress.consumed[hotspot.id] === true) {
     return false;
@@ -42,10 +45,16 @@ export function isHotspotVisible(
     visibility !== undefined &&
     Object.prototype.hasOwnProperty.call(visibility, hotspot.id)
   ) {
-    return visibility[hotspot.id] === true;
+    return (
+      visibility[hotspot.id] === true &&
+      evaluateHotspotConditionGroup(hotspot.visibleIf, getVariable)
+    );
   }
 
-  return hotspot.visibleByDefault !== false;
+  return (
+    hotspot.visibleByDefault !== false &&
+    evaluateHotspotConditionGroup(hotspot.visibleIf, getVariable)
+  );
 }
 
 /**

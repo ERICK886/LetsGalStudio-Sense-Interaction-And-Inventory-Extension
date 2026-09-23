@@ -309,18 +309,18 @@ export function RecipePropertyPanel({
     const lines = recipe![key];
 
     return (
-      <div
+      <chakra.div
         data-testid={`${testIdPrefix}-block`}
         style={{ display: "flex", flexDirection: "column", gap: 8 }}
       >
-        <div
+        <chakra.div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}
         >
-          <span
+          <chakra.span
             style={{
               flex: 1,
               fontSize: FONT_SIZE_DEFAULT,
@@ -329,7 +329,7 @@ export function RecipePropertyPanel({
             }}
           >
             {title}
-          </span>
+          </chakra.span>
           <chakra.button
             type="button"
             data-testid={`${testIdPrefix}-add`}
@@ -338,10 +338,10 @@ export function RecipePropertyPanel({
           >
             <IconLabel icon="plus">添加</IconLabel>
           </chakra.button>
-        </div>
+        </chakra.div>
 
         {lines.length === 0 ? (
-          <div
+          <chakra.div
             style={{
               color: tokens.textMuted,
               fontSize: 12,
@@ -349,10 +349,10 @@ export function RecipePropertyPanel({
             }}
           >
             暂无条目，点击「添加」
-          </div>
+          </chakra.div>
         ) : (
           lines.map((line, index) => (
-            <div
+            <chakra.div
               key={`${key}-${index}`}
               data-testid={`${testIdPrefix}-row-${index}`}
               style={{
@@ -374,18 +374,18 @@ export function RecipePropertyPanel({
                 }}
               >
                 {items.length === 0 ? (
-                  <option value="">（无物品）</option>
+                  <chakra.option value="">（无物品）</chakra.option>
                 ) : null}
                 {line.itemId &&
                 !items.some((item) => item.id === line.itemId) ? (
-                  <option value={line.itemId}>
+                  <chakra.option value={line.itemId}>
                     （缺失）{line.itemId}
-                  </option>
+                  </chakra.option>
                 ) : null}
                 {items.map((item) => (
-                  <option key={item.id} value={item.id}>
+                  <chakra.option key={item.id} value={item.id}>
                     {item.name || item.id}
-                  </option>
+                  </chakra.option>
                 ))}
               </chakra.select>
               <DeferredNumberInput
@@ -415,16 +415,16 @@ export function RecipePropertyPanel({
               >
                 <IconLabel icon="trash" />
               </chakra.button>
-            </div>
+            </chakra.div>
           ))
         )}
-      </div>
+      </chakra.div>
     );
   };
 
   return (
-    <div data-testid="recipe-property-panel" style={panelShellStyle(tokens)}>
-      <div
+    <chakra.div data-testid="recipe-property-panel" style={panelShellStyle(tokens)}>
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -433,7 +433,7 @@ export function RecipePropertyPanel({
           flexShrink: 0,
         }}
       >
-        <span
+        <chakra.span
           style={{
             fontSize: FONT_SIZE_TITLE,
             fontWeight: 650,
@@ -441,10 +441,10 @@ export function RecipePropertyPanel({
           }}
         >
           配方属性
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           overflowY: "auto",
@@ -453,7 +453,7 @@ export function RecipePropertyPanel({
         }}
       >
         {recipe === null ? (
-          <div
+          <chakra.div
             data-testid="recipe-property-panel-empty"
             style={{
               display: "flex",
@@ -467,17 +467,17 @@ export function RecipePropertyPanel({
             }}
           >
             从左侧新建或选择配方后，可在此编辑属性。
-          </div>
+          </chakra.div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <label
+          <chakra.div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <chakra.label
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: 6,
               }}
             >
-              <span
+              <chakra.span
                 style={{
                   fontSize: 12,
                   color: tokens.textMuted,
@@ -485,7 +485,7 @@ export function RecipePropertyPanel({
                 }}
               >
                 名称
-              </span>
+              </chakra.span>
               <chakra.input
                 data-testid="recipe-property-name"
                 type="text"
@@ -493,16 +493,16 @@ export function RecipePropertyPanel({
                 onChange={(e) => handleNameChange(e.target.value)}
                 style={fieldInputStyle(tokens)}
               />
-            </label>
+            </chakra.label>
 
-            <label
+            <chakra.label
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: 6,
               }}
             >
-              <span
+              <chakra.span
                 style={{
                   fontSize: 12,
                   color: tokens.textMuted,
@@ -510,7 +510,7 @@ export function RecipePropertyPanel({
                 }}
               >
                 描述
-              </span>
+              </chakra.span>
               <chakra.textarea
                 data-testid="recipe-property-description"
                 value={recipe.description ?? ""}
@@ -522,13 +522,13 @@ export function RecipePropertyPanel({
                   minHeight: 64,
                 }}
               />
-            </label>
+            </chakra.label>
 
             {renderLinesBlock("ingredients", "原料", "recipe-ingredient")}
             {renderLinesBlock("products", "产物", "recipe-product")}
-          </div>
+          </chakra.div>
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

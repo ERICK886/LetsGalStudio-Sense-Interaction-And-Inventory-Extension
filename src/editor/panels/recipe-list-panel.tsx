@@ -201,7 +201,7 @@ export function RecipeListPanel({
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="recipe-list-panel"
       style={{
         display: "flex",
@@ -212,7 +212,7 @@ export function RecipeListPanel({
         color: tokens.textPrimary,
       }}
     >
-      <div
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -222,7 +222,7 @@ export function RecipeListPanel({
           flexShrink: 0,
         }}
       >
-        <span
+        <chakra.span
           style={{
             flex: 1,
             fontSize: FONT_SIZE_TITLE,
@@ -230,7 +230,7 @@ export function RecipeListPanel({
           }}
         >
           配方
-        </span>
+        </chakra.span>
         <chakra.button
           type="button"
           data-testid="recipe-list-add"
@@ -239,9 +239,9 @@ export function RecipeListPanel({
         >
           <IconLabel icon="plus">新建</IconLabel>
         </chakra.button>
-      </div>
+      </chakra.div>
 
-      <div style={{ padding: "8px 12px", flexShrink: 0 }}>
+      <chakra.div style={{ padding: "8px 12px", flexShrink: 0 }}>
         <chakra.input
           data-testid="recipe-list-search"
           type="search"
@@ -261,9 +261,9 @@ export function RecipeListPanel({
             outline: "none",
           }}
         />
-      </div>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           minHeight: 0,
@@ -275,7 +275,7 @@ export function RecipeListPanel({
         }}
       >
         {filtered.length === 0 ? (
-          <div
+          <chakra.div
             style={{
               padding: 16,
               color: tokens.textMuted,
@@ -286,13 +286,13 @@ export function RecipeListPanel({
             {library.recipes.length === 0
               ? "暂无配方，点击「新建」"
               : "无匹配配方"}
-          </div>
+          </chakra.div>
         ) : (
           filtered.map((recipe) => {
             const selected = recipe.id === selectedRecipeId;
 
             return (
-              <div
+              <chakra.div
                 key={recipe.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
@@ -304,7 +304,7 @@ export function RecipeListPanel({
                   style={rowStyle(tokens, selected)}
                 >
                   <IconLabel icon="flask" iconSize={11} />
-                  <span
+                  <chakra.span
                     style={{
                       flex: 1,
                       overflow: "hidden",
@@ -313,7 +313,7 @@ export function RecipeListPanel({
                     }}
                   >
                     {recipe.name || "（未命名）"}
-                  </span>
+                  </chakra.span>
                 </chakra.button>
                 <chakra.button
                   type="button"
@@ -328,11 +328,11 @@ export function RecipeListPanel({
                 >
                   <IconLabel icon="trash" />
                 </chakra.button>
-              </div>
+              </chakra.div>
             );
           })
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

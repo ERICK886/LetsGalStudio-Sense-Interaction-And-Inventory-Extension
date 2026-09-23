@@ -1045,7 +1045,7 @@ export function EditorShell({
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="editor-shell"
       style={{
         width: "100%",
@@ -1084,7 +1084,7 @@ export function EditorShell({
       />
 
       {/* 顶栏：品牌 + 分区 Tab + 设计分辨率 + 导入导出 + 运行预览 */}
-      <header
+      <chakra.header
         data-testid="editor-top-bar"
         style={{
           display: "flex",
@@ -1097,7 +1097,7 @@ export function EditorShell({
           boxShadow: "0 1px 0 rgba(0,0,0,0.25)",
         }}
       >
-        <div
+        <chakra.div
           style={{
             display: "flex",
             alignItems: "center",
@@ -1105,7 +1105,7 @@ export function EditorShell({
             marginRight: 4,
           }}
         >
-          <span
+          <chakra.span
             aria-hidden
             style={{
               width: 8,
@@ -1115,7 +1115,7 @@ export function EditorShell({
               boxShadow: `0 0 0 3px ${tokens.accent}33`,
             }}
           />
-          <span
+          <chakra.span
             style={{
               fontSize: FONT_SIZE_TITLE,
               fontWeight: 650,
@@ -1124,10 +1124,10 @@ export function EditorShell({
             }}
           >
             场景交互
-          </span>
-        </div>
+          </chakra.span>
+        </chakra.div>
 
-        <div
+        <chakra.div
           role="tablist"
           aria-label="编辑分区"
           style={{ display: "flex", alignItems: "center", gap: 6 }}
@@ -1180,7 +1180,7 @@ export function EditorShell({
           >
             <IconLabel icon="layer-group">UI</IconLabel>
           </chakra.button>
-        </div>
+        </chakra.div>
 
         {editorSection === "scenes" || editorSection === "ui" ? (
           <DesignResolutionMenu
@@ -1288,15 +1288,15 @@ export function EditorShell({
           <IconLabel icon="play">运行预览</IconLabel>
         </chakra.button>
 
-        <div style={{ flex: 1 }} />
+        <chakra.div style={{ flex: 1 }} />
 
-        <span style={{ fontSize: FONT_SIZE_DEFAULT, color: tokens.textMuted }}>
+        <chakra.span style={{ fontSize: FONT_SIZE_DEFAULT, color: tokens.textMuted }}>
           {sectionLabel}编辑
-        </span>
-      </header>
+        </chakra.span>
+      </chakra.header>
 
       {/* 左中右三栏 */}
-      <div
+      <chakra.div
         data-testid="editor-body"
         style={{
           flex: 1,
@@ -1307,7 +1307,7 @@ export function EditorShell({
       >
         {editorSection === "scenes" ? (
           <>
-            <aside
+            <chakra.aside
               data-testid="editor-panel-left"
               style={{
                 width: 260,
@@ -1319,7 +1319,7 @@ export function EditorShell({
                 background: tokens.bgElevated,
               }}
             >
-              <div style={{ flex: 1, minHeight: 0 }}>
+              <chakra.div style={{ flex: 1, minHeight: 0 }}>
                 <SceneListPanel
                   library={library}
                   selectedSceneId={selectedSceneId}
@@ -1328,8 +1328,8 @@ export function EditorShell({
                   defaultSceneId={defaultSceneId}
                   onSetDefaultSceneId={handleSetDefaultSceneId}
                 />
-              </div>
-              <div style={{ flex: 1, minHeight: 0 }}>
+              </chakra.div>
+              <chakra.div style={{ flex: 1, minHeight: 0 }}>
                 <HotspotListPanel
                   scene={selectedScene}
                   selectedHotspotId={selectedHotspotId}
@@ -1338,10 +1338,10 @@ export function EditorShell({
                   placementActive={placementActive}
                   onRequestPlace={() => setPlacementActive(true)}
                 />
-              </div>
-            </aside>
+              </chakra.div>
+            </chakra.aside>
 
-            <main
+            <chakra.main
               data-testid="editor-panel-center"
               style={{
                 flex: 1,
@@ -1359,7 +1359,7 @@ export function EditorShell({
                 画布宿主：flex:1 给出确定高度，供 SceneCanvas absolute 铺满 +
                 ResizeObserver 测到真实中栏尺寸，letterbox 才能居中。
               */}
-              <div
+              <chakra.div
                 data-testid="scene-canvas-host"
                 style={{
                   flex: 1,
@@ -1378,10 +1378,10 @@ export function EditorShell({
                   designWidth={designSize.width}
                   designHeight={designSize.height}
                 />
-              </div>
-            </main>
+              </chakra.div>
+            </chakra.main>
 
-            <aside
+            <chakra.aside
               data-testid="editor-panel-right"
               style={{
                 width: 300,
@@ -1398,13 +1398,13 @@ export function EditorShell({
                 scenes={library.scenes}
                 items={itemsLibrary.items}
               />
-            </aside>
+            </chakra.aside>
           </>
         ) : null}
 
         {editorSection === "items" ? (
           <>
-            <aside
+            <chakra.aside
               data-testid="editor-panel-left"
               style={{
                 width: 260,
@@ -1423,9 +1423,9 @@ export function EditorShell({
                 onLibraryChange={commitItemsLibrary}
                 scenes={library.scenes}
               />
-            </aside>
+            </chakra.aside>
 
-            <main
+            <chakra.main
               data-testid="editor-panel-center"
               style={{
                 flex: 1,
@@ -1436,9 +1436,9 @@ export function EditorShell({
               }}
             >
               <ItemPreviewPanel item={selectedItem} />
-            </main>
+            </chakra.main>
 
-            <aside
+            <chakra.aside
               data-testid="editor-panel-right"
               style={{
                 width: 300,
@@ -1452,13 +1452,13 @@ export function EditorShell({
                 item={selectedItem}
                 onItemChange={handleItemChange}
               />
-            </aside>
+            </chakra.aside>
           </>
         ) : null}
 
         {editorSection === "recipes" ? (
           <>
-            <aside
+            <chakra.aside
               data-testid="editor-panel-left"
               style={{
                 width: 260,
@@ -1476,9 +1476,9 @@ export function EditorShell({
                 onSelectRecipe={setSelectedRecipeId}
                 onLibraryChange={commitRecipesLibrary}
               />
-            </aside>
+            </chakra.aside>
 
-            <main
+            <chakra.main
               data-testid="editor-panel-center"
               style={{
                 flex: 1,
@@ -1492,9 +1492,9 @@ export function EditorShell({
                 recipe={selectedRecipe}
                 items={itemsLibrary.items}
               />
-            </main>
+            </chakra.main>
 
-            <aside
+            <chakra.aside
               data-testid="editor-panel-right"
               style={{
                 width: 300,
@@ -1509,12 +1509,12 @@ export function EditorShell({
                 items={itemsLibrary.items}
                 onRecipeChange={handleRecipeChange}
               />
-            </aside>
+            </chakra.aside>
           </>
         ) : null}
 
         {editorSection === "ui" ? <UiEditorPanel /> : null}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

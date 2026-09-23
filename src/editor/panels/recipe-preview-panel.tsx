@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * recipe-preview-panel.tsx
  * 作者: 池水三两升
@@ -116,7 +117,7 @@ function RecipeItemCard({
   );
 
   return (
-    <div
+    <chakra.div
       data-testid={`recipe-preview-${role}-card`}
       data-item-id={line.itemId}
       style={{
@@ -128,7 +129,7 @@ function RecipeItemCard({
         flexShrink: 0,
       }}
     >
-      <div
+      <chakra.div
         style={{
           position: "relative",
           width: 72,
@@ -144,7 +145,7 @@ function RecipeItemCard({
         }}
       >
         {iconUrl ? (
-          <img
+          <chakra.img
             src={iconUrl}
             alt={name}
             style={{
@@ -156,7 +157,7 @@ function RecipeItemCard({
             }}
           />
         ) : (
-          <span
+          <chakra.span
             style={{
               fontSize: 11,
               color: tokens.textMuted,
@@ -167,10 +168,10 @@ function RecipeItemCard({
             }}
           >
             {name}
-          </span>
+          </chakra.span>
         )}
 
-        <span
+        <chakra.span
           data-testid={`recipe-preview-${role}-count`}
           style={{
             position: "absolute",
@@ -192,10 +193,10 @@ function RecipeItemCard({
           }}
         >
           ×{line.count}
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
-      <span
+      <chakra.span
         title={name}
         style={{
           fontSize: 12,
@@ -209,8 +210,8 @@ function RecipeItemCard({
         }}
       >
         {name}
-      </span>
-    </div>
+      </chakra.span>
+    </chakra.div>
   );
 }
 
@@ -238,7 +239,7 @@ function RecipeItemGroup({
 }): React.ReactElement {
   if (lines.length === 0) {
     return (
-      <div
+      <chakra.div
         data-testid={`recipe-preview-${role}-empty`}
         style={{
           color: tokens.textMuted,
@@ -247,12 +248,12 @@ function RecipeItemGroup({
         }}
       >
         {emptyLabel}
-      </div>
+      </chakra.div>
     );
   }
 
   return (
-    <div
+    <chakra.div
       data-testid={`recipe-preview-${role}-group`}
       style={{
         display: "flex",
@@ -265,7 +266,7 @@ function RecipeItemGroup({
       {lines.map((line, index) => (
         <React.Fragment key={`${role}-${line.itemId}-${index}`}>
           {index > 0 ? (
-            <span
+            <chakra.span
               aria-hidden
               style={{
                 fontSize: 22,
@@ -276,7 +277,7 @@ function RecipeItemGroup({
               }}
             >
               +
-            </span>
+            </chakra.span>
           ) : null}
           <RecipeItemCard
             line={line}
@@ -287,7 +288,7 @@ function RecipeItemGroup({
           />
         </React.Fragment>
       ))}
-    </div>
+    </chakra.div>
   );
 }
 
@@ -319,7 +320,7 @@ export function RecipePreviewPanel({
   }, [recipe, items]);
 
   return (
-    <div
+    <chakra.div
       data-testid="recipe-preview-panel"
       style={{
         width: "100%",
@@ -331,7 +332,7 @@ export function RecipePreviewPanel({
         color: tokens.textPrimary,
       }}
     >
-      <div
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -341,7 +342,7 @@ export function RecipePreviewPanel({
           background: tokens.bgElevated,
         }}
       >
-        <span
+        <chakra.span
           style={{
             fontSize: FONT_SIZE_TITLE,
             fontWeight: 650,
@@ -349,10 +350,10 @@ export function RecipePreviewPanel({
           }}
         >
           配方预览
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           minHeight: 0,
@@ -364,7 +365,7 @@ export function RecipePreviewPanel({
         }}
       >
         {recipe === null ? (
-          <div
+          <chakra.div
             data-testid="recipe-preview-empty"
             style={{
               color: tokens.textMuted,
@@ -373,9 +374,9 @@ export function RecipePreviewPanel({
             }}
           >
             请选择配方
-          </div>
+          </chakra.div>
         ) : (
-          <div
+          <chakra.div
             data-testid="recipe-preview-formula"
             style={{
               display: "flex",
@@ -386,7 +387,7 @@ export function RecipePreviewPanel({
               maxWidth: 640,
             }}
           >
-            <div
+            <chakra.div
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -395,7 +396,7 @@ export function RecipePreviewPanel({
                 textAlign: "center",
               }}
             >
-              <div
+              <chakra.div
                 style={{
                   fontSize: FONT_SIZE_TITLE + 2,
                   fontWeight: 650,
@@ -404,9 +405,9 @@ export function RecipePreviewPanel({
                 }}
               >
                 {recipe.name || "（未命名）"}
-              </div>
+              </chakra.div>
               {recipe.description?.trim() ? (
-                <div
+                <chakra.div
                   data-testid="recipe-preview-description"
                   style={{
                     fontSize: FONT_SIZE_DEFAULT,
@@ -416,11 +417,11 @@ export function RecipePreviewPanel({
                   }}
                 >
                   {recipe.description}
-                </div>
+                </chakra.div>
               ) : null}
-            </div>
+            </chakra.div>
 
-            <div
+            <chakra.div
               data-testid="recipe-preview-visual"
               style={{
                 display: "flex",
@@ -444,7 +445,7 @@ export function RecipePreviewPanel({
                 emptyLabel="（无原料）"
               />
 
-              <span
+              <chakra.span
                 aria-hidden
                 data-testid="recipe-preview-arrow"
                 style={{
@@ -457,7 +458,7 @@ export function RecipePreviewPanel({
                 }}
               >
                 →
-              </span>
+              </chakra.span>
 
               <RecipeItemGroup
                 lines={recipe.products}
@@ -467,10 +468,10 @@ export function RecipePreviewPanel({
                 role="product"
                 emptyLabel="（无产物）"
               />
-            </div>
+            </chakra.div>
 
             {formulaText ? (
-              <div
+              <chakra.div
                 data-testid="recipe-preview-formula-text"
                 style={{
                   fontSize: 12,
@@ -481,11 +482,11 @@ export function RecipePreviewPanel({
                 }}
               >
                 {formulaText}
-              </div>
+              </chakra.div>
             ) : null}
-          </div>
+          </chakra.div>
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

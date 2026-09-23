@@ -11,6 +11,7 @@
 import { clamp01 } from "../shared/coords";
 import { logError } from "../shared/logger";
 import { normalizeHotspotHoverShadow } from "./hover-shadow";
+import { normalizeHotspotConditionGroup } from "./hotspot-condition";
 import { normalizeHotspotLabel } from "./hotspot-label";
 import {
   defaultBackpackScreen,
@@ -456,6 +457,8 @@ function normalizeHotspotElement(raw: unknown): HotspotElement | null {
   if (label !== undefined) {
     hotspot.label = label;
   }
+  const visibleIf = normalizeHotspotConditionGroup(obj.visibleIf);
+  if (visibleIf) hotspot.visibleIf = visibleIf;
 
   return hotspot;
 }

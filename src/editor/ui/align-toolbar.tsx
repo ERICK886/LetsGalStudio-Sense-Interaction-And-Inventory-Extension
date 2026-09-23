@@ -85,7 +85,7 @@ export function AlignToolbar({
   const disabled = selectedCount < 2;
 
   return (
-    <div
+    <chakra.div
       data-testid="align-toolbar"
       style={{
         display: "flex",
@@ -93,7 +93,7 @@ export function AlignToolbar({
         gap: 6,
       }}
     >
-      <div
+      <chakra.div
         style={{
           fontSize: 12,
           color: tokens.textMuted,
@@ -101,8 +101,8 @@ export function AlignToolbar({
         }}
       >
         对齐{disabled ? "（需多选 ≥2）" : `（已选 ${selectedCount}）`}
-      </div>
-      <div
+      </chakra.div>
+      <chakra.div
         style={{
           display: "flex",
           flexWrap: "wrap",
@@ -120,13 +120,13 @@ export function AlignToolbar({
             style={btnStyle(tokens, disabled)}
           >
             <FaIcon name={icon} css={{ fontSize: 12 }} />
-            <span>{label}</span>
+            <chakra.span>{label}</chakra.span>
           </chakra.button>
         ))}
-      </div>
-      <div style={{ fontSize: 11, color: tokens.textMuted }}>
+      </chakra.div>
+      <chakra.div style={{ fontSize: 11, color: tokens.textMuted }}>
         字号基准 {FONT_SIZE_DEFAULT}；对齐基于选中包围盒
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

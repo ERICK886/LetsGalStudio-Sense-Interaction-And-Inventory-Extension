@@ -954,7 +954,7 @@ export function UiEditorPanel(): React.ReactElement {
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="ui-editor-panel"
       style={{
         display: "flex",
@@ -966,7 +966,7 @@ export function UiEditorPanel(): React.ReactElement {
         overflow: "hidden",
       }}
     >
-      <aside
+      <chakra.aside
         data-testid="ui-editor-left"
         style={{
           width: 220,
@@ -982,7 +982,7 @@ export function UiEditorPanel(): React.ReactElement {
           gap: 10,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -991,12 +991,12 @@ export function UiEditorPanel(): React.ReactElement {
           }}
         >
           界面
-        </div>
+        </chakra.div>
         {tabBtn("hud", "快捷栏 HUD", "grip")}
         {tabBtn("backpack", "全屏背包", "bag-shopping")}
         {tabBtn("sceneUi", "场景 UI", "clapperboard")}
         {sub === "hud" ? (
-          <div
+          <chakra.div
             style={{
               display: "flex",
               flexDirection: "column",
@@ -1004,7 +1004,7 @@ export function UiEditorPanel(): React.ReactElement {
               marginTop: 12,
             }}
           >
-            <label
+            <chakra.label
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1024,13 +1024,13 @@ export function UiEditorPanel(): React.ReactElement {
                 style={{ width: 16, height: 16, margin: 0, accentColor: tokens.accent }}
               />
               自动显示背包快捷栏
-            </label>
-            <span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
+            </chakra.label>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
               关闭后场景交互不再自动显示；剧本方法仍可手动打开。
-            </span>
-          </div>
+            </chakra.span>
+          </chakra.div>
         ) : null}
-        <p
+        <chakra.p
           style={{
             marginTop: 12,
             fontSize: 12,
@@ -1043,10 +1043,10 @@ export function UiEditorPanel(): React.ReactElement {
             : sub === "backpack"
               ? "右侧可添加图层；Shift+单击多选后可用对齐；Ctrl+Z / Y 撤销重做。"
               : "获得提示、交互点悬停与返回场景的全局预设；中栏顶部切换子页。"}
-        </p>
-      </aside>
+        </chakra.p>
+      </chakra.aside>
 
-      <main
+      <chakra.main
         data-testid="ui-editor-center"
         style={{
           flex: 1,
@@ -1083,7 +1083,7 @@ export function UiEditorPanel(): React.ReactElement {
             onActionEnd={endBagAction}
           />
         ) : (
-          <div
+          <chakra.div
             data-testid="ui-editor-scene-ui"
             style={{
               display: "flex",
@@ -1096,7 +1096,7 @@ export function UiEditorPanel(): React.ReactElement {
               overflow: "hidden",
             }}
           >
-            <div
+            <chakra.div
               data-testid="ui-editor-scene-ui-tabs"
               style={{
                 display: "flex",
@@ -1111,8 +1111,8 @@ export function UiEditorPanel(): React.ReactElement {
               {sceneUiTabBtn("hotspotHover", "交互点悬停", "hand-pointer")}
               {sceneUiTabBtn("hotspotLabel", "交互点提示", "comment")}
               {sceneUiTabBtn("sceneReturn", "返回场景", "arrow-left")}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+            </chakra.div>
+            <chakra.div style={{ flex: 1, minHeight: 0, display: "flex" }}>
               {sceneUiTab === "itemToast" ? (
                 <ItemToastEditorPanel />
               ) : sceneUiTab === "hotspotHover" ? (
@@ -1122,12 +1122,12 @@ export function UiEditorPanel(): React.ReactElement {
               ) : (
                 <SceneReturnEditorPanel />
               )}
-            </div>
-          </div>
+            </chakra.div>
+          </chakra.div>
         )}
-      </main>
+      </chakra.main>
 
-      <aside
+      <chakra.aside
         data-testid="ui-editor-right"
         style={{
           width: 300,
@@ -1142,7 +1142,7 @@ export function UiEditorPanel(): React.ReactElement {
           gap: 12,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -1150,7 +1150,7 @@ export function UiEditorPanel(): React.ReactElement {
           }}
         >
           编辑目标：{selectedLabel}
-        </div>
+        </chakra.div>
 
         {sub === "hud" ? (
           <OverlayPalette
@@ -1180,7 +1180,7 @@ export function UiEditorPanel(): React.ReactElement {
           />
         )}
 
-        <div
+        <chakra.div
           style={{
             display: "flex",
             flexDirection: "column",
@@ -1230,13 +1230,13 @@ export function UiEditorPanel(): React.ReactElement {
               </chakra.button>
             </>
           )}
-        </div>
+        </chakra.div>
 
         {sub === "hud" ? (
           selectedHudIds.length > 1 ? (
-            <p style={{ fontSize: 12, color: tokens.textMuted, margin: 0 }}>
+            <chakra.p style={{ fontSize: 12, color: tokens.textMuted, margin: 0 }}>
               多选时请用上方对齐工具；属性表单仅在单选时可用。
-            </p>
+            </chakra.p>
           ) : (
             <FormRenderer
               schema={hudSchema}
@@ -1253,9 +1253,9 @@ export function UiEditorPanel(): React.ReactElement {
             />
           )
         ) : selectedBagIds.length > 1 ? (
-          <p style={{ fontSize: 12, color: tokens.textMuted, margin: 0 }}>
+          <chakra.p style={{ fontSize: 12, color: tokens.textMuted, margin: 0 }}>
             多选时请用上方对齐工具；属性表单仅在单选时可用。
-          </p>
+          </chakra.p>
         ) : (
           <FormRenderer
             schema={bagSchema}
@@ -1271,7 +1271,7 @@ export function UiEditorPanel(): React.ReactElement {
             }}
           />
         )}
-      </aside>
-    </div>
+      </chakra.aside>
+    </chakra.div>
   );
 }

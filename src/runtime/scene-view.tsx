@@ -35,7 +35,7 @@ import type {
   SceneProgress,
 } from "../domain/types";
 import type { ToastQueueState } from "../domain/toast-queue";
-import { SceneBaseLayer } from "../editor/canvas/scene-base-layer";
+import { SceneBaseLayer } from "../shared/scene-base-layer";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
 import { buildSceneLayout } from "../shared/scene-layout";
 import { HotspotView } from "./hotspot-view";
@@ -325,6 +325,13 @@ export function SceneView({
   globalHotspotLabel,
 }: SceneViewProps): React.ReactElement {
   const ctx = useExtensionContext();
+  const [, setVariableRevision] = useState(0);
+  useEffect(
+    () => ctx.subscribe("variable:changed", () =>
+      setVariableRevision((revision) => revision + 1),
+    ),
+    [ctx],
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   /**
    * 宿主实测尺寸；未测到前不布局/不播转场，避免默认 800×600 → 真尺寸时
@@ -678,8 +685,10 @@ export function SceneView({
    */
   const hotspotsFor = useCallback(
     (painted: PaintedScene): HotspotElement[] =>
-      painted.scene.hotspots.filter((hs) => isHotspotVisible(hs, progress)),
-    [progress],
+      painted.scene.hotspots.filter((hotspot) =>
+        isHotspotVisible(hotspot, progress, (name) => ctx.variables.get(name)),
+      ),
+    [progress, ctx],
   );
 
   /**

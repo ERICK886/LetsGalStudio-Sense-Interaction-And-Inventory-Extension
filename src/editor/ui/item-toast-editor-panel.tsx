@@ -195,7 +195,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="item-toast-editor-panel"
       style={{
         display: "flex",
@@ -204,7 +204,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
         minHeight: 0,
       }}
     >
-      <main
+      <chakra.main
         data-testid="item-toast-preview-area"
         style={{
           flex: 1,
@@ -220,7 +220,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
           padding: 24,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -228,11 +228,11 @@ export function ItemToastEditorPanel(): React.ReactElement {
           }}
         >
           预览
-        </div>
-        <div style={previewStyle}>获得物品：旧钥匙 x1</div>
-      </main>
+        </chakra.div>
+        <chakra.div style={previewStyle}>获得物品：旧钥匙 x1</chakra.div>
+      </chakra.main>
 
-      <aside
+      <chakra.aside
         data-testid="item-toast-form-aside"
         style={{
           width: 300,
@@ -246,7 +246,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
           gap: 12,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -254,7 +254,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
           }}
         >
           编辑目标：全局
-        </div>
+        </chakra.div>
 
         <chakra.button
           type="button"
@@ -283,7 +283,7 @@ export function ItemToastEditorPanel(): React.ReactElement {
           value={formValue}
           onChange={handleChange}
         />
-      </aside>
-    </div>
+      </chakra.aside>
+    </chakra.div>
   );
 }

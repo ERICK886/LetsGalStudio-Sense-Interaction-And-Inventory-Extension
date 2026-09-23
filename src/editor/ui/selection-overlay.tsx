@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * selection-overlay.tsx
  * 作者: 池水三两升
@@ -191,7 +192,7 @@ export function SelectionOverlay({
   };
 
   return (
-    <div
+    <chakra.div
       data-testid="selection-overlay"
       style={{
         position: "absolute",
@@ -207,7 +208,7 @@ export function SelectionOverlay({
     >
       {resizable
         ? HANDLES.map((id) => (
-            <div
+            <chakra.div
               key={id}
               data-testid={`selection-handle-${id}`}
               data-handle={id}
@@ -216,6 +217,6 @@ export function SelectionOverlay({
             />
           ))
         : null}
-    </div>
+    </chakra.div>
   );
 }

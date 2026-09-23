@@ -18,7 +18,7 @@
 
 ## 界面与构建
 
-- 编辑器控件使用本仓库依赖的 Chakra UI，并保持 Provider/样式变量局限于编辑器根节点。玩家 HUD、场景叠层和背包的点击穿透、层级及透明背景按运行时需求处理，不把编辑器样式注入玩家界面。
+- 编辑器内全部作者界面组件（控件、面板、布局、文本与选项）使用本仓库依赖的 Chakra UI，并保持 Provider/样式变量局限于编辑器根节点。编辑器与玩家共用的场景绘制层放在 shared，不依赖 Chakra。玩家 HUD、场景叠层和背包的点击穿透、层级及透明背景按运行时需求处理，不把编辑器样式注入玩家界面。
 - 保留现有信息架构、键盘与焦点操作，并检查浅色和深色模式。界面调整应走真实的设置、存档和渲染路径，不能只改外观。
 - Vite 输出必须仍是 `dist/index.mjs` 单文件；React、React DOM、JSX runtime 与 `@avg-studio/sdk` 继续由宿主提供。修改依赖或构建配置后，核对产物不存在未被宿主解析的裸导入。
 - 优先执行相关的定向验证，再运行 `node node_modules/vite/bin/vite.js build` 与 `git diff --check`。可用 `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` 检查类型；若有失败，逐项区分本次引入与原有问题并报告。

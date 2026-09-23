@@ -11,7 +11,7 @@
  * - 预览非编辑器主场景时预置返回栈（主场景 = defaultSceneId，否则场景库首项）
  */
 
-import { ChakraProvider, createSystem, defaultConfig } from "@chakra-ui/react";
+import { chakra, ChakraProvider, createSystem, defaultConfig } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
@@ -167,7 +167,7 @@ function MountPlaceholder({
   const muted = themeMode === "dark" ? "#8B8B95" : "#8A8582";
 
   return (
-    <div
+    <chakra.div
       data-testid="editor-mount-placeholder"
       style={{
         width: "100%",
@@ -182,7 +182,7 @@ function MountPlaceholder({
         ...rootTypographyStyle,
       }}
     >
-      <div
+      <chakra.div
         style={{
           width: 28,
           height: 28,
@@ -193,11 +193,11 @@ function MountPlaceholder({
         }}
       />
       <style>{`@keyframes si-spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ fontSize: FONT_SIZE_TITLE + 2, fontWeight: 600 }}>
+      <chakra.div style={{ fontSize: FONT_SIZE_TITLE + 2, fontWeight: 600 }}>
         场景编辑器
-      </div>
-      <div style={{ fontSize: FONT_SIZE_DEFAULT, color: muted }}>{message}</div>
-    </div>
+      </chakra.div>
+      <chakra.div style={{ fontSize: FONT_SIZE_DEFAULT, color: muted }}>{message}</chakra.div>
+    </chakra.div>
   );
 }
 
@@ -390,7 +390,7 @@ function EditorAppContent(): React.ReactElement {
          */
         rootPointerEvents="auto"
       >
-        <div
+        <chakra.div
           data-testid="editor-app-root"
           data-extension-editor-root=""
           style={{
@@ -427,7 +427,7 @@ function EditorAppContent(): React.ReactElement {
               onSetEditMode={handleSetEditMode}
             />
           ) : null}
-        </div>
+        </chakra.div>
       </ThemeProvider>
     </ChakraProvider>
   );

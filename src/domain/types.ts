@@ -176,6 +176,23 @@ export type SceneAction =
    */
   | { type: "continueStory" };
 
+export type HotspotConditionOperator =
+  | "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "truthy" | "falsy";
+
+export interface HotspotCondition {
+  source: "game";
+  target: string;
+  valueType: "string" | "number" | "bool";
+  operator: HotspotConditionOperator;
+  value?: string | number | boolean;
+  compareTo?: { source: "game"; target: string };
+}
+
+export interface HotspotConditionGroup {
+  logic: "all" | "any";
+  conditions: HotspotCondition[];
+}
+
 export interface HotspotElement {
   type: "hotspot";
   id: string;
@@ -188,6 +205,7 @@ export interface HotspotElement {
   actions: SceneAction[];
   once: boolean;
   visibleByDefault: boolean;
+  visibleIf?: HotspotConditionGroup;
   customCss: string;
   motion: ElementMotion;
 }

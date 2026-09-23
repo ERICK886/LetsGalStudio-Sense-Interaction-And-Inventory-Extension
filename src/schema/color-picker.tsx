@@ -614,7 +614,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
 
   const popover = open
     ? createPortal(
-        <div
+        <chakra.div
           ref={popoverRef}
           style={{
             // 与 getBoundingClientRect 同一视口坐标系，禁止再做壳内相对换算
@@ -640,8 +640,8 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
           }}
         >
           {/* 顶栏：预览 + hex */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
+          <chakra.div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <chakra.span
               style={{
                 width: 28,
                 height: 28,
@@ -653,7 +653,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                 flex: "0 0 auto",
               }}
             >
-              <span
+              <chakra.span
                 style={{
                   display: "block",
                   width: "100%",
@@ -661,7 +661,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                   background: `rgba(${liveRgb.r},${liveRgb.g},${liveRgb.b},${draftA})`,
                 }}
               />
-            </span>
+            </chakra.span>
             <HexTextInput
               committedHex={displayHex}
               style={{
@@ -681,7 +681,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                 applyHsv(nextHsv.h, nextHsv.s, nextHsv.v, rgba.a);
               }}
             />
-          </div>
+          </chakra.div>
 
           <SvBoard
             hue={draftH}
@@ -720,13 +720,13 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
             tokens={themeTokens}
             onHsv={(nh, ns, nv, na) => applyHsv(nh, ns, nv, na)}
           />
-        </div>,
+        </chakra.div>,
         document.body,
       )
     : null;
 
   return (
-    <div
+    <chakra.div
       ref={rootRef}
       style={{
         position: "relative",
@@ -738,11 +738,11 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       }}
     >
       {label && (
-        <span
+        <chakra.span
           style={{ color: themeTokens.textMuted, fontWeight: 500 }}
         >
           {label}
-        </span>
+        </chakra.span>
       )}
 
       <chakra.button
@@ -768,7 +768,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
           opacity: disabled ? 0.5 : 1,
         }}
       >
-        <span
+        <chakra.span
           style={{
             width: 28,
             height: 28,
@@ -786,7 +786,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
           }}
         >
           {isEmpty ? null : (
-            <span
+            <chakra.span
               style={{
                 display: "block",
                 width: "100%",
@@ -798,8 +798,8 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
               }}
             />
           )}
-        </span>
-        <span
+        </chakra.span>
+        <chakra.span
           style={{
             fontFamily: FONT_MONO,
             fontSize: FONT_SIZE_UI,
@@ -807,11 +807,11 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
           }}
         >
           {isEmpty ? (placeholder ?? "#RRGGBB") : displayHex}
-        </span>
+        </chakra.span>
       </chakra.button>
 
       {popover}
-    </div>
+    </chakra.div>
   );
 };
 
@@ -870,7 +870,7 @@ const SvBoard: React.FC<{
   const hueHex = rgbaToHex({ ...hsvToRgb(hue, 1, 1), a: 1 }, false);
 
   return (
-    <div
+    <chakra.div
       ref={ref}
       onMouseDown={(e) => {
         dragging.current = true;
@@ -889,7 +889,7 @@ const SvBoard: React.FC<{
         overflow: "hidden",
       }}
     >
-      <span
+      <chakra.span
         style={{
           position: "absolute",
           left: `${saturation * 100}%`,
@@ -904,7 +904,7 @@ const SvBoard: React.FC<{
           pointerEvents: "none",
         }}
       />
-    </div>
+    </chakra.div>
   );
 };
 
@@ -918,8 +918,8 @@ const HueSlider: React.FC<{
   onGestureEnd?: () => void;
 }> = ({ hue, tokens, onChange, onGestureEnd }) => {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ width: 14, color: tokens.textMuted, fontSize: 12 }}>H</span>
+    <chakra.div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <chakra.span style={{ width: 14, color: tokens.textMuted, fontSize: 12 }}>H</chakra.span>
       <chakra.input
         type="range"
         min={0}
@@ -940,7 +940,7 @@ const HueSlider: React.FC<{
           cursor: "pointer",
         }}
       />
-    </div>
+    </chakra.div>
   );
 };
 
@@ -955,9 +955,9 @@ const AlphaSlider: React.FC<{
   onGestureEnd?: () => void;
 }> = ({ color, alpha, tokens, onChange, onGestureEnd }) => {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ width: 14, color: tokens.textMuted, fontSize: 12 }}>A</span>
-      <div
+    <chakra.div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <chakra.span style={{ width: 14, color: tokens.textMuted, fontSize: 12 }}>A</chakra.span>
+      <chakra.div
         style={{
           flex: 1,
           height: 12,
@@ -987,8 +987,8 @@ const AlphaSlider: React.FC<{
             cursor: "pointer",
           }}
         />
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 };
 
@@ -1153,7 +1153,7 @@ const ModeTabs: React.FC<{
 }> = ({ mode, onChange, tokens }) => {
   const tabs: ColorMode[] = ["HEX", "RGB", "HSL"];
   return (
-    <div
+    <chakra.div
       style={{
         display: "flex",
         gap: 2,
@@ -1186,7 +1186,7 @@ const ModeTabs: React.FC<{
           </chakra.button>
         );
       })}
-    </div>
+    </chakra.div>
   );
 };
 
@@ -1236,9 +1236,9 @@ const ModeFields: React.FC<{
 
   if (mode === "HEX") {
     return (
-      <div style={{ display: "flex", gap: 8, width: "100%", minWidth: 0 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={labelStyle}>HEX</div>
+      <chakra.div style={{ display: "flex", gap: 8, width: "100%", minWidth: 0 }}>
+        <chakra.div style={{ flex: 1, minWidth: 0 }}>
+          <chakra.div style={labelStyle}>HEX</chakra.div>
           <HexTextInput
             committedHex={hex}
             style={{ ...fieldStyle, borderColor: tokens.accent }}
@@ -1247,10 +1247,10 @@ const ModeFields: React.FC<{
               onHsv(nh.h, nh.s, nh.v, rgba.a);
             }}
           />
-        </div>
+        </chakra.div>
         {allowAlpha && (
-          <div style={{ flex: "0 0 56px", width: 56, minWidth: 0 }}>
-            <div style={labelStyle}>A</div>
+          <chakra.div style={{ flex: "0 0 56px", width: 56, minWidth: 0 }}>
+            <chakra.div style={labelStyle}>A</chakra.div>
             <NumberTextInput
               style={fieldStyle}
               value={a}
@@ -1259,15 +1259,15 @@ const ModeFields: React.FC<{
               decimals={2}
               onCommit={(n) => onHsv(h, s, v, n)}
             />
-          </div>
+          </chakra.div>
         )}
-      </div>
+      </chakra.div>
     );
   }
 
   if (mode === "RGB") {
     return (
-      <div style={{ display: "flex", gap: 6, width: "100%", minWidth: 0 }}>
+      <chakra.div style={{ display: "flex", gap: 6, width: "100%", minWidth: 0 }}>
         {(
           [
             [
@@ -1296,8 +1296,8 @@ const ModeFields: React.FC<{
             ],
           ] as const
         ).map(([lab, val, set]) => (
-          <div key={lab} style={{ flex: 1, minWidth: 0 }}>
-            <div style={labelStyle}>{lab}</div>
+          <chakra.div key={lab} style={{ flex: 1, minWidth: 0 }}>
+            <chakra.div style={labelStyle}>{lab}</chakra.div>
             <NumberTextInput
               style={fieldStyle}
               value={val}
@@ -1306,11 +1306,11 @@ const ModeFields: React.FC<{
               decimals={0}
               onCommit={set}
             />
-          </div>
+          </chakra.div>
         ))}
         {allowAlpha && (
-          <div style={{ flex: "0 0 52px", width: 52, minWidth: 0 }}>
-            <div style={labelStyle}>A</div>
+          <chakra.div style={{ flex: "0 0 52px", width: 52, minWidth: 0 }}>
+            <chakra.div style={labelStyle}>A</chakra.div>
             <NumberTextInput
               style={fieldStyle}
               value={a}
@@ -1319,17 +1319,17 @@ const ModeFields: React.FC<{
               decimals={2}
               onCommit={(n) => onHsv(h, s, v, n)}
             />
-          </div>
+          </chakra.div>
         )}
-      </div>
+      </chakra.div>
     );
   }
 
   // HSL
   return (
-    <div style={{ display: "flex", gap: 6, width: "100%", minWidth: 0 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={labelStyle}>H</div>
+    <chakra.div style={{ display: "flex", gap: 6, width: "100%", minWidth: 0 }}>
+      <chakra.div style={{ flex: 1, minWidth: 0 }}>
+        <chakra.div style={labelStyle}>H</chakra.div>
         <NumberTextInput
           style={fieldStyle}
           value={Math.round(hsl.h)}
@@ -1342,9 +1342,9 @@ const ModeFields: React.FC<{
             onHsv(nh.h, nh.s, nh.v, a);
           }}
         />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={labelStyle}>S</div>
+      </chakra.div>
+      <chakra.div style={{ flex: 1, minWidth: 0 }}>
+        <chakra.div style={labelStyle}>S</chakra.div>
         <NumberTextInput
           style={fieldStyle}
           value={Math.round(hsl.s * 100)}
@@ -1357,9 +1357,9 @@ const ModeFields: React.FC<{
             onHsv(nh.h, nh.s, nh.v, a);
           }}
         />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={labelStyle}>L</div>
+      </chakra.div>
+      <chakra.div style={{ flex: 1, minWidth: 0 }}>
+        <chakra.div style={labelStyle}>L</chakra.div>
         <NumberTextInput
           style={fieldStyle}
           value={Math.round(hsl.l * 100)}
@@ -1372,10 +1372,10 @@ const ModeFields: React.FC<{
             onHsv(nh.h, nh.s, nh.v, a);
           }}
         />
-      </div>
+      </chakra.div>
       {allowAlpha && (
-        <div style={{ flex: "0 0 52px", width: 52, minWidth: 0 }}>
-          <div style={labelStyle}>A</div>
+        <chakra.div style={{ flex: "0 0 52px", width: 52, minWidth: 0 }}>
+          <chakra.div style={labelStyle}>A</chakra.div>
           <NumberTextInput
             style={fieldStyle}
             value={a}
@@ -1384,8 +1384,8 @@ const ModeFields: React.FC<{
             decimals={2}
             onCommit={(n) => onHsv(h, s, v, n)}
           />
-        </div>
+        </chakra.div>
       )}
-    </div>
+    </chakra.div>
   );
 };

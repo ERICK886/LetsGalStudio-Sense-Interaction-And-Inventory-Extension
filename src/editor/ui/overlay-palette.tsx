@@ -92,12 +92,12 @@ export function OverlayPalette({
       }}
     >
       <FaIcon name={UI_OVERLAY_KIND_ICONS[kind]} css={{ fontSize: 13 }} />
-      <span>{UI_OVERLAY_KIND_LABELS[kind]}</span>
+      <chakra.span>{UI_OVERLAY_KIND_LABELS[kind]}</chakra.span>
     </chakra.button>
   );
 
   return (
-    <div
+    <chakra.div
       data-testid="ui-overlay-palette"
       style={{
         display: "flex",
@@ -108,14 +108,14 @@ export function OverlayPalette({
         marginBottom: 8,
       }}
     >
-      <div style={{ fontSize: 12, color: tokens.textMuted }}>基础</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      <chakra.div style={{ fontSize: 12, color: tokens.textMuted }}>基础</chakra.div>
+      <chakra.div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {BASIC.map(btn)}
-      </div>
-      <div style={{ fontSize: 12, color: tokens.textMuted }}>控件</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      </chakra.div>
+      <chakra.div style={{ fontSize: 12, color: tokens.textMuted }}>控件</chakra.div>
+      <chakra.div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {CONTROLS.map(btn)}
-      </div>
+      </chakra.div>
       {onDelete ? (
         <chakra.button
           type="button"
@@ -142,6 +142,6 @@ export function OverlayPalette({
           删除选中图层
         </chakra.button>
       ) : null}
-    </div>
+    </chakra.div>
   );
 }

@@ -160,7 +160,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
   }, [config]);
 
   return (
-    <div
+    <chakra.div
       data-testid="scene-return-editor-panel"
       style={{
         display: "flex",
@@ -169,7 +169,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
         minHeight: 0,
       }}
     >
-      <main
+      <chakra.main
         data-testid="scene-return-preview-area"
         style={{
           flex: 1,
@@ -185,7 +185,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           padding: 24,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -193,10 +193,10 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           }}
         >
           预览
-        </div>
-        <div style={previewStyle}>{config.label}</div>
+        </chakra.div>
+        <chakra.div style={previewStyle}>{config.label}</chakra.div>
         {!config.enabled ? (
-          <p
+          <chakra.p
             style={{
               margin: 0,
               fontSize: 12,
@@ -204,11 +204,11 @@ export function SceneReturnEditorPanel(): React.ReactElement {
             }}
           >
             已禁用（运行时不会显示）
-          </p>
+          </chakra.p>
         ) : null}
-      </main>
+      </chakra.main>
 
-      <aside
+      <chakra.aside
         data-testid="scene-return-form-aside"
         style={{
           width: 300,
@@ -222,7 +222,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           gap: 12,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -230,7 +230,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           }}
         >
           编辑目标：全局
-        </div>
+        </chakra.div>
 
         <chakra.button
           type="button"
@@ -259,7 +259,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           value={formValue}
           onChange={handleChange}
         />
-      </aside>
-    </div>
+      </chakra.aside>
+    </chakra.div>
   );
 }

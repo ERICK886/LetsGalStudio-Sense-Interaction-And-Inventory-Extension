@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * scene-canvas.tsx
  * 作者: 池水三两升
@@ -21,7 +22,7 @@ import { clamp01 } from "../../shared/coords";
 import { resolveAssetUrl } from "../../shared/resolve-asset-url";
 import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
-import { SceneBaseLayer } from "./scene-base-layer";
+import { SceneBaseLayer } from "../../shared/scene-base-layer";
 
 /**
  * SceneCanvas 组件属性。
@@ -341,7 +342,7 @@ export function SceneCanvas({
   );
 
   return (
-    <div
+    <chakra.div
       ref={rootRef}
       data-testid="scene-canvas"
       style={{
@@ -380,6 +381,6 @@ export function SceneCanvas({
           />
         </SceneBaseLayer>
       )}
-    </div>
+    </chakra.div>
   );
 }

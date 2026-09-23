@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * hotspot-layer.tsx
  * 作者: 池水三两升
@@ -314,7 +315,7 @@ export function HotspotLayer({
   }, []);
 
   return (
-    <div
+    <chakra.div
       data-testid="hotspot-layer"
       style={{
         position: "absolute",
@@ -342,7 +343,7 @@ export function HotspotLayer({
         const url = resolveUrl(hs.visual.src);
 
         return (
-          <div
+          <chakra.div
             key={hs.id}
             data-testid={`hotspot-node-${hs.id}`}
             data-selected={selected ? "1" : "0"}
@@ -368,7 +369,7 @@ export function HotspotLayer({
             }}
           >
             {url ? (
-              <img
+              <chakra.img
                 src={url}
                 alt=""
                 draggable={false}
@@ -382,7 +383,7 @@ export function HotspotLayer({
                 }}
               />
             ) : (
-              <div
+              <chakra.div
                 style={{
                   width: "100%",
                   height: "100%",
@@ -396,7 +397,7 @@ export function HotspotLayer({
                 }}
               >
                 交互点
-              </div>
+              </chakra.div>
             )}
 
             {selected ? (
@@ -425,9 +426,9 @@ export function HotspotLayer({
                 }}
               />
             ) : null}
-          </div>
+          </chakra.div>
         );
       })}
-    </div>
+    </chakra.div>
   );
 }

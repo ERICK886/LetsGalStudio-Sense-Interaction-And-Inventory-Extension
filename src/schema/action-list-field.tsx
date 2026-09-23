@@ -365,7 +365,7 @@ function ActionCard({
   const { tokens } = useTheme();
 
   return (
-    <div
+    <chakra.div
       data-testid={`action-card-${index}`}
       style={{
         border: `1px solid ${tokens.border}`,
@@ -377,7 +377,7 @@ function ActionCard({
         gap: 8,
       }}
     >
-      <div
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -385,7 +385,7 @@ function ActionCard({
           flexWrap: "wrap",
         }}
       >
-        <span
+        <chakra.span
           style={{
             fontSize: 11,
             color: tokens.textMuted,
@@ -394,7 +394,7 @@ function ActionCard({
           }}
         >
           #{index + 1}
-        </span>
+        </chakra.span>
         <chakra.select
           aria-label={`动作 ${index + 1} 类型`}
           value={action.type}
@@ -410,9 +410,9 @@ function ActionCard({
           }}
         >
           {ACTION_TYPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
+            <chakra.option key={opt.value} value={opt.value}>
               {opt.label}
-            </option>
+            </chakra.option>
           ))}
         </chakra.select>
         <chakra.button
@@ -447,12 +447,12 @@ function ActionCard({
         >
           <IconLabel icon="trash" iconSize={11} />
         </chakra.button>
-      </div>
+      </chakra.div>
 
       {action.type === "openScene" ? (
         <>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</span>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</chakra.span>
             <chakra.select
               aria-label={`动作 ${index + 1} 目标场景`}
               value={action.sceneIdOrName}
@@ -463,7 +463,7 @@ function ActionCard({
               }}
             >
               {scenes.length === 0 ? (
-                <option value="">（无场景）</option>
+                <chakra.option value="">（无场景）</chakra.option>
               ) : null}
               {/* 若当前值不在列表中，保留一项以免丢引用 */}
               {action.sceneIdOrName &&
@@ -472,23 +472,23 @@ function ActionCard({
                   s.id === action.sceneIdOrName ||
                   s.name === action.sceneIdOrName,
               ) ? (
-                <option value={action.sceneIdOrName}>
+                <chakra.option value={action.sceneIdOrName}>
                   {action.sceneIdOrName}（缺失）
-                </option>
+                </chakra.option>
               ) : null}
               {scenes.map((s) => (
-                <option key={s.id} value={s.id}>
+                <chakra.option key={s.id} value={s.id}>
                   {s.name || s.id}
-                </option>
+                </chakra.option>
               ))}
             </chakra.select>
-          </label>
+          </chakra.label>
 
           {/*
            * 压入返回栈：缺省 true（pushReturn 省略）；仅显式 false 时不压栈。
            * checked={pushReturn !== false} 与运行时 openSceneWithReturn 语义一致。
            */}
-          <label
+          <chakra.label
             style={{
               display: "flex",
               flexDirection: "row",
@@ -510,19 +510,19 @@ function ActionCard({
                 }
               }}
             />
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               压入返回栈
-            </span>
-          </label>
+            </chakra.span>
+          </chakra.label>
 
           {/*
            * 返回目标：空 = 来源场景（打开前的 currentSceneId）；
            * 非空时覆盖压栈 id（须为有效场景 id/name）。
            */}
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               返回目标
-            </span>
+            </chakra.span>
             <chakra.select
               aria-label={`动作 ${index + 1} 返回目标`}
               value={action.returnTarget ?? ""}
@@ -539,7 +539,7 @@ function ActionCard({
                 }
               }}
             >
-              <option value="">（来源场景）</option>
+              <chakra.option value="">（来源场景）</chakra.option>
               {/* 若当前 returnTarget 不在列表中，保留一项以免丢引用 */}
               {action.returnTarget &&
               !scenes.some(
@@ -547,24 +547,24 @@ function ActionCard({
                   s.id === action.returnTarget ||
                   s.name === action.returnTarget,
               ) ? (
-                <option value={action.returnTarget}>
+                <chakra.option value={action.returnTarget}>
                   {action.returnTarget}（缺失）
-                </option>
+                </chakra.option>
               ) : null}
               {scenes.map((s) => (
-                <option key={s.id} value={s.id}>
+                <chakra.option key={s.id} value={s.id}>
                   {s.name || s.id}
-                </option>
+                </chakra.option>
               ))}
             </chakra.select>
-          </label>
+          </chakra.label>
         </>
       ) : null}
 
       {action.type === "giveItem" ? (
         <>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>物品</span>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>物品</chakra.span>
             <chakra.select
               aria-label={`动作 ${index + 1} 物品`}
               data-testid={`action-give-item-${index}`}
@@ -575,23 +575,23 @@ function ActionCard({
               }}
             >
               {items.length === 0 ? (
-                <option value="">（物品库为空）</option>
+                <chakra.option value="">（物品库为空）</chakra.option>
               ) : null}
               {action.itemId &&
               !items.some((it) => it.id === action.itemId) ? (
-                <option value={action.itemId}>
+                <chakra.option value={action.itemId}>
                   {action.itemId}（缺失）
-                </option>
+                </chakra.option>
               ) : null}
               {items.map((it) => (
-                <option key={it.id} value={it.id}>
+                <chakra.option key={it.id} value={it.id}>
                   {it.name || it.id}
-                </option>
+                </chakra.option>
               ))}
             </chakra.select>
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
+          </chakra.label>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>数量</chakra.span>
             <DeferredNumberInput
               value={action.amount}
               min={1}
@@ -606,11 +606,11 @@ function ActionCard({
                 });
               }}
             />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+          </chakra.label>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               提示文案
-            </span>
+            </chakra.span>
             <chakra.input
               type="text"
               value={action.toastText}
@@ -620,13 +620,13 @@ function ActionCard({
                 onReplace({ ...action, toastText: e.target.value });
               }}
             />
-          </label>
+          </chakra.label>
 
           {/* Toast 位置覆盖：空值 = 跟随全局 */}
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               Toast 位置
-            </span>
+            </chakra.span>
             <chakra.select
               aria-label={`动作 ${index + 1} Toast 位置`}
               data-testid={`action-toast-placement-${index}`}
@@ -642,27 +642,27 @@ function ActionCard({
               }}
             >
               {TOAST_PLACEMENT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
+                <chakra.option key={opt.value} value={opt.value}>
                   {opt.label}
-                </option>
+                </chakra.option>
               ))}
             </chakra.select>
-          </label>
+          </chakra.label>
 
           {/* 偏移与间距：留空则删除覆盖字段 */}
-          <div
+          <chakra.div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
               gap: 8,
             }}
           >
-            <label
+            <chakra.label
               style={{ display: "flex", flexDirection: "column", gap: 4 }}
             >
-              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                 X 偏移
-              </span>
+              </chakra.span>
               <DeferredNumberInput
                 value={action.toastOffsetX ?? ""}
                 step={1}
@@ -680,13 +680,13 @@ function ActionCard({
                   );
                 }}
               />
-            </label>
-            <label
+            </chakra.label>
+            <chakra.label
               style={{ display: "flex", flexDirection: "column", gap: 4 }}
             >
-              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                 Y 偏移
-              </span>
+              </chakra.span>
               <DeferredNumberInput
                 value={action.toastOffsetY ?? ""}
                 step={1}
@@ -704,13 +704,13 @@ function ActionCard({
                   );
                 }}
               />
-            </label>
-            <label
+            </chakra.label>
+            <chakra.label
               style={{ display: "flex", flexDirection: "column", gap: 4 }}
             >
-              <span style={{ fontSize: 11, color: tokens.textMuted }}>
+              <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                 间距
-              </span>
+              </chakra.span>
               <DeferredNumberInput
                 value={action.toastGap ?? ""}
                 min={0}
@@ -729,11 +729,11 @@ function ActionCard({
                   );
                 }}
               />
-            </label>
-          </div>
+            </chakra.label>
+          </chakra.div>
 
           {/* Toast 样式覆盖：与全局样式子集一致 */}
-          <div
+          <chakra.div
             style={{
               border: `1px dashed ${tokens.border}`,
               borderRadius: 6,
@@ -743,7 +743,7 @@ function ActionCard({
               gap: 8,
             }}
           >
-            <span
+            <chakra.span
               style={{
                 fontSize: 11,
                 color: tokens.textMuted,
@@ -751,20 +751,20 @@ function ActionCard({
               }}
             >
               Toast 样式覆盖（留空跟随全局）
-            </span>
-            <div
+            </chakra.span>
+            <chakra.div
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                 gap: 8,
               }}
             >
-              <label
+              <chakra.label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   文字色
-                </span>
+                </chakra.span>
                 <ColorPicker
                   value={action.toastStyle?.color ?? ""}
                   allowAlpha={false}
@@ -777,13 +777,13 @@ function ActionCard({
                     );
                   }}
                 />
-              </label>
-              <label
+              </chakra.label>
+              <chakra.label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   背景色
-                </span>
+                </chakra.span>
                 <chakra.input
                   type="text"
                   value={action.toastStyle?.background ?? ""}
@@ -799,13 +799,13 @@ function ActionCard({
                     );
                   }}
                 />
-              </label>
-              <label
+              </chakra.label>
+              <chakra.label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   字号
-                </span>
+                </chakra.span>
                 <DeferredNumberInput
                   value={action.toastStyle?.fontSize ?? ""}
                   min={8}
@@ -818,13 +818,13 @@ function ActionCard({
                     onReplace(updateToastStyle(action, "fontSize", n));
                   }}
                 />
-              </label>
-              <label
+              </chakra.label>
+              <chakra.label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   圆角
-                </span>
+                </chakra.span>
                 <DeferredNumberInput
                   value={action.toastStyle?.borderRadius ?? ""}
                   min={0}
@@ -837,13 +837,13 @@ function ActionCard({
                     onReplace(updateToastStyle(action, "borderRadius", n));
                   }}
                 />
-              </label>
-              <label
+              </chakra.label>
+              <chakra.label
                 style={{ display: "flex", flexDirection: "column", gap: 4 }}
               >
-                <span style={{ fontSize: 11, color: tokens.textMuted }}>
+                <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   阴影强度
-                </span>
+                </chakra.span>
                 <DeferredNumberInput
                   value={action.toastStyle?.shadow ?? ""}
                   min={0}
@@ -856,12 +856,12 @@ function ActionCard({
                     onReplace(updateToastStyle(action, "shadow", n));
                   }}
                 />
-              </label>
-            </div>
-          </div>
+              </chakra.label>
+            </chakra.div>
+          </chakra.div>
 
           {/* Toast 动画：复用 motionSection 经 FormRenderer 编辑 */}
-          <div
+          <chakra.div
             style={{
               border: `1px dashed ${tokens.border}`,
               borderRadius: 6,
@@ -882,14 +882,14 @@ function ActionCard({
                 onReplace(next as GiveItemAction);
               }}
             />
-          </div>
+          </chakra.div>
         </>
       ) : null}
 
       {action.type === "removeItem" ? (
         <>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>物品</span>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>物品</chakra.span>
             <chakra.select
               aria-label={`动作 ${index + 1} 扣除物品`}
               data-testid={`action-remove-item-${index}`}
@@ -900,23 +900,23 @@ function ActionCard({
               }}
             >
               {items.length === 0 ? (
-                <option value="">（物品库为空）</option>
+                <chakra.option value="">（物品库为空）</chakra.option>
               ) : null}
               {action.itemId &&
               !items.some((it) => it.id === action.itemId) ? (
-                <option value={action.itemId}>
+                <chakra.option value={action.itemId}>
                   {action.itemId}（缺失）
-                </option>
+                </chakra.option>
               ) : null}
               {items.map((it) => (
-                <option key={it.id} value={it.id}>
+                <chakra.option key={it.id} value={it.id}>
                   {it.name || it.id}
-                </option>
+                </chakra.option>
               ))}
             </chakra.select>
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
+          </chakra.label>
+          <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>数量</chakra.span>
             <DeferredNumberInput
               value={action.amount}
               min={1}
@@ -931,17 +931,17 @@ function ActionCard({
                 });
               }}
             />
-          </label>
-          <span style={{ fontSize: 11, color: tokens.textMuted }}>
+          </chakra.label>
+          <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
             持有不足时中心提示「物品不足」，并中断后续动作。
-          </span>
+          </chakra.span>
         </>
       ) : null}
 
       {action.type === "continueStory" ? (
-        <span style={{ fontSize: 11, color: tokens.textMuted }}>
+        <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
           关闭场景交互并解除「打开场景交互」阻塞，剧本从下一节点继续。
-        </span>
+        </chakra.span>
       ) : null}
 
       {action.type === "jumpFragmentReturn" ||
@@ -983,7 +983,7 @@ function ActionCard({
           }}
         />
       ) : null}
-    </div>
+    </chakra.div>
   );
 }
 
@@ -1040,7 +1040,7 @@ export function ActionListField({
   );
 
   return (
-    <section
+    <chakra.section
       data-testid="action-list-field"
       style={{
         marginBottom: 14,
@@ -1048,7 +1048,7 @@ export function ActionListField({
         borderBottom: `1px solid ${tokens.border}`,
       }}
     >
-      <div
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -1057,7 +1057,7 @@ export function ActionListField({
           gap: 8,
         }}
       >
-        <h3
+        <chakra.h3
           style={{
             margin: 0,
             fontSize: FONT_SIZE_TITLE,
@@ -1066,7 +1066,7 @@ export function ActionListField({
           }}
         >
           动作
-        </h3>
+        </chakra.h3>
         <chakra.button
           type="button"
           data-testid="action-list-add"
@@ -1077,10 +1077,10 @@ export function ActionListField({
             添加
           </IconLabel>
         </chakra.button>
-      </div>
+      </chakra.div>
 
       {value.length === 0 ? (
-        <p
+        <chakra.p
           style={{
             margin: 0,
             fontSize: FONT_SIZE_DEFAULT,
@@ -1088,9 +1088,9 @@ export function ActionListField({
           }}
         >
           暂无动作。点击「添加」配置打开场景 / 给予物品 / 跳转片段。
-        </p>
+        </chakra.p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <chakra.div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {value.map((action, index) => (
             <ActionCard
               key={index}
@@ -1104,8 +1104,8 @@ export function ActionListField({
               onMove={(delta) => handleMove(index, delta)}
             />
           ))}
-        </div>
+        </chakra.div>
       )}
-    </section>
+    </chakra.section>
   );
 }

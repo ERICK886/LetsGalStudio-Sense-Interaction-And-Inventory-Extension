@@ -13,7 +13,7 @@ import React, { useRef } from "react";
 import {
   clientToLocal,
   type SceneLayout,
-} from "../../shared/scene-layout";
+} from "./scene-layout";
 
 /**
  * SceneBaseLayer 属性。

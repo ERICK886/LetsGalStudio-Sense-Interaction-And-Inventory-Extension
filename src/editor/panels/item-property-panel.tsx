@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * item-property-panel.tsx
  * 作者: 池水三两升
@@ -121,8 +122,8 @@ export function ItemPropertyPanel({
   );
 
   return (
-    <div data-testid="item-property-panel" style={panelShellStyle(tokens)}>
-      <div
+    <chakra.div data-testid="item-property-panel" style={panelShellStyle(tokens)}>
+      <chakra.div
         style={{
           display: "flex",
           alignItems: "center",
@@ -131,7 +132,7 @@ export function ItemPropertyPanel({
           flexShrink: 0,
         }}
       >
-        <span
+        <chakra.span
           style={{
             fontSize: FONT_SIZE_TITLE,
             fontWeight: 650,
@@ -139,10 +140,10 @@ export function ItemPropertyPanel({
           }}
         >
           物品属性
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
-      <div
+      <chakra.div
         style={{
           flex: 1,
           overflowY: "auto",
@@ -151,7 +152,7 @@ export function ItemPropertyPanel({
         }}
       >
         {formItem === null ? (
-          <div
+          <chakra.div
             data-testid="item-property-panel-empty"
             style={{
               display: "flex",
@@ -165,7 +166,7 @@ export function ItemPropertyPanel({
             }}
           >
             从左侧新建或选择物品后，可在此编辑属性。
-          </div>
+          </chakra.div>
         ) : (
           <FormRenderer
             schema={itemFields(formItem)}
@@ -175,7 +176,7 @@ export function ItemPropertyPanel({
             }}
           />
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }

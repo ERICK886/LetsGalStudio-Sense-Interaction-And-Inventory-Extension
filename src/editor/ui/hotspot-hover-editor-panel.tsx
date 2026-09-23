@@ -112,7 +112,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
   }, [ctx]);
 
   return (
-    <div
+    <chakra.div
       data-testid="hotspot-hover-editor-panel"
       style={{
         display: "flex",
@@ -121,7 +121,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
         minHeight: 0,
       }}
     >
-      <main
+      <chakra.main
         data-testid="hotspot-hover-info-area"
         style={{
           flex: 1,
@@ -137,7 +137,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           padding: 24,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -145,8 +145,8 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           }}
         >
           说明
-        </div>
-        <p
+        </chakra.div>
+        <chakra.p
           style={{
             margin: 0,
             fontSize: FONT_SIZE_DEFAULT,
@@ -157,10 +157,10 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           }}
         >
           未勾选自定义的交互点将使用此预设。
-        </p>
-      </main>
+        </chakra.p>
+      </chakra.main>
 
-      <aside
+      <chakra.aside
         data-testid="hotspot-hover-form-aside"
         style={{
           width: 300,
@@ -174,7 +174,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           gap: 12,
         }}
       >
-        <div
+        <chakra.div
           style={{
             fontSize: 12,
             color: tokens.textMuted,
@@ -182,7 +182,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           }}
         >
           编辑目标：全局
-        </div>
+        </chakra.div>
 
         <chakra.button
           type="button"
@@ -211,7 +211,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           value={formValue}
           onChange={handleChange}
         />
-      </aside>
-    </div>
+      </chakra.aside>
+    </chakra.div>
   );
 }

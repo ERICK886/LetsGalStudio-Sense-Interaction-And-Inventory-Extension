@@ -1,3 +1,4 @@
+import { chakra } from "@chakra-ui/react";
 /**
  * item-preview-panel.tsx
  * 作者: 池水三两升
@@ -59,7 +60,7 @@ function PreviewImageBlock({
   );
 
   return (
-    <div
+    <chakra.div
       data-testid={testId}
       style={{
         display: "flex",
@@ -70,7 +71,7 @@ function PreviewImageBlock({
         maxWidth: 360,
       }}
     >
-      <span
+      <chakra.span
         style={{
           alignSelf: "flex-start",
           fontSize: 12,
@@ -79,8 +80,8 @@ function PreviewImageBlock({
         }}
       >
         {label}
-      </span>
-      <div
+      </chakra.span>
+      <chakra.div
         style={{
           width: "100%",
           minHeight: Math.min(120, maxHeight),
@@ -95,7 +96,7 @@ function PreviewImageBlock({
         }}
       >
         {url ? (
-          <img
+          <chakra.img
             src={url}
             alt={label}
             style={{
@@ -106,12 +107,12 @@ function PreviewImageBlock({
             }}
           />
         ) : (
-          <span style={{ color: tokens.textMuted, fontSize: FONT_SIZE_DEFAULT }}>
+          <chakra.span style={{ color: tokens.textMuted, fontSize: FONT_SIZE_DEFAULT }}>
             未设置
-          </span>
+          </chakra.span>
         )}
-      </div>
-    </div>
+      </chakra.div>
+    </chakra.div>
   );
 }
 
@@ -135,7 +136,7 @@ export function ItemPreviewPanel({
 
   if (item === null) {
     return (
-      <div
+      <chakra.div
         data-testid="item-preview-panel"
         style={{
           width: "100%",
@@ -149,12 +150,12 @@ export function ItemPreviewPanel({
         }}
       >
         从左侧新建或选择物品后预览
-      </div>
+      </chakra.div>
     );
   }
 
   return (
-    <div
+    <chakra.div
       data-testid="item-preview-panel"
       style={{
         width: "100%",
@@ -170,7 +171,7 @@ export function ItemPreviewPanel({
         color: tokens.textPrimary,
       }}
     >
-      <div
+      <chakra.div
         style={{
           width: "100%",
           maxWidth: 360,
@@ -179,7 +180,7 @@ export function ItemPreviewPanel({
           gap: 6,
         }}
       >
-        <span
+        <chakra.span
           data-testid="item-preview-name"
           style={{
             fontSize: FONT_SIZE_TITLE,
@@ -188,14 +189,14 @@ export function ItemPreviewPanel({
           }}
         >
           {item.name || "（未命名）"}
-        </span>
-        <span
+        </chakra.span>
+        <chakra.span
           data-testid="item-preview-id"
           style={{ fontSize: 12, color: tokens.textMuted }}
         >
           {item.id}
-        </span>
-        <p
+        </chakra.span>
+        <chakra.p
           data-testid="item-preview-description"
           style={{
             margin: "8px 0 0",
@@ -206,13 +207,13 @@ export function ItemPreviewPanel({
           }}
         >
           {item.description.trim() ? item.description : "（无描述）"}
-        </p>
-        <span style={{ fontSize: 12, color: tokens.textMuted, marginTop: 4 }}>
+        </chakra.p>
+        <chakra.span style={{ fontSize: 12, color: tokens.textMuted, marginTop: 4 }}>
           {item.stackable
             ? `可堆叠${item.maxStack != null ? ` · 上限 ${item.maxStack}` : ""}`
             : "不可堆叠（唯一实例）"}
-        </span>
-      </div>
+        </chakra.span>
+      </chakra.div>
 
       <PreviewImageBlock
         label="图标 (icon)"
@@ -231,6 +232,6 @@ export function ItemPreviewPanel({
         tokens={tokens}
         resolve={resolve}
       />
-    </div>
+    </chakra.div>
   );
 }
