@@ -7,7 +7,7 @@
  * 编辑器左栏上半：场景列表 CRUD（新建 / 删除 / 选中）。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Input, chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { SceneDefinition, ScenesLibraryFile } from "../../domain/types";
@@ -253,18 +253,18 @@ export function SceneListPanel({
         >
           场景
         </chakra.span>
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="scene-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </chakra.button>
+        </Button>
       </chakra.div>
 
       <chakra.div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <chakra.input
+        <Input size="xs"
           data-testid="scene-list-search"
           type="search"
           placeholder="搜索场景…"
@@ -317,7 +317,7 @@ export function SceneListPanel({
                 key={scene.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`scene-list-item-${scene.id}`}
                   aria-selected={selected}
@@ -366,9 +366,9 @@ export function SceneListPanel({
                     <IconLabel icon="location-dot" iconSize={10} />
                     {scene.hotspots.length}
                   </chakra.span>
-                </chakra.button>
+                </Button>
                 {onSetDefaultSceneId && !isMain ? (
-                  <chakra.button
+                  <Button size="xs" variant="plain"
                     type="button"
                     data-testid={`scene-list-set-main-${scene.id}`}
                     aria-label={`将 ${scene.name} 设为主场景`}
@@ -385,9 +385,9 @@ export function SceneListPanel({
                     }}
                   >
                     设为主
-                  </chakra.button>
+                  </Button>
                 ) : null}
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`scene-list-delete-${scene.id}`}
                   aria-label={`删除场景 ${scene.name}`}
@@ -399,7 +399,7 @@ export function SceneListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </chakra.button>
+                </Button>
               </chakra.div>
             );
           })

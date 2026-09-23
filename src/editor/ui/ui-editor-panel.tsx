@@ -10,7 +10,7 @@
  * - 多选 + 显式对齐；右侧属性（单选节点 / 全局）
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Checkbox, chakra } from "@chakra-ui/react";
 import React, {
   useCallback,
   useEffect,
@@ -831,7 +831,7 @@ export function UiEditorPanel(): React.ReactElement {
     const active = sub === id;
 
     return (
-      <chakra.button
+      <Button size="xs" variant="plain"
         key={id}
         type="button"
         data-testid={`ui-editor-tab-${id}`}
@@ -858,7 +858,7 @@ export function UiEditorPanel(): React.ReactElement {
         }}
       >
         <IconLabel icon={icon}>{label}</IconLabel>
-      </chakra.button>
+      </Button>
     );
   };
 
@@ -878,7 +878,7 @@ export function UiEditorPanel(): React.ReactElement {
     const active = sceneUiTab === id;
 
     return (
-      <chakra.button
+      <Button size="xs" variant="plain"
         key={id}
         type="button"
         data-testid={`ui-editor-scene-ui-tab-${id}`}
@@ -902,7 +902,7 @@ export function UiEditorPanel(): React.ReactElement {
         }}
       >
         <IconLabel icon={icon}>{label}</IconLabel>
-      </chakra.button>
+      </Button>
     );
   };
 
@@ -1004,7 +1004,7 @@ export function UiEditorPanel(): React.ReactElement {
               marginTop: 12,
             }}
           >
-            <chakra.label
+            <Checkbox.Root checked={autoShowHud}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1013,18 +1013,13 @@ export function UiEditorPanel(): React.ReactElement {
                 fontSize: FONT_SIZE_DEFAULT,
                 cursor: "pointer",
               }}
-            >
-              <chakra.input
-                type="checkbox"
-                data-testid="ui-editor-auto-show-hud"
-                checked={autoShowHud}
-                onChange={(event) =>
-                  handleAutoShowHudChange(event.target.checked)
-                }
-                style={{ width: 16, height: 16, margin: 0, accentColor: tokens.accent }}
-              />
-              自动显示背包快捷栏
-            </chakra.label>
+                onCheckedChange={(details) =>
+                  handleAutoShowHudChange(details.checked === true)
+                } colorPalette="teal">
+                <Checkbox.HiddenInput data-testid="ui-editor-auto-show-hud" />
+                <Checkbox.Control />
+                <Checkbox.Label>自动显示背包快捷栏</Checkbox.Label>
+            </Checkbox.Root>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
               关闭后场景交互不再自动显示；剧本方法仍可手动打开。
             </chakra.span>
@@ -1190,44 +1185,44 @@ export function UiEditorPanel(): React.ReactElement {
           {sub === "hud" ? (
             <>
               {primaryHudId !== null && !canDeleteHudOverlay ? (
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid="ui-editor-reset-hud-node"
                   onClick={handleResetHudNode}
                   style={resetButtonStyle(tokens, false)}
                 >
                   <IconLabel icon="rotate-left">重置此节点</IconLabel>
-                </chakra.button>
+                </Button>
               ) : null}
-              <chakra.button
+              <Button size="xs" variant="plain"
                 type="button"
                 data-testid="ui-editor-reset-hud-all"
                 onClick={handleResetHudAll}
                 style={resetButtonStyle(tokens, true)}
               >
                 <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
-              </chakra.button>
+              </Button>
             </>
           ) : (
             <>
               {primaryBagId !== null && !canDeleteBagOverlay ? (
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid="ui-editor-reset-bag-node"
                   onClick={handleResetBagNode}
                   style={resetButtonStyle(tokens, false)}
                 >
                   <IconLabel icon="rotate-left">重置此节点</IconLabel>
-                </chakra.button>
+                </Button>
               ) : null}
-              <chakra.button
+              <Button size="xs" variant="plain"
                 type="button"
                 data-testid="ui-editor-reset-bag-all"
                 onClick={handleResetBagAll}
                 style={resetButtonStyle(tokens, true)}
               >
                 <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
-              </chakra.button>
+              </Button>
             </>
           )}
         </chakra.div>

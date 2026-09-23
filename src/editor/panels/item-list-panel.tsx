@@ -8,7 +8,7 @@
  * 删除时若场景仍引用该物品，在面板顶部显示黄色软警告条（仍允许删除）。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Input, chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import { scenesReferencingItem } from "../../domain/item-refs";
@@ -271,14 +271,14 @@ export function ItemListPanel({
         >
           物品
         </chakra.span>
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="item-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </chakra.button>
+        </Button>
       </chakra.div>
 
       {deleteWarning ? (
@@ -302,7 +302,7 @@ export function ItemListPanel({
       ) : null}
 
       <chakra.div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <chakra.input
+        <Input size="xs"
           data-testid="item-list-search"
           type="search"
           placeholder="搜索物品…"
@@ -356,7 +356,7 @@ export function ItemListPanel({
                 key={item.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`item-list-item-${item.id}`}
                   aria-selected={selected}
@@ -386,8 +386,8 @@ export function ItemListPanel({
                   >
                     {item.stackable ? "堆叠" : "唯一"}
                   </chakra.span>
-                </chakra.button>
-                <chakra.button
+                </Button>
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`item-list-delete-${item.id}`}
                   aria-label={`删除物品 ${item.name}`}
@@ -399,7 +399,7 @@ export function ItemListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </chakra.button>
+                </Button>
               </chakra.div>
             );
           })

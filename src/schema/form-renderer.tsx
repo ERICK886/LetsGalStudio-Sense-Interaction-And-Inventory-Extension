@@ -1,3 +1,4 @@
+import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
 /**
  * form-renderer.tsx
  * 作者: 池水三两升
@@ -6,11 +7,11 @@
  *
  * Schema 驱动受控属性表单渲染器（精简版）。
  * 支持 string / number / boolean / enum / asset / color 叶子，以及 section / grid 布局。
- * color 字段走自定义 ColorPicker，非原生 input[type=color]。
+ * color 字段走 Chakra ColorPicker 复合控件，保留作者 HEX 数据格式。
  * number：聚焦期间用草稿字符串，失焦后再按 min/max 钳制提交，避免输入「300」时「3」被钳回 min。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Textarea, Input, Checkbox, chakra } from "@chakra-ui/react";
 import React, { useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
@@ -185,9 +186,9 @@ function renderStringField<T extends Record<string, unknown>>(
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       {field.multiline ? (
-        <chakra.textarea {...common} rows={3} />
+        <Textarea size="xs" {...common} rows={3} />
       ) : (
-        <chakra.input type="text" {...common} />
+        <Input size="xs" type="text" {...common} />
       )}
       <FieldHint text={field.description} tokens={tokens} />
     </chakra.div>
@@ -286,7 +287,7 @@ function SchemaNumberField<T extends Record<string, unknown>>(props: {
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <chakra.input
+      <Input size="xs"
         id={id}
         type="number"
         value={focused ? draft : String(committed)}
@@ -371,14 +372,13 @@ function renderBooleanField<T extends Record<string, unknown>>(
       }}
       data-testid={`schema-field-${field.key}`}
     >
-      <chakra.input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => {
-          onChange(setNestedValue(value, field.key, e.target.checked));
-        }}
-      />
+      <Checkbox.Root checked={checked}
+        onCheckedChange={(details) =>
+          onChange(setNestedValue(value, field.key, details.checked === true))
+        } colorPalette="teal">
+        <Checkbox.HiddenInput id={id} />
+        <Checkbox.Control />
+      </Checkbox.Root>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       <FieldHint text={field.description} tokens={tokens} />
     </chakra.div>
@@ -407,7 +407,7 @@ function renderEnumField<T extends Record<string, unknown>>(
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <chakra.select
+      <EditorSelect
         id={id}
         value={str}
         style={inputStyle(tokens)}
@@ -416,11 +416,11 @@ function renderEnumField<T extends Record<string, unknown>>(
         }}
       >
         {field.options.map((opt) => (
-          <chakra.option key={opt.value} value={opt.value}>
+          <EditorSelectOption key={opt.value} value={opt.value}>
             {opt.label}
-          </chakra.option>
+          </EditorSelectOption>
         ))}
-      </chakra.select>
+      </EditorSelect>
       <FieldHint text={field.description} tokens={tokens} />
     </chakra.div>
   );
@@ -501,7 +501,7 @@ function renderAssetField<T extends Record<string, unknown>>(
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <chakra.input
+      <Input size="xs"
         id={id}
         type="text"
         value={str}
@@ -520,7 +520,7 @@ function renderAssetField<T extends Record<string, unknown>>(
 }
 
 /**
- * 渲染 color 字段（自定义 ColorPicker：SV / 色相 / Alpha / HEX·RGB·HSL）。
+ * 渲染 color 字段（Chakra ColorPicker：色板 / 色相 / Alpha / 精确通道）。
  *
  * @param field - ColorFieldSchema
  * @param value - 当前对象

@@ -7,7 +7,7 @@
  * UI 区块「添加组件」工具条：基础 + 控件（Font Awesome 图标）。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, chakra } from "@chakra-ui/react";
 import React from "react";
 import type { UiOverlayKind } from "../../domain/types";
 import {
@@ -70,7 +70,7 @@ export function OverlayPalette({
   const { tokens } = useTheme();
 
   const btn = (kind: UiOverlayKind): React.ReactElement => (
-    <chakra.button
+    <Button size="xs" variant="plain"
       key={kind}
       type="button"
       data-testid={`ui-overlay-add-${kind}`}
@@ -93,7 +93,7 @@ export function OverlayPalette({
     >
       <FaIcon name={UI_OVERLAY_KIND_ICONS[kind]} css={{ fontSize: 13 }} />
       <chakra.span>{UI_OVERLAY_KIND_LABELS[kind]}</chakra.span>
-    </chakra.button>
+    </Button>
   );
 
   return (
@@ -117,7 +117,7 @@ export function OverlayPalette({
         {CONTROLS.map(btn)}
       </chakra.div>
       {onDelete ? (
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="ui-overlay-delete"
           disabled={!canDelete}
@@ -140,7 +140,7 @@ export function OverlayPalette({
         >
           <FaIcon name="trash" css={{ fontSize: 12 }} />
           删除选中图层
-        </chakra.button>
+        </Button>
       ) : null}
     </chakra.div>
   );

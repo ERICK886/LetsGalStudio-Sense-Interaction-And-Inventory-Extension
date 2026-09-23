@@ -1,3 +1,4 @@
+import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
 /**
  * action-list-field.tsx
  * 作者: 池水三两升
@@ -9,7 +10,7 @@
  * giveItem：Toast 外观覆盖；片段动作：从工程 story 选择片段（显示名称）。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Input, Checkbox, chakra } from "@chakra-ui/react";
 import React, { useCallback } from "react";
 import { defaultElementMotion } from "../domain/motion";
 import type {
@@ -395,7 +396,7 @@ function ActionCard({
         >
           #{index + 1}
         </chakra.span>
-        <chakra.select
+        <EditorSelect
           aria-label={`动作 ${index + 1} 类型`}
           value={action.type}
           style={{ ...controlStyle(tokens), flex: 1, minWidth: 100 }}
@@ -410,12 +411,12 @@ function ActionCard({
           }}
         >
           {ACTION_TYPE_OPTIONS.map((opt) => (
-            <chakra.option key={opt.value} value={opt.value}>
+            <EditorSelectOption key={opt.value} value={opt.value}>
               {opt.label}
-            </chakra.option>
+            </EditorSelectOption>
           ))}
-        </chakra.select>
-        <chakra.button
+        </EditorSelect>
+        <Button size="xs" variant="plain"
           type="button"
           aria-label="上移"
           disabled={index === 0}
@@ -426,8 +427,8 @@ function ActionCard({
           onClick={() => onMove(-1)}
         >
           <IconLabel icon="arrow-up" iconSize={11} />
-        </chakra.button>
-        <chakra.button
+        </Button>
+        <Button size="xs" variant="plain"
           type="button"
           aria-label="下移"
           disabled={index >= total - 1}
@@ -438,22 +439,22 @@ function ActionCard({
           onClick={() => onMove(1)}
         >
           <IconLabel icon="arrow-down" iconSize={11} />
-        </chakra.button>
-        <chakra.button
+        </Button>
+        <Button size="xs" variant="plain"
           type="button"
           aria-label="删除动作"
           style={smallButtonStyle(tokens, { danger: true })}
           onClick={onRemove}
         >
           <IconLabel icon="trash" iconSize={11} />
-        </chakra.button>
+        </Button>
       </chakra.div>
 
       {action.type === "openScene" ? (
         <>
           <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</chakra.span>
-            <chakra.select
+            <EditorSelect
               aria-label={`动作 ${index + 1} 目标场景`}
               value={action.sceneIdOrName}
               style={controlStyle(tokens)}
@@ -463,7 +464,7 @@ function ActionCard({
               }}
             >
               {scenes.length === 0 ? (
-                <chakra.option value="">（无场景）</chakra.option>
+                <EditorSelectOption value="">（无场景）</EditorSelectOption>
               ) : null}
               {/* 若当前值不在列表中，保留一项以免丢引用 */}
               {action.sceneIdOrName &&
@@ -472,48 +473,39 @@ function ActionCard({
                   s.id === action.sceneIdOrName ||
                   s.name === action.sceneIdOrName,
               ) ? (
-                <chakra.option value={action.sceneIdOrName}>
+                <EditorSelectOption value={action.sceneIdOrName}>
                   {action.sceneIdOrName}（缺失）
-                </chakra.option>
+                </EditorSelectOption>
               ) : null}
               {scenes.map((s) => (
-                <chakra.option key={s.id} value={s.id}>
+                <EditorSelectOption key={s.id} value={s.id}>
                   {s.name || s.id}
-                </chakra.option>
+                </EditorSelectOption>
               ))}
-            </chakra.select>
+            </EditorSelect>
           </chakra.label>
 
           {/*
            * 压入返回栈：缺省 true（pushReturn 省略）；仅显式 false 时不压栈。
            * checked={pushReturn !== false} 与运行时 openSceneWithReturn 语义一致。
            */}
-          <chakra.label
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <chakra.input
-              type="checkbox"
-              aria-label={`动作 ${index + 1} 压入返回栈`}
-              checked={action.pushReturn !== false}
-              onChange={(e) => {
-                if (e.target.checked) {
+          <Checkbox.Root checked={action.pushReturn !== false}
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
+              onCheckedChange={(details) => {
+                if (details.checked === true) {
                   const next = { ...action };
                   delete next.pushReturn;
                   onReplace(next);
                 } else {
                   onReplace({ ...action, pushReturn: false });
                 }
-              }}
-            />
-            <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
-              压入返回栈
-            </chakra.span>
-          </chakra.label>
+              }} colorPalette="teal">
+              <Checkbox.HiddenInput aria-label={"动作 " + (index + 1) + " 压入返回栈"} />
+              <Checkbox.Control />
+              <Checkbox.Label style={{ fontSize: 11, color: tokens.textMuted }}>
+                压入返回栈
+              </Checkbox.Label>
+          </Checkbox.Root>
 
           {/*
            * 返回目标：空 = 来源场景（打开前的 currentSceneId）；
@@ -523,7 +515,7 @@ function ActionCard({
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               返回目标
             </chakra.span>
-            <chakra.select
+            <EditorSelect
               aria-label={`动作 ${index + 1} 返回目标`}
               value={action.returnTarget ?? ""}
               style={controlStyle(tokens)}
@@ -539,7 +531,7 @@ function ActionCard({
                 }
               }}
             >
-              <chakra.option value="">（来源场景）</chakra.option>
+              <EditorSelectOption value="">（来源场景）</EditorSelectOption>
               {/* 若当前 returnTarget 不在列表中，保留一项以免丢引用 */}
               {action.returnTarget &&
               !scenes.some(
@@ -547,16 +539,16 @@ function ActionCard({
                   s.id === action.returnTarget ||
                   s.name === action.returnTarget,
               ) ? (
-                <chakra.option value={action.returnTarget}>
+                <EditorSelectOption value={action.returnTarget}>
                   {action.returnTarget}（缺失）
-                </chakra.option>
+                </EditorSelectOption>
               ) : null}
               {scenes.map((s) => (
-                <chakra.option key={s.id} value={s.id}>
+                <EditorSelectOption key={s.id} value={s.id}>
                   {s.name || s.id}
-                </chakra.option>
+                </EditorSelectOption>
               ))}
-            </chakra.select>
+            </EditorSelect>
           </chakra.label>
         </>
       ) : null}
@@ -565,7 +557,7 @@ function ActionCard({
         <>
           <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>物品</chakra.span>
-            <chakra.select
+            <EditorSelect
               aria-label={`动作 ${index + 1} 物品`}
               data-testid={`action-give-item-${index}`}
               value={action.itemId}
@@ -575,20 +567,20 @@ function ActionCard({
               }}
             >
               {items.length === 0 ? (
-                <chakra.option value="">（物品库为空）</chakra.option>
+                <EditorSelectOption value="">（物品库为空）</EditorSelectOption>
               ) : null}
               {action.itemId &&
               !items.some((it) => it.id === action.itemId) ? (
-                <chakra.option value={action.itemId}>
+                <EditorSelectOption value={action.itemId}>
                   {action.itemId}（缺失）
-                </chakra.option>
+                </EditorSelectOption>
               ) : null}
               {items.map((it) => (
-                <chakra.option key={it.id} value={it.id}>
+                <EditorSelectOption key={it.id} value={it.id}>
                   {it.name || it.id}
-                </chakra.option>
+                </EditorSelectOption>
               ))}
-            </chakra.select>
+            </EditorSelect>
           </chakra.label>
           <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>数量</chakra.span>
@@ -611,7 +603,7 @@ function ActionCard({
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               提示文案
             </chakra.span>
-            <chakra.input
+            <Input size="xs"
               type="text"
               value={action.toastText}
               placeholder="空则回退物品名"
@@ -627,7 +619,7 @@ function ActionCard({
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
               Toast 位置
             </chakra.span>
-            <chakra.select
+            <EditorSelect
               aria-label={`动作 ${index + 1} Toast 位置`}
               data-testid={`action-toast-placement-${index}`}
               value={action.toastPlacement ?? ""}
@@ -642,11 +634,11 @@ function ActionCard({
               }}
             >
               {TOAST_PLACEMENT_OPTIONS.map((opt) => (
-                <chakra.option key={opt.value} value={opt.value}>
+                <EditorSelectOption key={opt.value} value={opt.value}>
                   {opt.label}
-                </chakra.option>
+                </EditorSelectOption>
               ))}
-            </chakra.select>
+            </EditorSelect>
           </chakra.label>
 
           {/* 偏移与间距：留空则删除覆盖字段 */}
@@ -784,7 +776,7 @@ function ActionCard({
                 <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>
                   背景色
                 </chakra.span>
-                <chakra.input
+                <Input size="xs"
                   type="text"
                   value={action.toastStyle?.background ?? ""}
                   placeholder="#1a1a2e"
@@ -890,7 +882,7 @@ function ActionCard({
         <>
           <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>物品</chakra.span>
-            <chakra.select
+            <EditorSelect
               aria-label={`动作 ${index + 1} 扣除物品`}
               data-testid={`action-remove-item-${index}`}
               value={action.itemId}
@@ -900,20 +892,20 @@ function ActionCard({
               }}
             >
               {items.length === 0 ? (
-                <chakra.option value="">（物品库为空）</chakra.option>
+                <EditorSelectOption value="">（物品库为空）</EditorSelectOption>
               ) : null}
               {action.itemId &&
               !items.some((it) => it.id === action.itemId) ? (
-                <chakra.option value={action.itemId}>
+                <EditorSelectOption value={action.itemId}>
                   {action.itemId}（缺失）
-                </chakra.option>
+                </EditorSelectOption>
               ) : null}
               {items.map((it) => (
-                <chakra.option key={it.id} value={it.id}>
+                <EditorSelectOption key={it.id} value={it.id}>
                   {it.name || it.id}
-                </chakra.option>
+                </EditorSelectOption>
               ))}
-            </chakra.select>
+            </EditorSelect>
           </chakra.label>
           <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>数量</chakra.span>
@@ -1067,7 +1059,7 @@ export function ActionListField({
         >
           动作
         </chakra.h3>
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="action-list-add"
           style={smallButtonStyle(tokens)}
@@ -1076,7 +1068,7 @@ export function ActionListField({
           <IconLabel icon="plus" iconSize={11}>
             添加
           </IconLabel>
-        </chakra.button>
+        </Button>
       </chakra.div>
 
       {value.length === 0 ? (

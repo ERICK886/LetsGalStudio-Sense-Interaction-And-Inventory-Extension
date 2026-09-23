@@ -1,4 +1,5 @@
-import { chakra } from "@chakra-ui/react";
+import { EditorSelect, EditorSelectOption } from "../ui/editor-select";
+import { Button, Input, chakra } from "@chakra-ui/react";
 import React from "react";
 import type { HotspotCondition, HotspotConditionGroup } from "../../domain/types";
 import { useTheme } from "../../theme/theme-provider";
@@ -53,9 +54,9 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
       <chakra.div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <chakra.span style={{ fontSize: 13, fontWeight: 650 }}>显示条件</chakra.span>
         {value ? (
-          <chakra.button type="button" style={buttonStyle} onClick={() => onChange(undefined)}>清除条件</chakra.button>
+          <Button size="xs" variant="plain" type="button" style={buttonStyle} onClick={() => onChange(undefined)}>清除条件</Button>
         ) : (
-          <chakra.button type="button" style={buttonStyle} onClick={() => onChange({ logic: "all", conditions: [newCondition()] })}>添加条件</chakra.button>
+          <Button size="xs" variant="plain" type="button" style={buttonStyle} onClick={() => onChange({ logic: "all", conditions: [newCondition()] })}>添加条件</Button>
         )}
       </chakra.div>
       <chakra.p style={{ margin: "7px 0 10px", fontSize: 11, color: tokens.textMuted, lineHeight: 1.5 }}>
@@ -65,12 +66,12 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
         <>
           <chakra.label style={{ display: "block", fontSize: 11, marginBottom: 10 }}>
             规则组合
-            <chakra.select aria-label="规则组合" value={value.logic}
+            <EditorSelect aria-label="规则组合" value={value.logic}
               onChange={(event) => onChange({ ...value, logic: event.target.value as HotspotConditionGroup["logic"] })}
               style={{ ...fieldStyle, marginTop: 4 }}>
-              <chakra.option value="all">全部满足</chakra.option>
-              <chakra.option value="any">任一满足</chakra.option>
-            </chakra.select>
+              <EditorSelectOption value="all">全部满足</EditorSelectOption>
+              <EditorSelectOption value="any">任一满足</EditorSelectOption>
+            </EditorSelect>
           </chakra.label>
           {value.conditions.map((condition, index) => {
             const options = operatorOptions(condition.valueType);
@@ -82,12 +83,12 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
               }}>
                 <chakra.div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <chakra.span style={{ fontSize: 11, fontWeight: 600 }}>条件 {index + 1}</chakra.span>
-                  <chakra.button type="button" aria-label={"删除条件 " + (index+1)} style={buttonStyle}
-                    onClick={() => remove(index)}>删除</chakra.button>
+                  <Button size="xs" variant="plain" type="button" aria-label={"删除条件 " + (index+1)} style={buttonStyle}
+                    onClick={() => remove(index)}>删除</Button>
                 </chakra.div>
                 <chakra.label style={{ display: "block", fontSize: 11, marginBottom: 8 }}>
                   游戏变量名
-                  <chakra.input aria-label={"条件 " + (index+1) + " 游戏变量名"}
+                  <Input size="xs" aria-label={"条件 " + (index+1) + " 游戏变量名"}
                     value={condition.target} placeholder="例如：已解锁"
                     onChange={(event) => update(index, { ...condition, target: event.target.value })}
                     style={{ ...fieldStyle, marginTop: 4 }} />
@@ -95,57 +96,57 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
                 <chakra.div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <chakra.label style={{ display: "block", fontSize: 11 }}>
                     类型
-                    <chakra.select aria-label={"条件 " + (index+1) + " 类型"} value={condition.valueType}
+                    <EditorSelect aria-label={"条件 " + (index+1) + " 类型"} value={condition.valueType}
                       onChange={(event) => {
                         const type = event.target.value as HotspotCondition["valueType"];
                         update(index, { ...condition, valueType: type, operator: "eq",
                           value: type === "number" ? 0 : type === "bool" ? false : "", compareTo: undefined });
                       }} style={{ ...fieldStyle, marginTop: 4 }}>
-                      <chakra.option value="string">文本</chakra.option>
-                      <chakra.option value="number">数字</chakra.option>
-                      <chakra.option value="bool">布尔</chakra.option>
-                    </chakra.select>
+                      <EditorSelectOption value="string">文本</EditorSelectOption>
+                      <EditorSelectOption value="number">数字</EditorSelectOption>
+                      <EditorSelectOption value="bool">布尔</EditorSelectOption>
+                    </EditorSelect>
                   </chakra.label>
                   <chakra.label style={{ display: "block", fontSize: 11 }}>
                     判断
-                    <chakra.select aria-label={"条件 " + (index+1) + " 判断"} value={condition.operator}
+                    <EditorSelect aria-label={"条件 " + (index+1) + " 判断"} value={condition.operator}
                       onChange={(event) => update(index, { ...condition,
                         operator: event.target.value as HotspotCondition["operator"] })}
                       style={{ ...fieldStyle, marginTop: 4 }}>
-                      {options.map(([operator, label]) => <chakra.option key={operator} value={operator}>{label}</chakra.option>)}
-                    </chakra.select>
+                      {options.map(([operator, label]) => <EditorSelectOption key={operator} value={operator}>{label}</EditorSelectOption>)}
+                    </EditorSelect>
                   </chakra.label>
                 </chakra.div>
                 {!noValue && (
                   <>
                     <chakra.label style={{ display: "block", fontSize: 11, marginTop: 8 }}>
                       比较对象
-                      <chakra.select aria-label={"条件 " + (index+1) + " 比较对象"}
+                      <EditorSelect aria-label={"条件 " + (index+1) + " 比较对象"}
                         value={condition.compareTo ? "variable" : "value"}
                         onChange={(event) => update(index, event.target.value === "variable"
                           ? { ...condition, compareTo: { source: "game", target: "" } }
                           : { ...condition, compareTo: undefined })}
                         style={{ ...fieldStyle, marginTop: 4 }}>
-                        <chakra.option value="value">固定值</chakra.option>
-                        <chakra.option value="variable">游戏变量</chakra.option>
-                      </chakra.select>
+                        <EditorSelectOption value="value">固定值</EditorSelectOption>
+                        <EditorSelectOption value="variable">游戏变量</EditorSelectOption>
+                      </EditorSelect>
                     </chakra.label>
                     {condition.compareTo ? (
-                      <chakra.input aria-label={"条件 " + (index+1) + " 比较变量名"}
+                      <Input size="xs" aria-label={"条件 " + (index+1) + " 比较变量名"}
                         value={condition.compareTo.target} placeholder="比较变量名"
                         onChange={(event) => update(index, { ...condition,
                           compareTo: { source: "game", target: event.target.value } })}
                         style={{ ...fieldStyle, marginTop: 7 }} />
                     ) : condition.valueType === "bool" ? (
-                      <chakra.select aria-label={"条件 " + (index+1) + " 比较值"}
+                      <EditorSelect aria-label={"条件 " + (index+1) + " 比较值"}
                         value={String(condition.value ?? false)}
                         onChange={(event) => update(index, { ...condition, value: event.target.value === "true" })}
                         style={{ ...fieldStyle, marginTop: 7 }}>
-                        <chakra.option value="true">真</chakra.option>
-                        <chakra.option value="false">假</chakra.option>
-                      </chakra.select>
+                        <EditorSelectOption value="true">真</EditorSelectOption>
+                        <EditorSelectOption value="false">假</EditorSelectOption>
+                      </EditorSelect>
                     ) : (
-                      <chakra.input aria-label={"条件 " + (index+1) + " 比较值"}
+                      <Input size="xs" aria-label={"条件 " + (index+1) + " 比较值"}
                         type={condition.valueType === "number" ? "number" : "text"}
                         value={condition.value === undefined ? "" : String(condition.value)}
                         onChange={(event) => update(index, { ...condition,
@@ -157,8 +158,8 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
               </chakra.div>
             );
           })}
-          <chakra.button type="button" style={buttonStyle}
-            onClick={() => onChange({ ...value, conditions: [...value.conditions, newCondition()] })}>添加一条规则</chakra.button>
+          <Button size="xs" variant="plain" type="button" style={buttonStyle}
+            onClick={() => onChange({ ...value, conditions: [...value.conditions, newCondition()] })}>添加一条规则</Button>
         </>
       )}
     </chakra.section>

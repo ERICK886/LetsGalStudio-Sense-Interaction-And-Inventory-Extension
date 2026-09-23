@@ -10,7 +10,7 @@
  * - 左侧展示一块使用 `applyUiBoxStyle` / `applyUiTextStyle` 渲染的静态按钮（非运行时栈）
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, chakra } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
@@ -232,7 +232,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           编辑目标：全局
         </chakra.div>
 
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="scene-return-reset-all"
           onClick={handleResetAll}
@@ -252,7 +252,7 @@ export function SceneReturnEditorPanel(): React.ReactElement {
           }}
         >
           全部重置为默认
-        </chakra.button>
+        </Button>
 
         <FormRenderer
           schema={sceneReturnFields()}

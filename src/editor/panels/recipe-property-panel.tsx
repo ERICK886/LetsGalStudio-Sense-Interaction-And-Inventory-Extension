@@ -1,3 +1,4 @@
+import { EditorSelect, EditorSelectOption } from "../ui/editor-select";
 /**
  * recipe-property-panel.tsx
  * 作者: 池水三两升
@@ -9,7 +10,7 @@
  * count 使用 DeferredNumberInput，失焦后再 normalizeCount。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Textarea, Input, chakra } from "@chakra-ui/react";
 import React, { useCallback } from "react";
 import type {
   ItemDefinition,
@@ -330,14 +331,14 @@ export function RecipePropertyPanel({
           >
             {title}
           </chakra.span>
-          <chakra.button
+          <Button size="xs" variant="plain"
             type="button"
             data-testid={`${testIdPrefix}-add`}
             onClick={() => addLine(key)}
             style={smallButtonStyle(tokens)}
           >
             <IconLabel icon="plus">添加</IconLabel>
-          </chakra.button>
+          </Button>
         </chakra.div>
 
         {lines.length === 0 ? (
@@ -361,7 +362,7 @@ export function RecipePropertyPanel({
                 gap: 6,
               }}
             >
-              <chakra.select
+              <EditorSelect
                 data-testid={`${testIdPrefix}-item-${index}`}
                 value={line.itemId}
                 onChange={(e) =>
@@ -374,20 +375,20 @@ export function RecipePropertyPanel({
                 }}
               >
                 {items.length === 0 ? (
-                  <chakra.option value="">（无物品）</chakra.option>
+                  <EditorSelectOption value="">（无物品）</EditorSelectOption>
                 ) : null}
                 {line.itemId &&
                 !items.some((item) => item.id === line.itemId) ? (
-                  <chakra.option value={line.itemId}>
+                  <EditorSelectOption value={line.itemId}>
                     （缺失）{line.itemId}
-                  </chakra.option>
+                  </EditorSelectOption>
                 ) : null}
                 {items.map((item) => (
-                  <chakra.option key={item.id} value={item.id}>
+                  <EditorSelectOption key={item.id} value={item.id}>
                     {item.name || item.id}
-                  </chakra.option>
+                  </EditorSelectOption>
                 ))}
-              </chakra.select>
+              </EditorSelect>
               <DeferredNumberInput
                 testId={`${testIdPrefix}-count-${index}`}
                 value={line.count}
@@ -406,7 +407,7 @@ export function RecipePropertyPanel({
                   flexShrink: 0,
                 }}
               />
-              <chakra.button
+              <Button size="xs" variant="plain"
                 type="button"
                 data-testid={`${testIdPrefix}-remove-${index}`}
                 aria-label={`删除${title}第 ${index + 1} 行`}
@@ -414,7 +415,7 @@ export function RecipePropertyPanel({
                 style={smallButtonStyle(tokens, { danger: true })}
               >
                 <IconLabel icon="trash" />
-              </chakra.button>
+              </Button>
             </chakra.div>
           ))
         )}
@@ -486,7 +487,7 @@ export function RecipePropertyPanel({
               >
                 名称
               </chakra.span>
-              <chakra.input
+              <Input size="xs"
                 data-testid="recipe-property-name"
                 type="text"
                 value={recipe.name}
@@ -511,7 +512,7 @@ export function RecipePropertyPanel({
               >
                 描述
               </chakra.span>
-              <chakra.textarea
+              <Textarea
                 data-testid="recipe-property-description"
                 value={recipe.description ?? ""}
                 rows={3}

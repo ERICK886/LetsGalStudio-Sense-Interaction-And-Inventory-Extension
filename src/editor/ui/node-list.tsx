@@ -9,7 +9,7 @@
  * - 使用 @dnd-kit 拖拽排序（固定节点与图层均可拖）
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, chakra } from "@chakra-ui/react";
 import React, { useMemo, useState } from "react";
 import {
   DndContext,
@@ -149,7 +149,7 @@ function SortableRow({
   };
 
   return (
-    <chakra.button
+    <Button size="xs" variant="plain"
       ref={setNodeRef}
       type="button"
       data-testid={`node-list-item-${item.id}`}
@@ -199,7 +199,7 @@ function SortableRow({
       >
         {item.label}
       </chakra.span>
-    </chakra.button>
+    </Button>
   );
 }
 

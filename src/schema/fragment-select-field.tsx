@@ -1,3 +1,4 @@
+import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
 /**
  * fragment-select-field.tsx
  * 作者: 池水三两升
@@ -165,7 +166,7 @@ export function FragmentSelectField(
   return (
     <chakra.label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>目标片段</chakra.span>
-      <chakra.select
+      <EditorSelect
         aria-label={`动作 ${index + 1} 目标片段`}
         data-testid={`action-fragment-${index}`}
         value={fragmentId}
@@ -181,20 +182,20 @@ export function FragmentSelectField(
           );
         }}
       >
-        <chakra.option value="">
+        <EditorSelectOption value="">
           {loading ? "（加载片段列表…）" : "（请选择片段）"}
-        </chakra.option>
+        </EditorSelectOption>
         {missingSelected ? (
-          <chakra.option value={fragmentId}>
+          <EditorSelectOption value={fragmentId}>
             {fragmentId}（未在工程中找到）
-          </chakra.option>
+          </EditorSelectOption>
         ) : null}
         {options.map((opt) => (
-          <chakra.option key={`${opt.chapterId}:${opt.fragmentId}`} value={opt.fragmentId}>
+          <EditorSelectOption key={`${opt.chapterId}:${opt.fragmentId}`} value={opt.fragmentId}>
             {opt.label}
-          </chakra.option>
+          </EditorSelectOption>
         ))}
-      </chakra.select>
+      </EditorSelect>
     </chakra.label>
   );
 }

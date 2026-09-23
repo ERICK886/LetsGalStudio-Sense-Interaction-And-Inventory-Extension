@@ -8,7 +8,7 @@
  * 对齐 item-list-panel 精简版（无场景引用软警告）。
  */
 
-import { chakra } from "@chakra-ui/react";
+import { Button, Input, chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { RecipeDefinition, RecipesLibraryFile } from "../../domain/types";
@@ -231,18 +231,18 @@ export function RecipeListPanel({
         >
           配方
         </chakra.span>
-        <chakra.button
+        <Button size="xs" variant="plain"
           type="button"
           data-testid="recipe-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </chakra.button>
+        </Button>
       </chakra.div>
 
       <chakra.div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <chakra.input
+        <Input size="xs"
           data-testid="recipe-list-search"
           type="search"
           placeholder="搜索配方…"
@@ -296,7 +296,7 @@ export function RecipeListPanel({
                 key={recipe.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <chakra.button
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`recipe-list-item-${recipe.id}`}
                   aria-selected={selected}
@@ -314,8 +314,8 @@ export function RecipeListPanel({
                   >
                     {recipe.name || "（未命名）"}
                   </chakra.span>
-                </chakra.button>
-                <chakra.button
+                </Button>
+                <Button size="xs" variant="plain"
                   type="button"
                   data-testid={`recipe-list-delete-${recipe.id}`}
                   aria-label={`删除配方 ${recipe.name}`}
@@ -327,7 +327,7 @@ export function RecipeListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </chakra.button>
+                </Button>
               </chakra.div>
             );
           })
