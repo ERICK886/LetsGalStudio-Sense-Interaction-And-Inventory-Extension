@@ -13,6 +13,7 @@
  * Studio 下层场景图，故编辑器预览不能沿用玩家的全透明叠层。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
@@ -277,14 +278,14 @@ export function PreviewShell({
           </span>
         </div>
 
-        <button
+        <chakra.button
           type="button"
           data-testid="preview-mode-toggle"
           onClick={() => onBackToEditor(true)}
           style={topBarButtonStyle(tokens, "primary")}
         >
           <IconLabel icon="pen-to-square">编辑</IconLabel>
-        </button>
+        </chakra.button>
 
         <div style={{ flex: 1 }} />
 

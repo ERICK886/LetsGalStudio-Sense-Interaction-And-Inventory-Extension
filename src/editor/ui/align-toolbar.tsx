@@ -7,6 +7,7 @@
  * 多选显式对齐工具条（左/右/顶/底/水平居中/垂直居中）。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React from "react";
 import { FaIcon } from "../../shared/fa-icon";
 import {
@@ -109,7 +110,7 @@ export function AlignToolbar({
         }}
       >
         {MODES.map(({ mode, label, icon }) => (
-          <button
+          <chakra.button
             key={mode}
             type="button"
             data-testid={`align-${mode}`}
@@ -120,7 +121,7 @@ export function AlignToolbar({
           >
             <FaIcon name={icon} css={{ fontSize: 12 }} />
             <span>{label}</span>
-          </button>
+          </chakra.button>
         ))}
       </div>
       <div style={{ fontSize: 11, color: tokens.textMuted }}>

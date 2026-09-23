@@ -13,6 +13,7 @@
  * - 「运行预览」以左侧当前编辑/选中场景为预览场景
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { scaleBackpackScreenLayout } from "../domain/backpack-screen-config";
@@ -1057,7 +1058,7 @@ export function EditorShell({
       }}
     >
       {/* 隐藏 file input：场景 / 物品 / 配方库导入 */}
-      <input
+      <chakra.input
         ref={scenesImportInputRef}
         type="file"
         accept="application/json,.json"
@@ -1065,7 +1066,7 @@ export function EditorShell({
         style={{ display: "none" }}
         onChange={handleScenesImportChange}
       />
-      <input
+      <chakra.input
         ref={itemsImportInputRef}
         type="file"
         accept="application/json,.json"
@@ -1073,7 +1074,7 @@ export function EditorShell({
         style={{ display: "none" }}
         onChange={handleItemsImportChange}
       />
-      <input
+      <chakra.input
         ref={recipesImportInputRef}
         type="file"
         accept="application/json,.json"
@@ -1131,7 +1132,7 @@ export function EditorShell({
           aria-label="编辑分区"
           style={{ display: "flex", alignItems: "center", gap: 6 }}
         >
-          <button
+          <chakra.button
             type="button"
             role="tab"
             data-testid="editor-section-scenes"
@@ -1142,8 +1143,8 @@ export function EditorShell({
             })}
           >
             <IconLabel icon="image">场景</IconLabel>
-          </button>
-          <button
+          </chakra.button>
+          <chakra.button
             type="button"
             role="tab"
             data-testid="editor-section-items"
@@ -1154,8 +1155,8 @@ export function EditorShell({
             })}
           >
             <IconLabel icon="box-open">物品库</IconLabel>
-          </button>
-          <button
+          </chakra.button>
+          <chakra.button
             type="button"
             role="tab"
             data-testid="editor-section-recipes"
@@ -1166,8 +1167,8 @@ export function EditorShell({
             })}
           >
             <IconLabel icon="flask">配方</IconLabel>
-          </button>
-          <button
+          </chakra.button>
+          <chakra.button
             type="button"
             role="tab"
             data-testid="editor-section-ui"
@@ -1178,7 +1179,7 @@ export function EditorShell({
             })}
           >
             <IconLabel icon="layer-group">UI</IconLabel>
-          </button>
+          </chakra.button>
         </div>
 
         {editorSection === "scenes" || editorSection === "ui" ? (
@@ -1190,68 +1191,68 @@ export function EditorShell({
 
         {editorSection === "scenes" ? (
           <>
-            <button
+            <chakra.button
               type="button"
               data-testid="editor-export-scenes"
               onClick={handleExportScenes}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-export">导出场景 JSON</IconLabel>
-            </button>
-            <button
+            </chakra.button>
+            <chakra.button
               type="button"
               data-testid="editor-import-scenes"
               onClick={handlePickScenesImport}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-import">导入场景 JSON</IconLabel>
-            </button>
+            </chakra.button>
           </>
         ) : null}
 
         {editorSection === "items" ? (
           <>
-            <button
+            <chakra.button
               type="button"
               data-testid="editor-export-items"
               onClick={handleExportItems}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-export">导出物品 JSON</IconLabel>
-            </button>
-            <button
+            </chakra.button>
+            <chakra.button
               type="button"
               data-testid="editor-import-items"
               onClick={handlePickItemsImport}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-import">导入物品 JSON</IconLabel>
-            </button>
+            </chakra.button>
           </>
         ) : null}
 
         {editorSection === "recipes" ? (
           <>
-            <button
+            <chakra.button
               type="button"
               data-testid="editor-export-recipes"
               onClick={handleExportRecipes}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-export">导出配方 JSON</IconLabel>
-            </button>
-            <button
+            </chakra.button>
+            <chakra.button
               type="button"
               data-testid="editor-import-recipes"
               onClick={handlePickRecipesImport}
               style={topBarButtonStyle(tokens)}
             >
               <IconLabel icon="file-import">导入配方 JSON</IconLabel>
-            </button>
+            </chakra.button>
           </>
         ) : null}
 
-        <button
+        <chakra.button
           type="button"
           data-testid="editor-undo"
           title="撤销 (Ctrl+Z)"
@@ -1262,8 +1263,8 @@ export function EditorShell({
           style={topBarButtonStyle(tokens, { disabled: !canUndo })}
         >
           <IconLabel icon="rotate-left">撤销</IconLabel>
-        </button>
-        <button
+        </chakra.button>
+        <chakra.button
           type="button"
           data-testid="editor-redo"
           title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
@@ -1274,9 +1275,9 @@ export function EditorShell({
           style={topBarButtonStyle(tokens, { disabled: !canRedo })}
         >
           <IconLabel icon="rotate-right">重做</IconLabel>
-        </button>
+        </chakra.button>
 
-        <button
+        <chakra.button
           type="button"
           data-testid="editor-mode-toggle"
           onClick={() =>
@@ -1285,7 +1286,7 @@ export function EditorShell({
           style={topBarButtonStyle(tokens, { variant: "primary" })}
         >
           <IconLabel icon="play">运行预览</IconLabel>
-        </button>
+        </chakra.button>
 
         <div style={{ flex: 1 }} />
 

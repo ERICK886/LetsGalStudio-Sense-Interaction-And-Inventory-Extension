@@ -9,6 +9,7 @@
  * giveItem：Toast 外观覆盖；片段动作：从工程 story 选择片段（显示名称）。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback } from "react";
 import { defaultElementMotion } from "../domain/motion";
 import type {
@@ -394,7 +395,7 @@ function ActionCard({
         >
           #{index + 1}
         </span>
-        <select
+        <chakra.select
           aria-label={`动作 ${index + 1} 类型`}
           value={action.type}
           style={{ ...controlStyle(tokens), flex: 1, minWidth: 100 }}
@@ -413,8 +414,8 @@ function ActionCard({
               {opt.label}
             </option>
           ))}
-        </select>
-        <button
+        </chakra.select>
+        <chakra.button
           type="button"
           aria-label="上移"
           disabled={index === 0}
@@ -425,8 +426,8 @@ function ActionCard({
           onClick={() => onMove(-1)}
         >
           <IconLabel icon="arrow-up" iconSize={11} />
-        </button>
-        <button
+        </chakra.button>
+        <chakra.button
           type="button"
           aria-label="下移"
           disabled={index >= total - 1}
@@ -437,22 +438,22 @@ function ActionCard({
           onClick={() => onMove(1)}
         >
           <IconLabel icon="arrow-down" iconSize={11} />
-        </button>
-        <button
+        </chakra.button>
+        <chakra.button
           type="button"
           aria-label="删除动作"
           style={smallButtonStyle(tokens, { danger: true })}
           onClick={onRemove}
         >
           <IconLabel icon="trash" iconSize={11} />
-        </button>
+        </chakra.button>
       </div>
 
       {action.type === "openScene" ? (
         <>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>目标场景</span>
-            <select
+            <chakra.select
               aria-label={`动作 ${index + 1} 目标场景`}
               value={action.sceneIdOrName}
               style={controlStyle(tokens)}
@@ -480,7 +481,7 @@ function ActionCard({
                   {s.name || s.id}
                 </option>
               ))}
-            </select>
+            </chakra.select>
           </label>
 
           {/*
@@ -495,7 +496,7 @@ function ActionCard({
               gap: 8,
             }}
           >
-            <input
+            <chakra.input
               type="checkbox"
               aria-label={`动作 ${index + 1} 压入返回栈`}
               checked={action.pushReturn !== false}
@@ -522,7 +523,7 @@ function ActionCard({
             <span style={{ fontSize: 11, color: tokens.textMuted }}>
               返回目标
             </span>
-            <select
+            <chakra.select
               aria-label={`动作 ${index + 1} 返回目标`}
               value={action.returnTarget ?? ""}
               style={controlStyle(tokens)}
@@ -555,7 +556,7 @@ function ActionCard({
                   {s.name || s.id}
                 </option>
               ))}
-            </select>
+            </chakra.select>
           </label>
         </>
       ) : null}
@@ -564,7 +565,7 @@ function ActionCard({
         <>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>物品</span>
-            <select
+            <chakra.select
               aria-label={`动作 ${index + 1} 物品`}
               data-testid={`action-give-item-${index}`}
               value={action.itemId}
@@ -587,7 +588,7 @@ function ActionCard({
                   {it.name || it.id}
                 </option>
               ))}
-            </select>
+            </chakra.select>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
@@ -610,7 +611,7 @@ function ActionCard({
             <span style={{ fontSize: 11, color: tokens.textMuted }}>
               提示文案
             </span>
-            <input
+            <chakra.input
               type="text"
               value={action.toastText}
               placeholder="空则回退物品名"
@@ -626,7 +627,7 @@ function ActionCard({
             <span style={{ fontSize: 11, color: tokens.textMuted }}>
               Toast 位置
             </span>
-            <select
+            <chakra.select
               aria-label={`动作 ${index + 1} Toast 位置`}
               data-testid={`action-toast-placement-${index}`}
               value={action.toastPlacement ?? ""}
@@ -645,7 +646,7 @@ function ActionCard({
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </chakra.select>
           </label>
 
           {/* 偏移与间距：留空则删除覆盖字段 */}
@@ -783,7 +784,7 @@ function ActionCard({
                 <span style={{ fontSize: 11, color: tokens.textMuted }}>
                   背景色
                 </span>
-                <input
+                <chakra.input
                   type="text"
                   value={action.toastStyle?.background ?? ""}
                   placeholder="#1a1a2e"
@@ -889,7 +890,7 @@ function ActionCard({
         <>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>物品</span>
-            <select
+            <chakra.select
               aria-label={`动作 ${index + 1} 扣除物品`}
               data-testid={`action-remove-item-${index}`}
               value={action.itemId}
@@ -912,7 +913,7 @@ function ActionCard({
                   {it.name || it.id}
                 </option>
               ))}
-            </select>
+            </chakra.select>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 11, color: tokens.textMuted }}>数量</span>
@@ -1066,7 +1067,7 @@ export function ActionListField({
         >
           动作
         </h3>
-        <button
+        <chakra.button
           type="button"
           data-testid="action-list-add"
           style={smallButtonStyle(tokens)}
@@ -1075,7 +1076,7 @@ export function ActionListField({
           <IconLabel icon="plus" iconSize={11}>
             添加
           </IconLabel>
-        </button>
+        </chakra.button>
       </div>
 
       {value.length === 0 ? (

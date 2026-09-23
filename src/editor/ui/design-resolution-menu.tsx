@@ -8,6 +8,7 @@
  * 自定义宽高草稿不挂 HTML min/max，保存时再 normalizeDesignSize。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useEffect, useId, useRef, useState } from "react";
 import {
   DESIGN_RESOLUTION_PRESETS,
@@ -118,7 +119,7 @@ export function DesignResolutionMenu({
 
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
-      <button
+      <chakra.button
         type="button"
         data-testid="design-resolution-trigger"
         aria-haspopup="listbox"
@@ -128,7 +129,7 @@ export function DesignResolutionMenu({
       >
         <IconLabel icon="display">{formatDesignSizeLabel(size)}</IconLabel>
         <IconLabel icon="chevron-down" iconSize={10} />
-      </button>
+      </chakra.button>
 
       {open ? (
         <div
@@ -153,7 +154,7 @@ export function DesignResolutionMenu({
             const active = matchesPreset(size, preset);
 
             return (
-              <button
+              <chakra.button
                 key={`${preset.width}x${preset.height}`}
                 type="button"
                 role="option"
@@ -180,11 +181,11 @@ export function DesignResolutionMenu({
                 }}
               >
                 {preset.label}
-              </button>
+              </chakra.button>
             );
           })}
 
-          <button
+          <chakra.button
             type="button"
             data-testid="design-resolution-custom"
             onClick={() => {
@@ -211,7 +212,7 @@ export function DesignResolutionMenu({
             }}
           >
             <IconLabel icon="sliders">自定义…</IconLabel>
-          </button>
+          </chakra.button>
         </div>
       ) : null}
 
@@ -256,7 +257,7 @@ export function DesignResolutionMenu({
                 <div style={{ marginBottom: 4, color: tokens.textMuted }}>
                   宽（{DESIGN_SIZE_MIN}–{DESIGN_SIZE_MAX}）
                 </div>
-                <input
+                <chakra.input
                   data-testid="design-resolution-custom-width"
                   type="number"
                   value={draftW}
@@ -277,7 +278,7 @@ export function DesignResolutionMenu({
                 <div style={{ marginBottom: 4, color: tokens.textMuted }}>
                   高（{DESIGN_SIZE_MIN}–{DESIGN_SIZE_MAX}）
                 </div>
-                <input
+                <chakra.input
                   data-testid="design-resolution-custom-height"
                   type="number"
                   value={draftH}
@@ -296,14 +297,14 @@ export function DesignResolutionMenu({
               </label>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button
+              <chakra.button
                 type="button"
                 onClick={() => setCustomOpen(false)}
                 style={buttonStyle}
               >
                 取消
-              </button>
-              <button
+              </chakra.button>
+              <chakra.button
                 type="button"
                 data-testid="design-resolution-custom-save"
                 onClick={applyCustom}
@@ -315,7 +316,7 @@ export function DesignResolutionMenu({
                 }}
               >
                 保存
-              </button>
+              </chakra.button>
             </div>
           </div>
         </>

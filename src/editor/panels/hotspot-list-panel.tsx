@@ -7,6 +7,7 @@
  * 编辑器左栏下半：当前场景的交互点（hotspot）列表与图层排序。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo } from "react";
 import {
   closestCenter,
@@ -178,7 +179,7 @@ function SortableHotspotRow({
         transition,
       }}
     >
-      <button
+      <chakra.button
         type="button"
         data-testid={`hotspot-list-drag-${hotspot.id}`}
         aria-label={`拖动调整交互点 ${hotspot.name || "未命名"} 的图层顺序`}
@@ -203,9 +204,9 @@ function SortableHotspotRow({
         }}
       >
         <IconLabel icon="grip-vertical" iconSize={11} />
-      </button>
+      </chakra.button>
 
-      <button
+      <chakra.button
         type="button"
         data-testid={`hotspot-list-item-${hotspot.id}`}
         aria-selected={selected}
@@ -241,9 +242,9 @@ function SortableHotspotRow({
         >
           {hotspot.name || "（未命名）"}
         </span>
-      </button>
+      </chakra.button>
 
-      <button
+      <chakra.button
         type="button"
         data-testid={`hotspot-list-delete-${hotspot.id}`}
         aria-label={`删除交互点 ${hotspot.name}`}
@@ -255,7 +256,7 @@ function SortableHotspotRow({
         }}
       >
         <IconLabel icon="trash" />
-      </button>
+      </chakra.button>
     </div>
   );
 }
@@ -420,7 +421,7 @@ export function HotspotListPanel({
         >
           交互点
         </span>
-        <button
+        <chakra.button
           type="button"
           data-testid="hotspot-list-add"
           disabled={scene === null}
@@ -434,7 +435,7 @@ export function HotspotListPanel({
           <IconLabel icon={placementActive ? "crosshairs" : "plus"}>
             {placementActive ? "点击画布…" : "新建"}
           </IconLabel>
-        </button>
+        </chakra.button>
       </div>
 
       <div

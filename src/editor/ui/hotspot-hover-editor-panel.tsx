@@ -10,6 +10,7 @@
  * - 顶部展示说明文案：「未勾选自定义的交互点将使用此预设」
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
@@ -183,7 +184,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           编辑目标：全局
         </div>
 
-        <button
+        <chakra.button
           type="button"
           data-testid="hotspot-hover-reset-all"
           onClick={handleResetAll}
@@ -203,7 +204,7 @@ export function HotspotHoverEditorPanel(): React.ReactElement {
           }}
         >
           全部重置为默认
-        </button>
+        </chakra.button>
 
         <FormRenderer
           schema={hotspotHoverPresetFields()}

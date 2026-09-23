@@ -7,6 +7,7 @@
  * 编辑器左栏上半：场景列表 CRUD（新建 / 删除 / 选中）。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { SceneDefinition, ScenesLibraryFile } from "../../domain/types";
@@ -252,18 +253,18 @@ export function SceneListPanel({
         >
           场景
         </span>
-        <button
+        <chakra.button
           type="button"
           data-testid="scene-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </button>
+        </chakra.button>
       </div>
 
       <div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <input
+        <chakra.input
           data-testid="scene-list-search"
           type="search"
           placeholder="搜索场景…"
@@ -316,7 +317,7 @@ export function SceneListPanel({
                 key={scene.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <button
+                <chakra.button
                   type="button"
                   data-testid={`scene-list-item-${scene.id}`}
                   aria-selected={selected}
@@ -365,9 +366,9 @@ export function SceneListPanel({
                     <IconLabel icon="location-dot" iconSize={10} />
                     {scene.hotspots.length}
                   </span>
-                </button>
+                </chakra.button>
                 {onSetDefaultSceneId && !isMain ? (
-                  <button
+                  <chakra.button
                     type="button"
                     data-testid={`scene-list-set-main-${scene.id}`}
                     aria-label={`将 ${scene.name} 设为主场景`}
@@ -384,9 +385,9 @@ export function SceneListPanel({
                     }}
                   >
                     设为主
-                  </button>
+                  </chakra.button>
                 ) : null}
-                <button
+                <chakra.button
                   type="button"
                   data-testid={`scene-list-delete-${scene.id}`}
                   aria-label={`删除场景 ${scene.name}`}
@@ -398,7 +399,7 @@ export function SceneListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </button>
+                </chakra.button>
               </div>
             );
           })

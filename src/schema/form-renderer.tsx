@@ -10,6 +10,7 @@
  * number：聚焦期间用草稿字符串，失焦后再按 min/max 钳制提交，避免输入「300」时「3」被钳回 min。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
@@ -184,9 +185,9 @@ function renderStringField<T extends Record<string, unknown>>(
     <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
       {field.multiline ? (
-        <textarea {...common} rows={3} />
+        <chakra.textarea {...common} rows={3} />
       ) : (
-        <input type="text" {...common} />
+        <chakra.input type="text" {...common} />
       )}
       <FieldHint text={field.description} tokens={tokens} />
     </div>
@@ -285,7 +286,7 @@ function SchemaNumberField<T extends Record<string, unknown>>(props: {
   return (
     <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <input
+      <chakra.input
         id={id}
         type="number"
         value={focused ? draft : String(committed)}
@@ -370,7 +371,7 @@ function renderBooleanField<T extends Record<string, unknown>>(
       }}
       data-testid={`schema-field-${field.key}`}
     >
-      <input
+      <chakra.input
         id={id}
         type="checkbox"
         checked={checked}
@@ -406,7 +407,7 @@ function renderEnumField<T extends Record<string, unknown>>(
   return (
     <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <select
+      <chakra.select
         id={id}
         value={str}
         style={inputStyle(tokens)}
@@ -419,7 +420,7 @@ function renderEnumField<T extends Record<string, unknown>>(
             {opt.label}
           </option>
         ))}
-      </select>
+      </chakra.select>
       <FieldHint text={field.description} tokens={tokens} />
     </div>
   );
@@ -500,7 +501,7 @@ function renderAssetField<T extends Record<string, unknown>>(
   return (
     <div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <input
+      <chakra.input
         id={id}
         type="text"
         value={str}

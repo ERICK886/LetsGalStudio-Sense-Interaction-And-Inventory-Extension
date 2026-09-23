@@ -8,6 +8,7 @@
  * 对齐 item-list-panel 精简版（无场景引用软警告）。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import type { RecipeDefinition, RecipesLibraryFile } from "../../domain/types";
@@ -230,18 +231,18 @@ export function RecipeListPanel({
         >
           配方
         </span>
-        <button
+        <chakra.button
           type="button"
           data-testid="recipe-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </button>
+        </chakra.button>
       </div>
 
       <div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <input
+        <chakra.input
           data-testid="recipe-list-search"
           type="search"
           placeholder="搜索配方…"
@@ -295,7 +296,7 @@ export function RecipeListPanel({
                 key={recipe.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <button
+                <chakra.button
                   type="button"
                   data-testid={`recipe-list-item-${recipe.id}`}
                   aria-selected={selected}
@@ -313,8 +314,8 @@ export function RecipeListPanel({
                   >
                     {recipe.name || "（未命名）"}
                   </span>
-                </button>
-                <button
+                </chakra.button>
+                <chakra.button
                   type="button"
                   data-testid={`recipe-list-delete-${recipe.id}`}
                   aria-label={`删除配方 ${recipe.name}`}
@@ -326,7 +327,7 @@ export function RecipeListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </button>
+                </chakra.button>
               </div>
             );
           })

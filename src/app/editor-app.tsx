@@ -11,6 +11,7 @@
  * - 预览非编辑器主场景时预置返回栈（主场景 = defaultSceneId，否则场景库首项）
  */
 
+import { ChakraProvider, createSystem, defaultConfig } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useExtensionContext,
@@ -33,6 +34,13 @@ import {
   rootTypographyStyle,
 } from "../theme/theme-provider";
 import type { ThemeMode } from "../theme/tokens";
+
+const editorUiSystem = createSystem({
+  ...defaultConfig,
+  cssVarsRoot: "[data-extension-editor-root]",
+  preflight: false,
+  globalCss: {},
+});
 
 /**
  * 解析编辑器预览用的「主场景」id。
@@ -368,57 +376,60 @@ function EditorAppContent(): React.ReactElement {
   }, [mode, EditorShellComp, PreviewShellComp, previewSave]);
 
   return (
-    <ThemeProvider
-      initialMode={themeMode}
-      /**
-       * 预览用不透明底：顶栏占高后场景 letterbox 两侧若透明会透出
-       * Studio 下层图；编辑态沿用主题默认底。
-       */
-      rootBackground={mode === "preview" ? "#141418" : undefined}
-      /**
-       * 编辑器顶栏 /「编辑」按钮必须可点；
-       * 不可沿用玩家叠层的 pointer-events:none 默认。
-       */
-      rootPointerEvents="auto"
-    >
-      <div
-        data-testid="editor-app-root"
-        style={{
-          width: "100%",
-          height: "100%",
-          position: "relative",
-          minHeight: 0,
-          background: mode === "preview" ? "#141418" : undefined,
-          pointerEvents: "auto",
-        }}
+    <ChakraProvider value={editorUiSystem}>
+      <ThemeProvider
+        initialMode={themeMode}
+        /**
+         * 预览用不透明底：顶栏占高后场景 letterbox 两侧若透明会透出
+         * Studio 下层图；编辑态沿用主题默认底。
+         */
+        rootBackground={mode === "preview" ? "#141418" : undefined}
+        /**
+         * 编辑器顶栏 /「编辑」按钮必须可点；
+         * 不可沿用玩家叠层的 pointer-events:none 默认。
+         */
+        rootPointerEvents="auto"
       >
-        {loadError ? (
-          <MountPlaceholder
-            themeMode={themeMode}
-            message={`加载失败：${loadError}`}
-          />
-        ) : !shellReady ? (
-          <MountPlaceholder
-            themeMode={themeMode}
-            message={
-              mode === "preview" ? "正在加载运行预览…" : "正在加载编辑器…"
-            }
-          />
-        ) : mode === "preview" && PreviewShellComp && previewSave ? (
-          <PreviewShellComp
-            key={previewSessionKey}
-            save={previewSave}
-            onBackToEditor={handleSetEditMode}
-          />
-        ) : EditorShellComp ? (
-          <EditorShellComp
-            editorSection={editorSection}
-            onEditorSectionChange={setEditorSection}
-            onSetEditMode={handleSetEditMode}
-          />
-        ) : null}
-      </div>
-    </ThemeProvider>
+        <div
+          data-testid="editor-app-root"
+          data-extension-editor-root=""
+          style={{
+            width: "100%",
+            height: "100%",
+            position: "relative",
+            minHeight: 0,
+            background: mode === "preview" ? "#141418" : undefined,
+            pointerEvents: "auto",
+          }}
+        >
+          {loadError ? (
+            <MountPlaceholder
+              themeMode={themeMode}
+              message={`加载失败：${loadError}`}
+            />
+          ) : !shellReady ? (
+            <MountPlaceholder
+              themeMode={themeMode}
+              message={
+                mode === "preview" ? "正在加载运行预览…" : "正在加载编辑器…"
+              }
+            />
+          ) : mode === "preview" && PreviewShellComp && previewSave ? (
+            <PreviewShellComp
+              key={previewSessionKey}
+              save={previewSave}
+              onBackToEditor={handleSetEditMode}
+            />
+          ) : EditorShellComp ? (
+            <EditorShellComp
+              editorSection={editorSection}
+              onEditorSectionChange={setEditorSection}
+              onSetEditMode={handleSetEditMode}
+            />
+          ) : null}
+        </div>
+      </ThemeProvider>
+    </ChakraProvider>
   );
 }
 

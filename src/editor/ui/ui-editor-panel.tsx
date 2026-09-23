@@ -10,6 +10,7 @@
  * - 多选 + 显式对齐；右侧属性（单选节点 / 全局）
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, {
   useCallback,
   useEffect,
@@ -819,7 +820,7 @@ export function UiEditorPanel(): React.ReactElement {
     const active = sub === id;
 
     return (
-      <button
+      <chakra.button
         key={id}
         type="button"
         data-testid={`ui-editor-tab-${id}`}
@@ -846,7 +847,7 @@ export function UiEditorPanel(): React.ReactElement {
         }}
       >
         <IconLabel icon={icon}>{label}</IconLabel>
-      </button>
+      </chakra.button>
     );
   };
 
@@ -866,7 +867,7 @@ export function UiEditorPanel(): React.ReactElement {
     const active = sceneUiTab === id;
 
     return (
-      <button
+      <chakra.button
         key={id}
         type="button"
         data-testid={`ui-editor-scene-ui-tab-${id}`}
@@ -890,7 +891,7 @@ export function UiEditorPanel(): React.ReactElement {
         }}
       >
         <IconLabel icon={icon}>{label}</IconLabel>
-      </button>
+      </chakra.button>
     );
   };
 
@@ -1143,44 +1144,44 @@ export function UiEditorPanel(): React.ReactElement {
           {sub === "hud" ? (
             <>
               {primaryHudId !== null && !canDeleteHudOverlay ? (
-                <button
+                <chakra.button
                   type="button"
                   data-testid="ui-editor-reset-hud-node"
                   onClick={handleResetHudNode}
                   style={resetButtonStyle(tokens, false)}
                 >
                   <IconLabel icon="rotate-left">重置此节点</IconLabel>
-                </button>
+                </chakra.button>
               ) : null}
-              <button
+              <chakra.button
                 type="button"
                 data-testid="ui-editor-reset-hud-all"
                 onClick={handleResetHudAll}
                 style={resetButtonStyle(tokens, true)}
               >
                 <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
-              </button>
+              </chakra.button>
             </>
           ) : (
             <>
               {primaryBagId !== null && !canDeleteBagOverlay ? (
-                <button
+                <chakra.button
                   type="button"
                   data-testid="ui-editor-reset-bag-node"
                   onClick={handleResetBagNode}
                   style={resetButtonStyle(tokens, false)}
                 >
                   <IconLabel icon="rotate-left">重置此节点</IconLabel>
-                </button>
+                </chakra.button>
               ) : null}
-              <button
+              <chakra.button
                 type="button"
                 data-testid="ui-editor-reset-bag-all"
                 onClick={handleResetBagAll}
                 style={resetButtonStyle(tokens, true)}
               >
                 <IconLabel icon="arrows-rotate">全部重置为默认</IconLabel>
-              </button>
+              </chakra.button>
             </>
           )}
         </div>

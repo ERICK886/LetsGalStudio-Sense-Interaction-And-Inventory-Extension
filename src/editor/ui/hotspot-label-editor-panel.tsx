@@ -7,6 +7,7 @@
  * 全局交互点提示文本外观（`SceneUiConfig.hotspotLabel`）的表单编辑器。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import {
@@ -205,7 +206,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           编辑目标：全局
         </div>
 
-        <button
+        <chakra.button
           type="button"
           data-testid="hotspot-label-reset-all"
           onClick={handleResetAll}
@@ -225,7 +226,7 @@ export function HotspotLabelEditorPanel(): React.ReactElement {
           }}
         >
           全部重置为默认
-        </button>
+        </chakra.button>
 
         <FormRenderer
           schema={hotspotLabelPresetFields()}

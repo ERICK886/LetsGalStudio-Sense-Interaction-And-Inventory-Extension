@@ -9,6 +9,7 @@
  * 选中时回写 fragmentId + chapterId。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useEffect, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import type { ThemeTokens } from "../theme/tokens";
@@ -164,7 +165,7 @@ export function FragmentSelectField(
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span style={{ fontSize: 11, color: tokens.textMuted }}>目标片段</span>
-      <select
+      <chakra.select
         aria-label={`动作 ${index + 1} 目标片段`}
         data-testid={`action-fragment-${index}`}
         value={fragmentId}
@@ -193,7 +194,7 @@ export function FragmentSelectField(
             {opt.label}
           </option>
         ))}
-      </select>
+      </chakra.select>
     </label>
   );
 }

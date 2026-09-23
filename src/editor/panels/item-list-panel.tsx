@@ -8,6 +8,7 @@
  * 删除时若场景仍引用该物品，在面板顶部显示黄色软警告条（仍允许删除）。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useCallback, useMemo, useState } from "react";
 import { createId } from "../../domain/id";
 import { scenesReferencingItem } from "../../domain/item-refs";
@@ -270,14 +271,14 @@ export function ItemListPanel({
         >
           物品
         </span>
-        <button
+        <chakra.button
           type="button"
           data-testid="item-list-add"
           onClick={handleAdd}
           style={toolButtonStyle(tokens)}
         >
           <IconLabel icon="plus">新建</IconLabel>
-        </button>
+        </chakra.button>
       </div>
 
       {deleteWarning ? (
@@ -301,7 +302,7 @@ export function ItemListPanel({
       ) : null}
 
       <div style={{ padding: "8px 12px", flexShrink: 0 }}>
-        <input
+        <chakra.input
           data-testid="item-list-search"
           type="search"
           placeholder="搜索物品…"
@@ -355,7 +356,7 @@ export function ItemListPanel({
                 key={item.id}
                 style={{ display: "flex", alignItems: "center", gap: 4 }}
               >
-                <button
+                <chakra.button
                   type="button"
                   data-testid={`item-list-item-${item.id}`}
                   aria-selected={selected}
@@ -385,8 +386,8 @@ export function ItemListPanel({
                   >
                     {item.stackable ? "堆叠" : "唯一"}
                   </span>
-                </button>
-                <button
+                </chakra.button>
+                <chakra.button
                   type="button"
                   data-testid={`item-list-delete-${item.id}`}
                   aria-label={`删除物品 ${item.name}`}
@@ -398,7 +399,7 @@ export function ItemListPanel({
                   }}
                 >
                   <IconLabel icon="trash" />
-                </button>
+                </chakra.button>
               </div>
             );
           })

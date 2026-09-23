@@ -8,6 +8,7 @@
  * 避免「输入 300 时先出现 3 被立刻钳回 min」的问题。
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, { useEffect, useState } from "react";
 import { clampNumberFieldValue } from "./form-renderer";
 
@@ -145,7 +146,7 @@ export function DeferredNumberInput(
   };
 
   return (
-    <input
+    <chakra.input
       id={id}
       data-testid={testId}
       type="number"

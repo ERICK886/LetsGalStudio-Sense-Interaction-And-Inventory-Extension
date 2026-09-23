@@ -27,6 +27,7 @@
  * ```
  */
 
+import { chakra } from "@chakra-ui/react";
 import React, {
   useCallback,
   useEffect,
@@ -744,7 +745,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
         </span>
       )}
 
-      <button
+      <chakra.button
         ref={triggerRef}
         type="button"
         disabled={disabled}
@@ -807,7 +808,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
         >
           {isEmpty ? (placeholder ?? "#RRGGBB") : displayHex}
         </span>
-      </button>
+      </chakra.button>
 
       {popover}
     </div>
@@ -919,7 +920,7 @@ const HueSlider: React.FC<{
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span style={{ width: 14, color: tokens.textMuted, fontSize: 12 }}>H</span>
-      <input
+      <chakra.input
         type="range"
         min={0}
         max={360}
@@ -968,7 +969,7 @@ const AlphaSlider: React.FC<{
           position: "relative",
         }}
       >
-        <input
+        <chakra.input
           type="range"
           min={0}
           max={100}
@@ -1017,7 +1018,7 @@ const HexTextInput: React.FC<{
   }, [committedHex]);
 
   return (
-    <input
+    <chakra.input
       type="text"
       value={text}
       spellCheck={false}
@@ -1112,7 +1113,7 @@ const NumberTextInput: React.FC<{
   };
 
   return (
-    <input
+    <chakra.input
       type="text"
       inputMode="decimal"
       value={text}
@@ -1164,7 +1165,7 @@ const ModeTabs: React.FC<{
       {tabs.map((t) => {
         const active = mode === t;
         return (
-          <button
+          <chakra.button
             key={t}
             type="button"
             onClick={() => onChange(t)}
@@ -1182,7 +1183,7 @@ const ModeTabs: React.FC<{
             }}
           >
             {t}
-          </button>
+          </chakra.button>
         );
       })}
     </div>
@@ -1208,7 +1209,7 @@ const ModeFields: React.FC<{
 
   /**
    * 数值输入公共样式。
-   * 注意：原生 `<input>` 默认有较大固有宽度（约 size=20），
+   * 注意：原生 `<chakra.input>` 默认有较大固有宽度（约 size=20），
    * 必须 width:100% + box-sizing，否则会在窄列（如 Alpha）里撑破弹出层。
    * flex 应放在列容器上，不要写在 input 本身。
    */
