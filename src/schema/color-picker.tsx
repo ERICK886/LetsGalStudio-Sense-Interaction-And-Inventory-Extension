@@ -2,8 +2,9 @@ import {
   Box, ColorPicker as ChakraColorPicker, Flex, Input, NativeSelect,
   Portal, Text, parseColor,
 } from "@chakra-ui/react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTheme } from "../theme/theme-provider";
+import { useEditorPopoverPosition } from "../editor/ui/editor-popover-position";
 import type { ThemeTokens } from "../theme/tokens";
 
 export interface ColorPickerProps {
@@ -77,15 +78,6 @@ function serializeColor(color: PickerColor, allowAlpha: boolean): string {
   }, allowAlpha);
 }
 
-/** 缩放的 Studio 预览中，弹层须挂在编辑器根节点内。 */
-function useEditorPortal() {
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setContainer(document.querySelector<HTMLElement>("[data-extension-editor-root]"));
-  }, []);
-  return useMemo(() => ({ current: container }), [container]);
-}
-
 /** 使用与 light-engine 公共颜色字段相同的 Chakra ColorPicker 交互结构。 */
 export function ColorPicker({
   value, onChange, allowAlpha = false, label, disabled = false,
@@ -95,13 +87,13 @@ export function ColorPicker({
   const theme = tokens ?? contextTokens;
   const [color, setColor] = useState(() => toChakraColor(value, allowAlpha));
   const colorRef = useRef(color);
-  const [open, setOpen] = useState(false);
+  const { open, onOpenChange, triggerRef, positionerRef, portalRef, positionerStyle } =
+    useEditorPopoverPosition();
   const [mode, setMode] = useState<EditMode>("rgba");
   const [hexDraft, setHexDraft] = useState(value);
   const [hexFocused, setHexFocused] = useState(false);
   const pointerEditing = useRef(false);
   const cancelHexBlur = useRef(false);
-  const portalRef = useEditorPortal();
 
   useEffect(() => {
     if (open && pointerEditing.current) return;
@@ -147,13 +139,14 @@ export function ColorPicker({
         format={mode}
         size="xs"
         disabled={disabled}
-        positioning={{ strategy: "absolute", placement: "bottom-start", flip: true, slide: true }}
-        onOpenChange={(details) => setOpen(details.open)}
+        positioning={{ strategy: "absolute", placement: "bottom-start", flip: true, slide: true, applyStyles: false, listeners: false }}
+        onOpenChange={(details) => onOpenChange(details.open)}
         onValueChange={(details) => updateColor(details.value)}
         onValueChangeEnd={() => finishPointer()}
       >
         <ChakraColorPicker.Control w="100%" gap="6px">
           <ChakraColorPicker.Trigger
+            ref={triggerRef}
             aria-label={ariaLabel ?? "打开颜色面板"}
             title={ariaLabel ?? "打开颜色面板"}
             type="button"
@@ -213,7 +206,7 @@ export function ColorPicker({
           />
         </ChakraColorPicker.Control>
         <Portal container={portalRef}>
-          <ChakraColorPicker.Positioner zIndex={10000}>
+          <ChakraColorPicker.Positioner ref={positionerRef} style={positionerStyle} zIndex={10000}>
             <ChakraColorPicker.Content
               aria-label={(ariaLabel ?? "颜色") + "面板"}
               w="256px"

@@ -21,7 +21,9 @@ function load(path) {
   }).outputText;
   const module = { exports: {} };
   new Function("module", "exports", "require", output)(module, module.exports, (id) =>
-    id.includes("theme-provider") ? { useTheme: () => ({ tokens }) } : require(id),
+    id.includes("theme-provider") ? { useTheme: () => ({ tokens }) } :
+      id.endsWith("editor-popover-position") ? load("../src/editor/ui/editor-popover-position.ts") :
+        require(id),
   );
   return module.exports;
 }
@@ -64,4 +66,21 @@ test("旧颜色值读取与透明通道 HEX 输出保持兼容", () => {
   assert.equal(rgbaToHex(rgba, true), "#112233AA");
   assert.equal(rgbaToHex(rgba, false), "#112233");
   assert.equal(tryParseCssColor("#112233A"), null);
+});
+
+test("缩放预览中的弹层坐标贴近触发器，并在底部空间不足时上翻", () => {
+  const { getEditorPopoverCoordinates } = load("../src/editor/ui/editor-popover-position.ts");
+  const root = { left: 90, top: 110, width: 960, height: 540 };
+  const size = { width: 1920, height: 1080 };
+  const popup = { width: 260, height: 220 };
+  const middle = getEditorPopoverCoordinates(
+    { left: 790, top: 360, width: 120, height: 20, bottom: 380 },
+    root, size, popup,
+  );
+  assert.deepEqual(middle, { x: 1400, y: 544, width: 240 });
+  const bottom = getEditorPopoverCoordinates(
+    { left: 790, top: 580, width: 120, height: 20, bottom: 600 },
+    root, size, popup,
+  );
+  assert.deepEqual(bottom, { x: 1400, y: 716, width: 240 });
 });

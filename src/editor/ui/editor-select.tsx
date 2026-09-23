@@ -1,7 +1,8 @@
 import { Portal, Select, createListCollection } from "@chakra-ui/react";
 import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTheme } from "../../theme/theme-provider";
+import { useEditorPopoverPosition } from "./editor-popover-position";
 
 interface Option {
   value: string;
@@ -82,12 +83,8 @@ export function EditorSelect({
   const selectedValue = value === "" && options.some((option) => option.value === "")
     ? EMPTY_VALUE : value;
   const selected = collection.has(selectedValue) ? [selectedValue] : [];
-  // Studio 的扩展预览舞台会缩放；定位层须与触发器留在同一坐标系。
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setContainer(document.querySelector<HTMLElement>("[data-extension-editor-root]"));
-  }, []);
-  const portalRef = useMemo(() => ({ current: container }), [container]);
+  const { onOpenChange, triggerRef, positionerRef, portalRef, positionerStyle } =
+    useEditorPopoverPosition();
 
   return (
     <Select.Root
@@ -96,10 +93,11 @@ export function EditorSelect({
       disabled={disabled}
       lazyMount
       unmountOnExit
-      positioning={{ strategy: "absolute", placement: "bottom-start", sameWidth: true }}
+      positioning={{ strategy: "absolute", placement: "bottom-start", sameWidth: true, applyStyles: false, listeners: false }}
       w={style?.width ?? "100%"}
       flex={style?.flex}
       minW={style?.minWidth}
+      onOpenChange={(details) => onOpenChange(details.open)}
       onValueChange={(details) => {
         const next = details.value[0];
         if (next === undefined) return;
@@ -113,6 +111,7 @@ export function EditorSelect({
       <Select.HiddenSelect name={name} aria-label={ariaLabel} />
       <Select.Control>
         <Select.Trigger
+          ref={triggerRef}
           id={id}
           aria-label={ariaLabel}
           data-testid={testId}
@@ -136,7 +135,7 @@ export function EditorSelect({
         </Select.Trigger>
       </Select.Control>
       <Portal container={portalRef}>
-        <Select.Positioner>
+        <Select.Positioner ref={positionerRef} style={positionerStyle}>
           <Select.Content
             zIndex={10000}
             onKeyDown={(event) => event.stopPropagation()}
