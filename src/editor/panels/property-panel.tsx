@@ -103,6 +103,11 @@ function withHotspotFormDefaults(hotspot: HotspotElement): HotspotElement {
       src: hotspot.visual?.src ?? "",
       width: hotspot.visual?.width,
       height: hotspot.visual?.height,
+      widthRatio: hotspot.visual?.widthRatio ?? 0.05,
+      heightRatio: hotspot.visual?.heightRatio ?? 0.05,
+      placeholderColor: hotspot.visual?.placeholderColor ?? "#2EC4A4",
+      placeholderOpacity: hotspot.visual?.placeholderOpacity ?? 0.18,
+      placeholderShape: hotspot.visual?.placeholderShape ?? "square",
     },
   };
 }

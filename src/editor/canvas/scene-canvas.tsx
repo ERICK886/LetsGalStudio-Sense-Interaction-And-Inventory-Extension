@@ -19,7 +19,7 @@ import { useExtensionContext } from "@avg-studio/sdk";
 import type { SceneDefinition } from "../../domain/types";
 import { clamp01 } from "../../shared/coords";
 import { resolveAssetUrl } from "../../shared/resolve-asset-url";
-import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
+import { buildSceneLayout, contentRectForBase, worldToNorm, type ContentRect } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
 import { SceneBaseLayer } from "./scene-base-layer";
 
@@ -50,15 +50,18 @@ export interface SceneCanvasProps {
   onHotspotMove: (id: string, x: number, y: number) => void;
 
   /**
-   * 边框拉伸 hotspot（写回中心坐标 + visual 宽高）。
+   * 边框拉伸 hotspot（写回中心坐标 + 相对底图的宽高比例）。
    *
    * @param id - hotspot id
    * @param geometry - 中心归一化 + 设计像素尺寸
    */
   onHotspotResize: (
     id: string,
-    geometry: { x: number; y: number; width: number; height: number },
+    geometry: { x: number; y: number; widthRatio: number; heightRatio: number },
   ) => void;
+
+  /** 底图尺寸确定后，将旧像素尺寸迁移到内容区比例。 */
+  onNormalizeHotspotSizes?: (sceneId: string, contentRect: ContentRect) => void;
 
   /**
    * 点击空白放置新 hotspot（放置模式开启时）。
@@ -103,6 +106,7 @@ export function SceneCanvas({
   onSelectHotspot,
   onHotspotMove,
   onHotspotResize,
+  onNormalizeHotspotSizes,
   onCanvasPlace,
   placementActive = false,
   designWidth,
@@ -155,6 +159,15 @@ export function SceneCanvas({
     setImageNatural({ width: 0, height: 0 });
   }, [imageUrl]);
 
+  useEffect(() => {
+    if (scene !== null && imageUrl === "") {
+      onNormalizeHotspotSizes?.(
+        scene.id,
+        contentRectForBase(designWidth, designHeight, 0, 0),
+      );
+    }
+  }, [scene?.id, imageUrl, designWidth, designHeight, onNormalizeHotspotSizes]);
+
   const layout = useMemo(
     () =>
       buildSceneLayout(
@@ -164,6 +177,8 @@ export function SceneCanvas({
         designHeight,
         imageNatural.width,
         imageNatural.height,
+        undefined,
+        scene?.baseImageFit,
       ),
     [
       hostSize.width,
@@ -172,6 +187,7 @@ export function SceneCanvas({
       designHeight,
       imageNatural.width,
       imageNatural.height,
+      scene?.baseImageFit,
     ],
   );
 
@@ -362,9 +378,17 @@ export function SceneCanvas({
           editorChrome
           onImageNaturalSize={(w, h) => {
             setImageNatural({ width: w, height: h });
+            onNormalizeHotspotSizes?.(
+              scene.id,
+              contentRectForBase(designWidth, designHeight, w, h, scene.baseImageFit),
+            );
           }}
           onImageError={() => {
             setImageNatural({ width: 0, height: 0 });
+            onNormalizeHotspotSizes?.(
+              scene.id,
+              contentRectForBase(designWidth, designHeight, 0, 0),
+            );
           }}
           onBlankPointerDown={handleBlankPointerDown}
         >

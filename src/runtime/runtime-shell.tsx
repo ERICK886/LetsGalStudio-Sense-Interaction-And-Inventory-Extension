@@ -21,7 +21,7 @@ import type { ActionRuntime } from "../domain/actions";
 import { executeSceneActions } from "../domain/actions";
 import { resolveItemToastAppearance } from "../domain/item-toast-config";
 import { findScene } from "../domain/scene-registry";
-import { markConsumed } from "../domain/progress";
+import { markHotspotInteracted } from "../domain/progress";
 import {
   parseSceneReturnStackJson,
   stringifySceneReturnStack,
@@ -445,7 +445,7 @@ export function RuntimeShell({
   }, []);
 
   /**
-   * 交互点点击：执行动作链；once 完成后 markConsumed 并隐藏。
+   * 交互点点击：动作链完成后记录交互；once 点同时消耗并隐藏。
    * 动作链未结束前忽略再次点击（防抖）。
    *
    * @param hotspot - 被激活的交互点
@@ -465,8 +465,8 @@ export function RuntimeShell({
           actionRuntime,
         );
 
-        if (hotspot.once && !aborted) {
-          setProgress(markConsumed(progressRef.current, hotspot.id));
+        if (!aborted) {
+          setProgress(markHotspotInteracted(progressRef.current, hotspot));
         }
       } catch (err) {
         console.warn("[scene-interaction]", "hotspot activate failed", err);

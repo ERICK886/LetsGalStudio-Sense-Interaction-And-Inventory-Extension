@@ -70,6 +70,9 @@ export function createDefaultScene(): SceneDefinition {
     id: createId("scene"),
     name: "未命名场景",
     baseImage: "",
+    baseImageFit: "contain",
+    showQuickbar: true,
+    showOpenBagButton: true,
     hotspots: [],
     transitionMode: "fade",
   };

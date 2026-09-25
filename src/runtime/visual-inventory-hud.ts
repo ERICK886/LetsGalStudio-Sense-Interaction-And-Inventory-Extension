@@ -61,6 +61,7 @@ import {
   readHudSetting,
 } from "../store/hud-settings";
 import { BACKPACK_HUD_FULLSCREEN_SHOW_OPTIONS } from "../store/hud-ui-show";
+import { readSceneHudVisibility, subscribeSceneHudVisibility } from "../store/scene-hud-visibility";
 import { VISUAL_INVENTORY_HUD_OPEN_OPTIONS } from "../store/passthrough-show-options";
 
 /**
@@ -173,7 +174,9 @@ export function syncVisualInventoryHud(
 ): void {
   const items = readItems(ctx);
   const slots = padSlots(getQuickbarEntries(getInventorySession()));
+  const visibility = readSceneHudVisibility(ctx);
 
+  view.get("open-backpack")?.setHidden(!visibility.showOpenBagButton);
   view.get("open-backpack")?.setProps({
     text: readOpenBagLabel(ctx),
   });
@@ -184,7 +187,7 @@ export function syncVisualInventoryHud(
     const icon = view.get(`slot-icon-${i}`);
     const countEl = view.get(`slot-count-${i}`);
 
-    if (entry === null) {
+    if (entry === null || !visibility.showQuickbar) {
       btn?.setHidden(true);
       icon?.setHidden(true);
       countEl?.setHidden(true);
@@ -258,6 +261,10 @@ function bindVisualInventoryHudView(
       syncVisualInventoryHud(ctx, view);
     }),
   );
+
+  offs.push(subscribeSceneHudVisibility(() => {
+    syncVisualInventoryHud(ctx, view);
+  }));
 
   const openBtn = view.get("open-backpack");
 

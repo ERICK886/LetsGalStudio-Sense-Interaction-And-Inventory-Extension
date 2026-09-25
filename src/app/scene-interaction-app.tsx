@@ -276,7 +276,7 @@ function SceneInteractionAppContent({
         // Visual 可能未打开
       }
 
-      void ctx.ui.hide(BACKPACK_HUD_MODULE_ID).catch(() => {
+      void Promise.resolve(ctx.ui.hide(BACKPACK_HUD_MODULE_ID)).catch(() => {
         // 忽略
       });
     };

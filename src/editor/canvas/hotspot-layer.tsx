@@ -9,6 +9,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { HotspotElement } from "../../domain/types";
+import { hotspotDisplaySize, placeholderBackground, placeholderBorderRadius } from "../../domain/hotspot-visual";
 import { clamp01 } from "../../shared/coords";
 import {
   clientToLocal,
@@ -20,20 +21,19 @@ import { useTheme } from "../../theme/theme-provider";
 import { ResizeHandles } from "./resize-handles";
 import type { ResizeBox } from "./resize-math";
 
-/** 无图时的默认占位边长（设计像素） */
-export const HOTSPOT_PLACEHOLDER_SIZE = 64;
-
 /** 拉伸最小边长（设计像素），对齐大地图地点下限 */
 export const HOTSPOT_MIN_SIZE = 8;
 
 /**
- * 交互点几何提交（中心归一化 + 设计像素宽高）。
+ * 交互点几何提交（中心和尺寸均归一化；宽高像素供拖拽预览）。
  */
 export interface HotspotGeometry {
   x: number;
   y: number;
   width: number;
   height: number;
+  widthRatio: number;
+  heightRatio: number;
 }
 
 /**
@@ -85,28 +85,6 @@ export interface HotspotLayerProps {
    * 承载 world transform 的 DOM（用于 client→设计坐标）。
    */
   worldElement: HTMLElement | null;
-}
-
-/**
- * 推算 hotspot 在设计画幅中的显示尺寸。
- *
- * @param hs - 交互点
- * @returns `{ width, height }` 设计像素
- */
-function hotspotDisplaySize(hs: HotspotElement): {
-  width: number;
-  height: number;
-} {
-  const w =
-    typeof hs.visual.width === "number" && hs.visual.width > 0
-      ? hs.visual.width
-      : HOTSPOT_PLACEHOLDER_SIZE;
-  const h =
-    typeof hs.visual.height === "number" && hs.visual.height > 0
-      ? hs.visual.height
-      : HOTSPOT_PLACEHOLDER_SIZE;
-
-  return { width: w, height: h };
 }
 
 /**
@@ -184,18 +162,21 @@ export function HotspotLayer({
    * @param next - ResizeHandles 给出的盒（相对 hotspot-layer）
    * @returns HotspotGeometry
    */
-  const boxToGeometry = useCallback((next: ResizeBox): HotspotGeometry => {
-    const norm = worldToNorm(
-      next.centerLeft,
-      next.centerTop,
-      contentRectRef.current,
-    );
+  const boxToGeometry = useCallback((next: ResizeBox, hotspot: HotspotElement): HotspotGeometry => {
+    const rect = contentRectRef.current;
+    const norm = worldToNorm(next.centerLeft, next.centerTop, rect);
+    const hasImage = hotspot.visual.src.trim() !== "";
+    const side = Math.max(HOTSPOT_MIN_SIZE, Math.sqrt(next.width * next.height));
+    const width = hasImage ? Math.max(HOTSPOT_MIN_SIZE, next.width) : side;
+    const height = hasImage ? Math.max(HOTSPOT_MIN_SIZE, next.height) : side;
 
     return {
       x: clamp01(norm.x),
       y: clamp01(norm.y),
-      width: Math.max(HOTSPOT_MIN_SIZE, next.width),
-      height: Math.max(HOTSPOT_MIN_SIZE, next.height),
+      width,
+      height,
+      widthRatio: width / Math.max(1e-6, rect.width),
+      heightRatio: height / Math.max(1e-6, rect.height),
     };
   }, []);
 
@@ -334,7 +315,7 @@ export function HotspotLayer({
           : dragPose?.id === hs.id
             ? dragPose.y
             : hs.y;
-        const baseSize = hotspotDisplaySize(hs);
+        const baseSize = hotspotDisplaySize(hs, contentRect);
         const width = resizing ? resizing.width : baseSize.width;
         const height = resizing ? resizing.height : baseSize.height;
         const center = normToWorld(poseX, poseY, contentRect);
@@ -357,8 +338,8 @@ export function HotspotLayer({
               border: selected
                 ? `2px solid ${tokens.accent}`
                 : "1px dashed rgba(180, 180, 200, 0.55)",
-              borderRadius: 4,
-              background: url ? "transparent" : "rgba(46, 196, 164, 0.12)",
+              borderRadius: url ? 4 : placeholderBorderRadius(hs.visual),
+              background: url ? "transparent" : placeholderBackground(hs.visual),
               cursor: "grab",
               pointerEvents: "auto",
               // 选中时允许手柄溢出边框；图片仍由宽高约束
@@ -406,7 +387,7 @@ export function HotspotLayer({
                 minHeight={HOTSPOT_MIN_SIZE}
                 accentColor={tokens.accent}
                 onResizeLive={(next) => {
-                  const geo = boxToGeometry(next);
+                  const geo = boxToGeometry(next, hs);
 
                   setDragPose(null);
                   setResizePose({
@@ -418,7 +399,7 @@ export function HotspotLayer({
                   });
                 }}
                 onResizeCommit={(next) => {
-                  const geo = boxToGeometry(next);
+                  const geo = boxToGeometry(next, hs);
 
                   onResizeRef.current(hs.id, geo);
                   setResizePose(null);

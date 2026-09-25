@@ -117,6 +117,7 @@ function FieldLabel({
         fontSize: FONT_SIZE_DEFAULT,
         fontWeight: 550,
         color: tokens.textPrimary,
+        whiteSpace: label === "其他交互点完成后显示" ? "nowrap" : "pre-line",
       }}
     >
       {label}
@@ -362,23 +363,20 @@ function renderBooleanField<T extends Record<string, unknown>>(
 
   return (
     <div
-      style={{
-        ...fieldWrapStyle(),
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-      }}
+      style={fieldWrapStyle()}
       data-testid={`schema-field-${field.key}`}
     >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => {
-          onChange(setNestedValue(value, field.key, e.target.checked));
-        }}
-      />
-      <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => {
+            onChange(setNestedValue(value, field.key, e.target.checked));
+          }}
+        />
+        <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
+      </div>
       <FieldHint text={field.description} tokens={tokens} />
     </div>
   );

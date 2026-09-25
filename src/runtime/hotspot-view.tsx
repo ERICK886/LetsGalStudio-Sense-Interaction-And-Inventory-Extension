@@ -20,6 +20,7 @@ import {
   resolveHotspotLabelAppearance,
 } from "../domain/hotspot-label";
 import { buildHoverRuntimeStyle } from "../domain/hover-shadow";
+import { hotspotDisplaySize, placeholderBackground, placeholderBorderRadius } from "../domain/hotspot-visual";
 import { resolveHotspotHoverShadow } from "../domain/scene-ui-config";
 import type {
   HotspotElement,
@@ -35,9 +36,6 @@ import {
   normToWorld,
   type ContentRect,
 } from "../shared/scene-layout";
-
-/** 无图时的默认占位边长（设计像素） */
-export const RUNTIME_HOTSPOT_PLACEHOLDER_SIZE = 64;
 
 /**
  * HotspotView 组件属性。
@@ -87,28 +85,6 @@ export interface HotspotViewProps {
    * @default true
    */
   hoverEffectsEnabled?: boolean;
-}
-
-/**
- * 推算交互点在设计画幅中的显示尺寸。
- *
- * @param hs - 交互点
- * @returns `{ width, height }` 设计像素
- */
-function hotspotDisplaySize(hs: HotspotElement): {
-  width: number;
-  height: number;
-} {
-  const w =
-    typeof hs.visual.width === "number" && hs.visual.width > 0
-      ? hs.visual.width
-      : RUNTIME_HOTSPOT_PLACEHOLDER_SIZE;
-  const h =
-    typeof hs.visual.height === "number" && hs.visual.height > 0
-      ? hs.visual.height
-      : RUNTIME_HOTSPOT_PLACEHOLDER_SIZE;
-
-  return { width: w, height: h };
 }
 
 /**
@@ -170,7 +146,7 @@ export function HotspotView({
   const [alphaHit, setAlphaHit] = useState(false);
   /** 指针是否仍在外壳包围盒内（用于 leave 复位 / hover） */
   const [pointerInside, setPointerInside] = useState(false);
-  const size = hotspotDisplaySize(hotspot);
+  const size = hotspotDisplaySize(hotspot, contentRect);
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
   const hasImage = Boolean(url);
@@ -209,15 +185,10 @@ export function HotspotView({
     labelMode === "always" ||
     (labelMode === "hover" && interactiveHover);
 
-  /**
-   * 有图：仅剪影命中时接收指针，透明区放行给下方对话框。
-   * 无图：整框可点。
-   */
-  const rootPointerEvents: "auto" | "none" = hasImage
-    ? alphaHit
-      ? "auto"
-      : "none"
-    : "auto";
+  /** 图片由透明像素命中；无图由内层形状接收指针，圆形角落可穿透。 */
+  const rootPointerEvents: "auto" | "none" = hasImage && alphaHit
+    ? "auto"
+    : "none";
 
   /**
    * 按指针位置同步剪影命中状态。
@@ -409,11 +380,12 @@ export function HotspotView({
           style={{
             width: "100%",
             height: "100%",
-            borderRadius: 4,
-            background: "rgba(46, 196, 164, 0.18)",
-            border: "1px dashed rgba(180, 180, 200, 0.45)",
+            borderRadius: placeholderBorderRadius(hotspot.visual),
+            background: placeholderBackground(hotspot.visual),
+            border: "none",
             boxSizing: "border-box",
-            pointerEvents: "none",
+            clipPath: hotspot.visual.placeholderShape === "circle" ? "circle(50% at 50% 50%)" : undefined,
+            pointerEvents: "auto",
           }}
         />
       )}

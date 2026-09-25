@@ -23,7 +23,7 @@ import type { HotspotElement, SceneProgress } from "./types";
  *
  * @example
  * ```ts
- * if (isHotspotVisible(hs, progress)) {
+ * if (isHotspotVisible(hs, progress, scene.hotspots)) {
  *   // 渲染 HotspotView
  * }
  * ```
@@ -31,8 +31,22 @@ import type { HotspotElement, SceneProgress } from "./types";
 export function isHotspotVisible(
   hotspot: HotspotElement,
   progress: SceneProgress,
+  sceneHotspots: readonly HotspotElement[],
 ): boolean {
   if (hotspot.once && progress.consumed[hotspot.id] === true) {
+    return false;
+  }
+
+  if (
+    hotspot.showAfterAllOthers === true &&
+    sceneHotspots.some(
+      (other) =>
+        other.id !== hotspot.id &&
+        other.showAfterAllOthers !== true &&
+        progress.interacted?.[other.id] !== true &&
+        progress.consumed[other.id] !== true,
+    )
+  ) {
     return false;
   }
 
@@ -46,6 +60,20 @@ export function isHotspotVisible(
   }
 
   return hotspot.visibleByDefault !== false;
+}
+
+/** 记录成功交互；一次性交互点同时标记为已消耗。 */
+export function markHotspotInteracted(
+  progress: SceneProgress,
+  hotspot: HotspotElement,
+): SceneProgress {
+  return {
+    ...progress,
+    interacted: { ...progress.interacted, [hotspot.id]: true },
+    consumed: hotspot.once
+      ? { ...progress.consumed, [hotspot.id]: true }
+      : progress.consumed,
+  };
 }
 
 /**
