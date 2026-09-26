@@ -1,3 +1,5 @@
+import { MATERIAL_REFERENCE_PREFIX, materialPath } from "./material-reference";
+
 /**
  * resolve-asset-url.ts
  * 作者: 池水三两升
@@ -12,6 +14,7 @@
  * SDK asset.resolve 的最小形状（避免强耦合完整 AssetAPI）。
  */
 export type AssetResolveFn = (uri: string) => { url: string };
+export type ExtensionResourceUrlFn = (path: string) => string;
 
 /**
  * 解析资源 URI 为浏览器可加载的 URL。
@@ -36,6 +39,7 @@ export type AssetResolveFn = (uri: string) => { url: string };
 export function resolveAssetUrl(
   uri: string,
   resolve: AssetResolveFn | undefined,
+  extensionResourceUrl?: ExtensionResourceUrlFn,
 ): string {
   if (!uri) {
     return "";
@@ -45,6 +49,16 @@ export function resolveAssetUrl(
 
   if (trimmed.length === 0) {
     return "";
+  }
+
+  if (trimmed.startsWith(MATERIAL_REFERENCE_PREFIX)) {
+    const path = materialPath(trimmed);
+    if (!path) return "";
+    try {
+      return extensionResourceUrl?.(path) ?? resolve?.(trimmed).url ?? "";
+    } catch {
+      return "";
+    }
   }
 
   if (

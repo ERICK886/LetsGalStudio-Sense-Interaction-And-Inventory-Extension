@@ -32,6 +32,8 @@ import {
   QUICKBAR_SLOTS,
 } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
+import { MATERIAL_REFERENCE_PREFIX } from "../shared/material-reference";
+import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
 import {
   parseItemsLibraryJson,
   parseInventoryHudJson,
@@ -193,7 +195,10 @@ export function syncVisualInventoryHud(
 
     const def = findItem(items, entry.itemId);
     const name = def?.name || entry.itemId || "?";
-    const asset = (def?.icon ?? "").trim();
+    const rawAsset = (def?.icon ?? "").trim();
+    const asset = rawAsset.startsWith(MATERIAL_REFERENCE_PREFIX)
+      ? resolveContextAssetUrl(ctx, rawAsset)
+      : rawAsset;
     const count =
       entry.kind === "stack" && entry.count > 1
         ? String(entry.count)

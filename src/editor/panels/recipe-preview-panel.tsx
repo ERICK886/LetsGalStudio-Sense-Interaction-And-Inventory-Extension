@@ -18,6 +18,7 @@ import type {
   RecipeItemAmount,
 } from "../../domain/types";
 import { resolveAssetUrl } from "../../shared/resolve-asset-url";
+import { createContextAssetResolver } from "../../shared/resolve-context-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -309,7 +310,7 @@ export function RecipePreviewPanel({
 }: RecipePreviewPanelProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
+  const resolve = createContextAssetResolver(ctx);
 
   const formulaText = useMemo(() => {
     if (recipe === null) {

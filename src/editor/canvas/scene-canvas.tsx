@@ -19,7 +19,7 @@ import React, {
 import { useExtensionContext } from "@avg-studio/sdk";
 import type { SceneDefinition } from "../../domain/types";
 import { clamp01 } from "../../shared/coords";
-import { resolveAssetUrl } from "../../shared/resolve-asset-url";
+import { resolveContextAssetUrl } from "../../shared/resolve-context-asset-url";
 import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
 import { SceneBaseLayer } from "../../shared/scene-base-layer";
@@ -137,8 +137,8 @@ export function SceneCanvas({
   const imageUrl = useMemo(() => {
     const raw = scene?.baseImage ?? "";
 
-    return resolveAssetUrl(raw, ctx.asset?.resolve?.bind(ctx.asset));
-  }, [scene?.baseImage, ctx.asset]);
+    return resolveContextAssetUrl(ctx, raw);
+  }, [scene?.baseImage, ctx]);
 
   /**
    * 解析任意资源 URI。
@@ -148,8 +148,8 @@ export function SceneCanvas({
    */
   const resolveUrl = useCallback(
     (uri: string): string =>
-      resolveAssetUrl(uri, ctx.asset?.resolve?.bind(ctx.asset)),
-    [ctx.asset],
+      resolveContextAssetUrl(ctx, uri),
+    [ctx],
   );
 
   useEffect(() => {

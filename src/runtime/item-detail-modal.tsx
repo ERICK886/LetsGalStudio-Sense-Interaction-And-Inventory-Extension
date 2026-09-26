@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import type { ItemDefinition } from "../domain/types";
-import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -115,8 +115,8 @@ export function ItemDetailModal({
       (item.icon && item.icon.trim()) ||
       "";
 
-    return resolveAssetUrl(raw, ctx.asset?.resolve?.bind(ctx.asset));
-  }, [item, ctx.asset]);
+    return resolveContextAssetUrl(ctx, raw);
+  }, [item, ctx]);
 
   if (item === null) {
     return null;

@@ -20,6 +20,7 @@ import {
 import type { UiOverlayElement, UiOverlayRole } from "../domain/types";
 import { FaIcon } from "../shared/fa-icon";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { createContextAssetResolver } from "../shared/resolve-context-asset-url";
 import { useUiButtonSkin } from "./use-ui-button-skin";
 
 /**
@@ -120,7 +121,7 @@ function OverlayItem({
   labelByRole?: Partial<Record<UiOverlayRole, string>>;
 }): React.ReactElement {
   const ctx = useExtensionContext();
-  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
+  const resolve = createContextAssetResolver(ctx);
   const skin = useUiButtonSkin(el.skin ?? {});
   const [on, setOn] = useState(el.props.initialOn !== false);
   const [value, setValue] = useState(el.props.initialValue ?? 60);

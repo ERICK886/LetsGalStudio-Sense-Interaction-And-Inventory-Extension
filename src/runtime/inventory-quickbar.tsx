@@ -37,6 +37,7 @@ import type {
   RecipeDefinition,
 } from "../domain/types";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { createContextAssetResolver } from "../shared/resolve-context-asset-url";
 import { useInventory } from "../store/inventory-persistence";
 import { useItemsLibrary } from "../store/items-persistence";
 import { useRecipesLibrary } from "../store/recipes-persistence";
@@ -140,7 +141,7 @@ export function InventoryQuickbar({
 }: InventoryQuickbarProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
+  const resolve = createContextAssetResolver(ctx);
   const [bagOpen, setBagOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<ItemDefinition | null>(null);
 

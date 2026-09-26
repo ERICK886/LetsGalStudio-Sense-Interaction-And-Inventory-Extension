@@ -14,7 +14,7 @@ import {
   type UiButtonPointerPhase,
 } from "../domain/ui-button-skin";
 import type { UiButtonSkin } from "../domain/types";
-import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
 
 /**
  * useUiButtonSkin 返回值。
@@ -63,9 +63,9 @@ export function useUiButtonSkin(skin: UiButtonSkin): UseUiButtonSkinResult {
   const imageUrl = useMemo(
     () =>
       imageSrc
-        ? resolveAssetUrl(imageSrc, ctx.asset?.resolve?.bind(ctx.asset))
+        ? resolveContextAssetUrl(ctx, imageSrc)
         : "",
-    [imageSrc, ctx.asset],
+    [imageSrc, ctx],
   );
 
   const pointerHandlers = useMemo(

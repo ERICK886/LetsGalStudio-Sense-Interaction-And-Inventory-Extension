@@ -36,7 +36,7 @@ import type {
 } from "../domain/types";
 import type { ToastQueueState } from "../domain/toast-queue";
 import { SceneBaseLayer } from "../shared/scene-base-layer";
-import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
 import { buildSceneLayout } from "../shared/scene-layout";
 import { HotspotView } from "./hotspot-view";
 import { ToastLayer } from "./toast-layer";
@@ -374,8 +374,8 @@ export function SceneView({
    */
   const resolveUrl = useCallback(
     (uri: string): string =>
-      resolveAssetUrl(uri, ctx.asset?.resolve?.bind(ctx.asset)),
-    [ctx.asset],
+      resolveContextAssetUrl(ctx, uri),
+    [ctx],
   );
 
   /**
@@ -384,11 +384,8 @@ export function SceneView({
    */
   const sceneImageUrl = useCallback(
     (painted: PaintedScene): string =>
-      resolveAssetUrl(
-        painted.scene.baseImage ?? "",
-        ctx.asset?.resolve?.bind(ctx.asset),
-      ),
-    [ctx.asset],
+      resolveContextAssetUrl(ctx, painted.scene.baseImage ?? ""),
+    [ctx],
   );
 
   /**

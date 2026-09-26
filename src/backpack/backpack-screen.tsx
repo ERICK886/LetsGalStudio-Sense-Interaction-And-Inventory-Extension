@@ -58,6 +58,7 @@ import { UiOverlayLayer } from "../runtime/ui-overlay-layer";
 import { playResolvedSe } from "../shared/play-se";
 import { fitDesignToHost } from "../shared/scene-layout";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { createContextAssetResolver } from "../shared/resolve-context-asset-url";
 import { useBackpackScreenConfig } from "../store/use-backpack-ui-config";
 import { useDesignSize } from "../store/use-design-size";
 import { useSceneUiConfig } from "../store/use-scene-ui-config";
@@ -667,7 +668,7 @@ export function BackpackScreen({
   onClose,
 }: BackpackScreenProps): React.ReactElement {
   const ctx = useExtensionContext();
-  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
+  const resolve = createContextAssetResolver(ctx);
   const screenCfg = useBackpackScreenConfig();
   const sceneUi = useSceneUiConfig();
   const { size: designSize } = useDesignSize();

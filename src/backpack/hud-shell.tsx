@@ -49,6 +49,7 @@ import {
 } from "../shared/module-ids";
 import { logError } from "../shared/logger";
 import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { createContextAssetResolver } from "../shared/resolve-context-asset-url";
 import { fitDesignToHost } from "../shared/scene-layout";
 import {
   INVENTORY_HUD_JSON_KEY,
@@ -131,7 +132,7 @@ export function HudShell({
 }: HudShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const resolve = ctx.asset?.resolve?.bind(ctx.asset);
+  const resolve = createContextAssetResolver(ctx);
 
   const [inventory] = useInventorySession();
   const [itemsLibrary] = useItemsLibrary();

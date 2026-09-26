@@ -52,7 +52,7 @@ import type {
   SceneProgress,
 } from "../domain/types";
 import { playResolvedSe } from "../shared/play-se";
-import { resolveAssetUrl } from "../shared/resolve-asset-url";
+import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
 import {
   useProgress,
 } from "../store/inventory-persistence";
@@ -566,8 +566,7 @@ export function PlayerShell({
         },
         enqueueToast: handleEnqueueToast,
         enqueueRewardFly: handleEnqueueRewardFly,
-        resolveUrl: (uri) =>
-          resolveAssetUrl(uri, ctx.asset?.resolve?.bind(ctx.asset)),
+        resolveUrl: (uri) => resolveContextAssetUrl(ctx, uri),
         callFragment: handleCallFragment,
         goToFragment: handleGoToFragment,
         continueStory: async () => {
