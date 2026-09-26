@@ -1,4 +1,4 @@
-import { chakra } from "@chakra-ui/react";
+import { Button, chakra } from "@chakra-ui/react";
 /**
  * scene-canvas.tsx
  * 作者: 池水三两升
@@ -23,6 +23,9 @@ import { resolveContextAssetUrl } from "../../shared/resolve-context-asset-url";
 import { buildSceneLayout, worldToNorm } from "../../shared/scene-layout";
 import { HotspotLayer } from "./hotspot-layer";
 import { SceneBaseLayer } from "../../shared/scene-base-layer";
+import { useTheme } from "../../theme/theme-provider";
+import { editorButtonProps } from "../ui/editor-control-styles";
+import { applySceneViewport, bindSceneViewportGestures, FIT_SCENE_VIEWPORT, type SceneCanvasViewport } from "./scene-canvas-viewport";
 
 /**
  * SceneCanvas 组件属性。
@@ -124,6 +127,10 @@ export function SceneCanvas({
   const [hostSize, setHostSize] = useState({ width: 800, height: 600 });
   const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
   const [worldEl, setWorldEl] = useState<HTMLElement | null>(null);
+  const [viewport, setViewport] = useState<SceneCanvasViewport>(FIT_SCENE_VIEWPORT);
+  const viewportRef = useRef(viewport);
+  const [panning, setPanning] = useState(false);
+  const { tokens } = useTheme();
 
   onSelectRef.current = onSelectHotspot;
   onPlaceRef.current = onCanvasPlace;
@@ -156,7 +163,7 @@ export function SceneCanvas({
     setImageNatural({ width: 0, height: 0 });
   }, [imageUrl]);
 
-  const layout = useMemo(
+  const baseLayout = useMemo(
     () =>
       buildSceneLayout(
         hostSize.width,
@@ -175,6 +182,33 @@ export function SceneCanvas({
       imageNatural.height,
     ],
   );
+
+  const baseLayoutRef = useRef(baseLayout);
+  baseLayoutRef.current = baseLayout;
+  const layout = useMemo(() => applySceneViewport(baseLayout, viewport), [baseLayout, viewport]);
+  viewportRef.current = viewport;
+
+  const resetViewport = useCallback(() => {
+    viewportRef.current = FIT_SCENE_VIEWPORT;
+    setViewport(FIT_SCENE_VIEWPORT);
+    setPanning(false);
+  }, []);
+
+  useEffect(() => {
+    resetViewport();
+  }, [scene?.id, designWidth, designHeight, resetViewport]);
+
+  useEffect(() => {
+    const host = rootRef.current;
+    if (!host) return;
+    return bindSceneViewportGestures(host, host.ownerDocument.defaultView ?? window, {
+      getView: () => viewportRef.current,
+      getLayout: () => baseLayoutRef.current,
+      isEnabled: () => sceneRef.current !== null,
+      onChange: (next) => { viewportRef.current = next; setViewport(next); },
+      onPanning: setPanning,
+    });
+  }, [scene?.id, designWidth, designHeight]);
 
   layoutRef.current = layout;
 
@@ -296,9 +330,8 @@ export function SceneCanvas({
     });
 
     ro.observe(host);
-    const rect = host.getBoundingClientRect();
-
-    applySize(rect.width, rect.height);
+    // 宿主预览自身也可能有 CSS scale；测量布局尺寸而非屏幕尺寸。
+    applySize(host.clientWidth, host.clientHeight);
 
     return () => ro.disconnect();
   }, []);
@@ -351,8 +384,7 @@ export function SceneCanvas({
         inset: 0,
         overflow: "hidden",
         background: "transparent",
-        cursor:
-          scene !== null && placementActive ? "crosshair" : "default",
+        cursor: panning ? "grabbing" : scene !== null && placementActive ? "crosshair" : "default",
       }}
     >
       {scene === null ? null : (
@@ -380,6 +412,20 @@ export function SceneCanvas({
             worldElement={worldEl}
           />
         </SceneBaseLayer>
+      )}
+      {scene !== null && (
+        <chakra.div data-testid="scene-canvas-view-controls" style={{
+          position: "absolute", left: 12, bottom: 12, zIndex: 10,
+          display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8,
+          maxWidth: "calc(100% - 24px)", padding: "6px 8px", borderRadius: 6,
+          background: tokens.bgElevated, border: `1px solid ${tokens.border}`, color: tokens.textMuted,
+        }}>
+          <chakra.span data-testid="scene-canvas-zoom" style={{ fontVariantNumeric: "tabular-nums", minWidth: 38 }}>
+            {Math.round(viewport.zoom * 100)}%
+          </chakra.span>
+          <Button {...editorButtonProps(tokens)} size="sm" onClick={resetViewport}>适应画布</Button>
+          <chakra.span style={{ fontSize: 11 }}>Ctrl + 滚轮缩放 · 中键拖动画布</chakra.span>
+        </chakra.div>
       )}
     </chakra.div>
   );
