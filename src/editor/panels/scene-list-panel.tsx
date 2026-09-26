@@ -128,7 +128,8 @@ function rowStyle(
     cursor: "pointer",
     fontSize: FONT_SIZE_DEFAULT,
     textAlign: "left",
-    width: "100%",
+    flex: "1 1 0%",
+    minWidth: 0,
     boxSizing: "border-box",
   };
 }
@@ -315,7 +316,7 @@ export function SceneListPanel({
             return (
               <chakra.div
                 key={scene.id}
-                style={{ display: "flex", alignItems: "center", gap: 4 }}
+                style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, flexShrink: 0 }}
               >
                 <Button size="xs" variant="plain"
                   type="button"
@@ -326,8 +327,10 @@ export function SceneListPanel({
                 >
                   <IconLabel icon="image" iconSize={11} />
                   <chakra.span
+                    title={scene.name || "（未命名）"}
                     style={{
-                      flex: 1,
+                      flex: "1 1 0%",
+                      minWidth: 0,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
