@@ -8,21 +8,32 @@ import { editorButtonProps, editorInputProps } from "../ui/editor-control-styles
 import { materialReference } from "../../shared/material-reference";
 import { resolveContextAssetUrl } from "../../shared/resolve-context-asset-url";
 import { useTheme } from "../../theme/theme-provider";
-
-const KIND_LABELS: Record<MaterialKind, string> = {
-  scene: "场景底图", hotspot: "交互点", item: "物品", other: "其他图片",
-};
+import { MaterialDetailsPanel, MATERIAL_KIND_LABELS } from "./material-details-panel";
+import { collectMaterialUsage } from "../material-usage";
 
 /** 作者素材库：导入图片到扩展 assets/materials 并展示自动生成的清单。 */
 export function MaterialLibraryPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const { entries, root, busy, error, connectRoot, importFiles, importUri } = useMaterialLibrary();
+  const { entries, trashEntries, usage, root, busy, error, connectRoot, importFiles, importUri, refresh } = useMaterialLibrary();
   const [draftRoot, setDraftRoot] = useState(root);
   const [kind, setKind] = useState<MaterialKind>("scene");
   const [sourceUri, setSourceUri] = useState("");
   const [query, setQuery] = useState("");
-  const visibleEntries = entries.filter((entry) => entry.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const [view, setView] = useState("library");
+  const [category, setCategory] = useState("all");
+  const [usageFilter, setUsageFilter] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const displayedEntries = view === "trash" ? trashEntries : entries;
+  const usageCounts = new Map(displayedEntries.map((entry) => [entry.id, collectMaterialUsage(entry.path, usage.sources).length]));
+  const visibleEntries = displayedEntries.filter((entry) =>
+    entry.name.toLowerCase().includes(query.trim().toLowerCase()) &&
+    (category === "all" || entry.kind === category) &&
+    (usageFilter === "all" || (!usage.error && (usageFilter === "used" ? usageCounts.get(entry.id)! > 0 : usageCounts.get(entry.id) === 0))))
+    .sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, "zh-CN") : sort === "size" ? b.size - a.size :
+      (Date.parse(b.trashedAt ?? b.createdAt) || 0) - (Date.parse(a.trashedAt ?? a.createdAt) || 0));
+  const selectedEntry = displayedEntries.find((entry) => entry.id === selectedId);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setDraftRoot(root); }, [root]);
@@ -52,7 +63,7 @@ export function MaterialLibraryPanel(): React.ReactElement {
           <chakra.span style={{ fontSize: 12 }}>导入类别</chakra.span>
           <chakra.div style={{ width: 140 }}>
             <EditorSelect value={kind} onChange={(event) => setKind(event.target.value as MaterialKind)} aria-label="导入类别">
-              {Object.entries(KIND_LABELS).map(([value, label]) => <EditorSelectOption key={value} value={value}>{label}</EditorSelectOption>)}
+              {Object.entries(MATERIAL_KIND_LABELS).map(([value, label]) => <EditorSelectOption key={value} value={value}>{label}</EditorSelectOption>)}
             </EditorSelect>
           </chakra.div>
           <Input ref={inputRef} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
@@ -78,28 +89,47 @@ export function MaterialLibraryPanel(): React.ReactElement {
         </chakra.div>
 
         {error && <chakra.p role="alert" style={{ color: "#f87171", fontSize: 12 }}>{error}</chakra.p>}
-        <chakra.div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
-          <chakra.span style={{ fontSize: 12, color: tokens.textMuted, flexShrink: 0 }}>已收录 {entries.length} 张图片</chakra.span>
-          <Input {...editorInputProps(tokens)} size="sm" value={query} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="搜索素材名称" style={{ maxWidth: 260 }} />
+        <chakra.div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+          <Button {...editorButtonProps(tokens)} aria-pressed={view === "library"} borderColor={view === "library" ? tokens.accent : tokens.border} onClick={() => { setView("library"); setSelectedId(null); }}>素材（{entries.length}）</Button>
+          <Button {...editorButtonProps(tokens)} aria-pressed={view === "trash"} borderColor={view === "trash" ? tokens.accent : tokens.border} onClick={() => { setView("trash"); setSelectedId(null); }}>回收站（{trashEntries.length}）</Button>
+          <Input {...editorInputProps(tokens)} size="sm" aria-label="搜索素材名称" value={query} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="搜索素材名称" style={{ maxWidth: 260 }} />
+          <chakra.div style={{ width: 130 }}><EditorSelect value={category} aria-label="筛选素材类别" onChange={(event) => setCategory(event.target.value)}>
+            <EditorSelectOption value="all">全部类别</EditorSelectOption>
+            {Object.entries(MATERIAL_KIND_LABELS).map(([value, label]) => <EditorSelectOption key={value} value={value}>{label}</EditorSelectOption>)}
+          </EditorSelect></chakra.div>
+          <chakra.div style={{ width: 120 }}><EditorSelect value={usageFilter} aria-label="筛选引用状态" onChange={(event) => setUsageFilter(event.target.value)}>
+            <EditorSelectOption value="all">全部引用状态</EditorSelectOption><EditorSelectOption value="used">已使用</EditorSelectOption><EditorSelectOption value="unused">未使用</EditorSelectOption>
+          </EditorSelect></chakra.div>
+          <chakra.div style={{ width: 130 }}><EditorSelect value={sort} aria-label="素材排序" onChange={(event) => setSort(event.target.value)}>
+            <EditorSelectOption value="newest">最近添加</EditorSelectOption><EditorSelectOption value="name">按名称</EditorSelectOption><EditorSelectOption value="size">按文件大小</EditorSelectOption>
+          </EditorSelect></chakra.div>
+          <Button {...editorButtonProps(tokens)} disabled={busy} onClick={() => { void refresh().catch(() => {}); }}>刷新</Button>
         </chakra.div>
-        {entries.length === 0 ? (
+        {usage.error && <chakra.p role="alert" style={{ color: tokens.textSecondary, fontSize: 12 }}>引用检查暂不可用，删除功能已禁用：{usage.error}</chakra.p>}
+        <chakra.p style={{ margin: "0 0 10px", color: tokens.textMuted, fontSize: 11 }}>显示 {visibleEntries.length} / {displayedEntries.length} 张图片。选择素材可预览、修改名称和类别、复制引用及查看使用位置。</chakra.p>
+        {visibleEntries.length === 0 && (
           <chakra.div style={{ padding: 30, textAlign: "center", color: tokens.textMuted, border: `1px dashed ${tokens.borderStrong}`, borderRadius: 8 }}>
-            素材库为空。连接扩展源目录后导入图片。
-          </chakra.div>
-        ) : (
-          <chakra.div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-            {visibleEntries.map((entry) => (
-              <chakra.div key={entry.id} style={{ minWidth: 0, padding: 8, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgElevated }}>
-                <chakra.div style={{ height: 112, display: "flex", alignItems: "center", justifyContent: "center", background: tokens.bgSunken, borderRadius: 5 }}>
-                  <chakra.img src={resolveContextAssetUrl(ctx, materialReference(entry.path))} alt={entry.name}
-                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                </chakra.div>
-                <chakra.div title={entry.name} style={{ marginTop: 7, fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</chakra.div>
-                <chakra.div style={{ marginTop: 3, fontSize: 11, color: tokens.textMuted }}>{KIND_LABELS[entry.kind]} · {Math.ceil(entry.size / 1024)} KB</chakra.div>
-              </chakra.div>
-            ))}
+            {displayedEntries.length ? "没有符合筛选条件的素材。" : view === "trash" ? "回收站为空。" : "素材库为空。连接扩展源目录后导入图片。"}
           </chakra.div>
         )}
+        <chakra.div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <chakra.div style={{ flex: "1 1 280px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+            {visibleEntries.map((entry) => (
+              <Button {...editorButtonProps(tokens)} key={entry.id} aria-pressed={selectedId === entry.id} title={entry.name} onClick={() => setSelectedId(entry.id)}
+                bg={tokens.bgElevated} borderColor={selectedId === entry.id ? tokens.accent : tokens.border}
+                style={{ minWidth: 0, height: "auto", padding: 8, display: "flex", flexDirection: "column", alignItems: "stretch", gap: 0, textAlign: "left" }}>
+                <chakra.span style={{ height: 112, display: "flex", alignItems: "center", justifyContent: "center", background: tokens.bgSunken, borderRadius: 5 }}>
+                  <chakra.img src={resolveContextAssetUrl(ctx, materialReference(entry.path))} alt={entry.name}
+                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                </chakra.span>
+                <chakra.span style={{ marginTop: 7, fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</chakra.span>
+                <chakra.span style={{ marginTop: 3, fontSize: 11, color: tokens.textMuted }}>{MATERIAL_KIND_LABELS[entry.kind]} · {Math.ceil(entry.size / 1024)} KB</chakra.span>
+                <chakra.span style={{ marginTop: 3, fontSize: 11, color: tokens.textMuted }}>{usage.error ? "引用状态未知" : usageCounts.get(entry.id) ? `${usageCounts.get(entry.id)} 处引用` : "未使用"}</chakra.span>
+              </Button>
+            ))}
+          </chakra.div>
+          {selectedEntry && <MaterialDetailsPanel key={selectedEntry.id} entry={selectedEntry} />}
+        </chakra.div>
       </chakra.div>
     </chakra.main>
   );

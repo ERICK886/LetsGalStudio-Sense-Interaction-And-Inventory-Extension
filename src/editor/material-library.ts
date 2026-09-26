@@ -10,6 +10,8 @@ export interface MaterialEntry {
   mime: string;
   size: number;
   createdAt: string;
+  /** 回收站仅隐藏条目，保留图片文件和稳定引用。 */
+  trashedAt?: string;
 }
 
 export interface MaterialManifest {
@@ -35,7 +37,8 @@ export function parseMaterialManifest(raw: unknown): MaterialManifest {
       typeof entry.path !== "string" || !materialPath(materialReference(entry.path)) ||
       typeof entry.mime !== "string" ||
       typeof entry.size !== "number" || !Number.isFinite(entry.size) || entry.size < 0 ||
-      typeof entry.createdAt !== "string") {
+      typeof entry.createdAt !== "string" ||
+      (entry.trashedAt !== undefined && (typeof entry.trashedAt !== "string" || !entry.trashedAt.trim()))) {
       throw new Error("素材清单中存在无效条目");
     }
     return entry as MaterialEntry;
@@ -44,6 +47,17 @@ export function parseMaterialManifest(raw: unknown): MaterialManifest {
     throw new Error("素材清单包含重复 ID");
   }
   return { version: 1, materials };
+}
+
+export function updateMaterialMetadata(
+  manifest: MaterialManifest, id: string, name: string, kind: MaterialKind,
+): MaterialManifest {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 120) throw new Error("素材名称须为 1 至 120 个字符");
+  if (!["scene", "hotspot", "item", "other"].includes(kind)) throw new Error("素材类别无效");
+  if (!manifest.materials.some((entry) => entry.id === id)) throw new Error("素材不存在，请刷新素材库");
+  return { version: 1, materials: manifest.materials.map((entry) =>
+    entry.id === id ? { ...entry, name: trimmed, kind } : entry) };
 }
 
 /** 依据文件内容识别图片，不信任扩展名或浏览器提供的 MIME。 */

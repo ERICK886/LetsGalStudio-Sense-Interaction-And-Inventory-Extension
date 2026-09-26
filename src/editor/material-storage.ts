@@ -2,8 +2,10 @@ import type { ExtensionContext } from "@avg-studio/sdk";
 import {
   detectImageType, EMPTY_MATERIAL_MANIFEST, MATERIAL_MANIFEST_PATH,
   MAX_MATERIAL_BYTES, parseMaterialManifest,
+  updateMaterialMetadata,
   type MaterialEntry, type MaterialKind, type MaterialManifest,
 } from "./material-library";
+import { assertMaterialUnused, readMaterialUsageReport } from "./material-usage";
 
 const EXTENSION_ID = "ink.zenly.ext-27b96b";
 
@@ -95,6 +97,51 @@ async function readMaterialManifest(
   }
 }
 
+interface MaterialMutation {
+  manifest: MaterialManifest;
+  rollback?: () => Promise<void>;
+}
+
+/** 原子清单更新与跨编辑器写锁，失败时回滚本次新增资源。 */
+async function mutateMaterialManifest(
+  ctx: ExtensionContext,
+  root: string,
+  edit: (manifest: MaterialManifest, fs: FileSystem, path: PathApi, directory: string) => Promise<MaterialMutation>,
+): Promise<MaterialManifest> {
+  const { fs, path } = nodeApis(ctx);
+  const confirmed = await connectMaterialRoot(ctx, root);
+  const assetsDir = path.join(confirmed.root, "assets");
+  const materialsDir = path.join(assetsDir, "materials");
+  await fs.mkdir(assetsDir, { recursive: true });
+  await requirePlainDirectory(fs, assetsDir);
+  await fs.mkdir(materialsDir, { recursive: true });
+  await requirePlainDirectory(fs, materialsDir);
+  const id = ctx.native.node.require<CryptoApi>("node:crypto").randomUUID();
+  const lockPath = path.join(materialsDir, ".manifest.lock");
+  try { await fs.writeFile(lockPath, new Date().toISOString(), { flag: "wx" }); }
+  catch (failure) {
+    if (failure && typeof failure === "object" && "code" in failure && failure.code === "EEXIST") {
+      throw new Error("另一个编辑器正在修改素材库，请稍后刷新重试");
+    }
+    throw failure;
+  }
+  const temporaryPath = path.join(materialsDir, `.manifest-${id}.tmp`);
+  let mutation: MaterialMutation | undefined;
+  try {
+    mutation = await edit(await readMaterialManifest(fs, path, confirmed.root), fs, path, materialsDir);
+    const next = parseMaterialManifest(mutation.manifest);
+    await fs.writeFile(temporaryPath, JSON.stringify(next, null, 2), { flag: "wx" });
+    await fs.rename(temporaryPath, path.join(materialsDir, "manifest.json"));
+    return next;
+  } catch (failure) {
+    await fs.unlink(temporaryPath).catch(() => {});
+    await mutation?.rollback?.().catch(() => {});
+    throw failure;
+  } finally {
+    await fs.unlink(lockPath);
+  }
+}
+
 /** 先写唯一图片文件，再原子替换清单；失败时清理本次新增文件。 */
 export async function importMaterialFile(
   ctx: ExtensionContext,
@@ -109,15 +156,6 @@ export async function importMaterialFile(
   const imageType = detectImageType(bytes);
   if (!imageType) throw new Error("仅支持 PNG、JPEG、WebP、GIF、AVIF 图片");
 
-  const { fs, path } = nodeApis(ctx);
-  const confirmed = await connectMaterialRoot(ctx, root);
-  const assetsDir = path.join(confirmed.root, "assets");
-  const materialsDir = path.join(assetsDir, "materials");
-  await fs.mkdir(assetsDir, { recursive: true });
-  await requirePlainDirectory(fs, assetsDir);
-  await fs.mkdir(materialsDir, { recursive: true });
-  await requirePlainDirectory(fs, materialsDir);
-
   const id = ctx.native.node.require<CryptoApi>("node:crypto").randomUUID();
   const filename = `${id}.${imageType.extension}`;
   const entry: MaterialEntry = {
@@ -129,24 +167,35 @@ export async function importMaterialFile(
     size: bytes.byteLength,
     createdAt: new Date().toISOString(),
   };
-  const imagePath = path.join(materialsDir, filename);
-  const manifestPath = path.join(materialsDir, "manifest.json");
-  const temporaryPath = path.join(materialsDir, `.manifest-${id}.tmp`);
-  await fs.writeFile(imagePath, bytes, { flag: "wx" });
-  try {
-    const current = await readMaterialManifest(fs, path, confirmed.root);
-    const next: MaterialManifest = { version: 1, materials: [...current.materials, entry] };
-    await fs.writeFile(temporaryPath, JSON.stringify(next, null, 2), { flag: "wx" });
-    try {
-      await fs.rename(temporaryPath, manifestPath);
-    } catch (error) {
-      await fs.unlink(temporaryPath).catch(() => {});
-      throw error;
-    }
-    return next;
-  } catch (error) {
-    await fs.unlink(temporaryPath).catch(() => {});
-    await fs.unlink(imagePath).catch(() => {});
-    throw error;
-  }
+  return mutateMaterialManifest(ctx, root, async (current, fs, path, directory) => {
+    const imagePath = path.join(directory, filename);
+    await fs.writeFile(imagePath, bytes, { flag: "wx" });
+    return {
+      manifest: { version: 1, materials: [...current.materials, entry] },
+      rollback: () => fs.unlink(imagePath),
+    };
+  });
+}
+
+export async function editMaterialMetadata(
+  ctx: ExtensionContext, root: string, id: string, name: string, kind: MaterialKind,
+): Promise<MaterialManifest> {
+  return mutateMaterialManifest(ctx, root, async (manifest) => ({
+    manifest: updateMaterialMetadata(manifest, id, name, kind),
+  }));
+}
+
+/** 软删除保留图片路径，恢复时旧引用仍然有效。删除前重新检查最新设置。 */
+export async function setMaterialTrashed(
+  ctx: ExtensionContext, root: string, id: string, trashed: boolean,
+): Promise<MaterialManifest> {
+  return mutateMaterialManifest(ctx, root, async (manifest) => {
+    const entry = manifest.materials.find((material) => material.id === id);
+    if (!entry) throw new Error("素材不存在，请刷新素材库");
+    if (trashed) assertMaterialUnused(entry.path, readMaterialUsageReport(ctx));
+    const next = { ...entry };
+    if (trashed) next.trashedAt = entry.trashedAt ?? new Date().toISOString();
+    else delete next.trashedAt;
+    return { manifest: { version: 1, materials: manifest.materials.map((material) => material.id === id ? next : material) } };
+  });
 }
