@@ -1,4 +1,5 @@
 import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
+import { editorSmallButtonStyle as smallButtonStyle } from "../editor/ui/editor-control-styles";
 /**
  * action-list-field.tsx
  * 作者: 池水三两升
@@ -239,36 +240,6 @@ function updateToastStyle(
   }
 
   return next;
-}
-
-/**
- * 小按钮样式。
- *
- * @param tokens - 主题
- * @param options.danger - 危险操作
- * @returns CSSProperties
- */
-function smallButtonStyle(
-  tokens: ThemeTokens,
-  options: { danger?: boolean } = {},
-): React.CSSProperties {
-  return {
-    appearance: "none",
-    border: `1px solid ${
-      options.danger ? "#C45C5C" : tokens.borderStrong
-    }`,
-    background: tokens.bgSunken,
-    color: options.danger ? "#E8A0A0" : tokens.textPrimary,
-    borderRadius: 5,
-    padding: "3px 8px",
-    fontSize: 11,
-    fontFamily: "inherit",
-    cursor: "pointer",
-    lineHeight: 1.2,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-  };
 }
 
 /**

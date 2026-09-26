@@ -3,6 +3,8 @@ import { Button, Input, chakra } from "@chakra-ui/react";
 import React from "react";
 import type { HotspotCondition, HotspotConditionGroup } from "../../domain/types";
 import { useTheme } from "../../theme/theme-provider";
+import { IconLabel } from "../../shared/fa-icon";
+import { editorSmallButtonStyle } from "../ui/editor-control-styles";
 
 interface Props {
   value: HotspotConditionGroup | undefined;
@@ -31,11 +33,7 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
     borderRadius: 4, background: tokens.bgElevated, color: tokens.textPrimary,
     padding: "4px 7px", fontSize: 12,
   };
-  const buttonStyle: React.CSSProperties = {
-    border: "1px solid " + tokens.border, borderRadius: 4,
-    background: tokens.bgElevated, color: tokens.textPrimary,
-    padding: "5px 8px", cursor: "pointer", fontSize: 12,
-  };
+  const buttonStyle = editorSmallButtonStyle(tokens);
   const update = (index: number, next: HotspotCondition) => {
     if (!value) return;
     onChange({ ...value, conditions: value.conditions.map((entry, i) => i === index ? next : entry) });
@@ -54,9 +52,14 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
       <chakra.div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <chakra.span style={{ fontSize: 13, fontWeight: 650 }}>显示条件</chakra.span>
         {value ? (
-          <Button size="xs" variant="plain" type="button" style={buttonStyle} onClick={() => onChange(undefined)}>清除条件</Button>
+          <Button size="xs" variant="plain" type="button" style={buttonStyle} onClick={() => onChange(undefined)}>
+            <IconLabel icon="xmark" iconSize={11}>清除条件</IconLabel>
+          </Button>
         ) : (
-          <Button size="xs" variant="plain" type="button" style={buttonStyle} onClick={() => onChange({ logic: "all", conditions: [newCondition()] })}>添加条件</Button>
+          <Button size="xs" variant="plain" type="button" aria-label="添加条件" data-testid="hotspot-condition-add"
+            style={buttonStyle} onClick={() => onChange({ logic: "all", conditions: [newCondition()] })}>
+            <IconLabel icon="plus" iconSize={11}>添加</IconLabel>
+          </Button>
         )}
       </chakra.div>
       <chakra.p style={{ margin: "7px 0 10px", fontSize: 11, color: tokens.textMuted, lineHeight: 1.5 }}>
@@ -159,7 +162,9 @@ export function HotspotConditionEditor({ value, onChange }: Props): React.ReactE
             );
           })}
           <Button size="xs" variant="plain" type="button" style={buttonStyle}
-            onClick={() => onChange({ ...value, conditions: [...value.conditions, newCondition()] })}>添加一条规则</Button>
+            onClick={() => onChange({ ...value, conditions: [...value.conditions, newCondition()] })}>
+            <IconLabel icon="plus" iconSize={11}>添加一条规则</IconLabel>
+          </Button>
         </>
       )}
     </chakra.section>

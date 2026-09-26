@@ -1,6 +1,29 @@
 import type { ButtonProps, InputProps } from "@chakra-ui/react";
+import type { CSSProperties } from "react";
 import { FONT_SIZE_DEFAULT } from "../../theme/theme-provider";
 import type { ThemeTokens } from "../../theme/tokens";
+
+/** 属性面板的小按钮沿用动作链样式，供条件和动作控件共同使用。 */
+export function editorSmallButtonStyle(
+  tokens: ThemeTokens,
+  options: { danger?: boolean } = {},
+): CSSProperties {
+  return {
+    appearance: "none",
+    border: `1px solid ${options.danger ? "#C45C5C" : tokens.borderStrong}`,
+    background: tokens.bgSunken,
+    color: options.danger ? "#E8A0A0" : tokens.textPrimary,
+    borderRadius: 5,
+    padding: "3px 8px",
+    fontSize: 11,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    lineHeight: 1.2,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+  };
+}
 
 /** Chakra 控件使用插件的亮暗主题，避免继承宿主的默认配色。 */
 export function editorInputProps(tokens: ThemeTokens): InputProps {
