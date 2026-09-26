@@ -28,7 +28,6 @@ import { createSettingsPreviewSave } from "../store/preview-save";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
 import type { SceneInteractionSaveMap } from "../store/save-types";
 import { ThemeProvider } from "../theme/theme-provider";
-import { MaterialLibraryProvider } from "../editor/material-library-context";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -107,7 +106,7 @@ function buildPreviewReturnStackJson(
 /**
  * 编辑器顶部分区（与 editor-shell 保持一致）。
  */
-type EditorSection = "scenes" | "items" | "recipes" | "ui" | "materials";
+type EditorSection = "scenes" | "items" | "recipes" | "ui";
 
 /**
  * 编辑器 App 本地模式：作者编辑 vs 运行预览。
@@ -422,13 +421,11 @@ function EditorAppContent(): React.ReactElement {
               onBackToEditor={handleSetEditMode}
             />
           ) : EditorShellComp ? (
-            <MaterialLibraryProvider>
-              <EditorShellComp
-                editorSection={editorSection}
-                onEditorSectionChange={setEditorSection}
-                onSetEditMode={handleSetEditMode}
-              />
-            </MaterialLibraryProvider>
+            <EditorShellComp
+              editorSection={editorSection}
+              onEditorSectionChange={setEditorSection}
+              onSetEditMode={handleSetEditMode}
+            />
           ) : null}
         </chakra.div>
       </ThemeProvider>

@@ -81,7 +81,6 @@ import {
 import { ItemListPanel } from "./panels/item-list-panel";
 import { ItemPreviewPanel } from "./panels/item-preview-panel";
 import { ItemPropertyPanel } from "./panels/item-property-panel";
-import { MaterialLibraryPanel } from "./panels/material-library-panel";
 import { PropertyPanel } from "./panels/property-panel";
 import { RecipeListPanel } from "./panels/recipe-list-panel";
 import { RecipePreviewPanel } from "./panels/recipe-preview-panel";
@@ -92,7 +91,7 @@ import { DesignResolutionMenu } from "./ui/design-resolution-menu";
 import { UiEditorPanel } from "./ui/ui-editor-panel";
 
 /** 编辑器顶部分区：场景 / 物品库 / 配方 / UI。 */
-export type EditorSection = "scenes" | "items" | "recipes" | "ui" | "materials";
+export type EditorSection = "scenes" | "items" | "recipes" | "ui";
 
 /**
  * EditorShell 组件属性。
@@ -881,9 +880,7 @@ export function EditorShell({
         ? "物品库"
         : editorSection === "recipes"
           ? "配方"
-          : editorSection === "materials"
-            ? "素材库"
-            : "UI";
+          : "UI";
 
   /**
    * 导出当前场景库 JSON 并触发下载。
@@ -1182,18 +1179,6 @@ export function EditorShell({
             })}
           >
             <IconLabel icon="layer-group">UI</IconLabel>
-          </Button>
-          <Button size="xs" variant="plain"
-            type="button"
-            role="tab"
-            data-testid="editor-section-materials"
-            aria-selected={editorSection === "materials"}
-            onClick={() => onEditorSectionChange("materials")}
-            style={topBarButtonStyle(tokens, {
-              variant: editorSection === "materials" ? "active" : "default",
-            })}
-          >
-            <IconLabel icon="images">素材库</IconLabel>
           </Button>
         </chakra.div>
 
@@ -1529,7 +1514,6 @@ export function EditorShell({
         ) : null}
 
         {editorSection === "ui" ? <UiEditorPanel /> : null}
-        {editorSection === "materials" ? <MaterialLibraryPanel /> : null}
       </chakra.div>
     </chakra.div>
   );

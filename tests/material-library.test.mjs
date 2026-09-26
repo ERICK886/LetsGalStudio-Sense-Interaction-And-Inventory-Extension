@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { build } from "esbuild";
 
-const require = createRequire(import.meta.url);
 
 async function load(path) {
   const result = await build({ entryPoints: [fileURLToPath(new URL(path, import.meta.url))],
@@ -51,33 +46,4 @@ test("新旧场景、交互点和物品图片引用都能通过原 JSON 格式�
   const restoredItems = parseItemsLibraryJson(stringifyItemsLibrary(items));
   assert.equal(restoredItems.items[0].icon, "asset://items/old.png");
   assert.equal(restoredItems.items[0].detailImage, ref);
-});
-
-test("作者导入两张图片后更新清单，错误目录与伪图片会被拒绝", async () => {
-  const { connectMaterialRoot, importMaterialFile } = await load("../src/editor/material-storage.ts");
-  const root = await mkdtemp(join(tmpdir(), "avg-material-test-"));
-  const ctx = { native: { node: { require: (name) => require(name) } } };
-  const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 0, 0, 0, 0]);
-  try {
-    await writeFile(join(root, "extension.json"), JSON.stringify({ id: "other.extension" }));
-    await assert.rejects(() => connectMaterialRoot(ctx, root), /ID 不匹配/);
-    await writeFile(join(root, "extension.json"), JSON.stringify({ id: "ink.zenly.ext-27b96b" }));
-    await assert.rejects(() => importMaterialFile(ctx, root, new File(["not an image"], "fake.png"), "scene"), /仅支持/);
-    const first = await importMaterialFile(ctx, root, new File([png], "room.png"), "scene");
-    const second = await importMaterialFile(ctx, root, new File([png], "door.png"), "hotspot");
-    assert.equal(first.materials.length, 1);
-    assert.equal(second.materials.length, 2);
-    assert.equal(second.materials[1].name, "door.png");
-    assert.equal((await readFile(join(root, "assets", "materials", "manifest.json"), "utf8")).includes("door.png"), true);
-    assert.deepEqual(new Uint8Array(await readFile(join(root, ...second.materials[0].path.split("/")))), png);
-    const failingCtx = { native: { node: { require: (name) => name === "node:fs/promises"
-      ? { ...require(name), rename: async () => { throw new Error("模拟写入失败"); } }
-      : require(name) } } };
-    await assert.rejects(() => importMaterialFile(failingCtx, root, new File([png], "failed.png"), "item"), /模拟写入失败/);
-    assert.equal((await readdir(join(root, "assets", "materials"))).length, 3);
-  } finally {
-    if (root.startsWith(tmpdir()) && root.includes("avg-material-test-")) {
-      await rm(root, { recursive: true, force: true });
-    }
-  }
 });

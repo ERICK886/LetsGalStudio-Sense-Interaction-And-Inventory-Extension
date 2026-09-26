@@ -1,5 +1,5 @@
 import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
-import { editorButtonProps, editorInputProps } from "../editor/ui/editor-control-styles";
+import { editorInputProps } from "../editor/ui/editor-control-styles";
 /**
  * form-renderer.tsx
  * 作者: 池水三两升
@@ -12,12 +12,11 @@ import { editorButtonProps, editorInputProps } from "../editor/ui/editor-control
  * number：聚焦期间用草稿字符串，失焦后再按 min/max 钳制提交，避免输入「300」时「3」被钳回 min。
  */
 
-import { Button, Textarea, Input, Checkbox, chakra } from "@chakra-ui/react";
+import { Textarea, Input, Checkbox, chakra } from "@chakra-ui/react";
 import React, { useEffect, useMemo, useState } from "react";
 import { useExtensionContext } from "@avg-studio/sdk";
 import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
-import { materialReference } from "../shared/material-reference";
-import { useMaterialLibrary } from "../editor/material-library-context";
+import { ProjectImagePicker } from "../editor/ui/project-image-picker";
 import {
   FONT_SIZE_DEFAULT,
   FONT_SIZE_TITLE,
@@ -510,11 +509,6 @@ function SchemaAssetField<T extends Record<string, unknown>>({
   const id = `field-${field.key}`;
   const showPreview =
     field.showPreview !== false && (field.accept ?? "image") === "image";
-  const { entries } = useMaterialLibrary();
-  const ctx = useExtensionContext();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const matching = entries.filter((entry) => entry.name.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
@@ -528,31 +522,9 @@ function SchemaAssetField<T extends Record<string, unknown>>({
           onChange(setNestedValue(value, field.key, e.target.value));
         }}
       />
-      {showPreview ? (
-        <>
-          <Button {...editorButtonProps(tokens)} size="xs" h="28px" w="100%" variant="outline" type="button" aria-expanded={pickerOpen} onClick={() => setPickerOpen(!pickerOpen)}>
-            从素材库选择（{entries.length}）
-          </Button>
-          {pickerOpen ? (
-            <chakra.div style={{ padding: 8, border: `1px solid ${tokens.border}`, borderRadius: 6, background: tokens.bgSunken }}>
-              <Input {...editorInputProps(tokens)} size="xs" h="28px" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索图片名称" />
-              <chakra.div style={{ maxHeight: 210, overflowY: "auto", marginTop: 7, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
-                {matching.map((entry) => (
-                  <Button {...editorButtonProps(tokens)} key={entry.id} size="xs" variant="outline" type="button"
-                    title={entry.name} onClick={() => {
-                      onChange(setNestedValue(value, field.key, materialReference(entry.path)));
-                      setPickerOpen(false);
-                    }}
-                    style={{ height: 88, minWidth: 0, display: "flex", flexDirection: "column", gap: 3, padding: 4 }}>
-                    <chakra.img src={resolveContextAssetUrl(ctx, materialReference(entry.path))} alt="" style={{ maxWidth: "100%", height: 55, objectFit: "contain" }} />
-                    <chakra.span style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</chakra.span>
-                  </Button>
-                ))}
-              </chakra.div>
-              {matching.length === 0 ? <chakra.div style={{ padding: 8, color: tokens.textMuted, fontSize: 11 }}>没有可选图片，请先在顶部“素材库”导入。</chakra.div> : null}
-            </chakra.div>
-          ) : null}
-        </>
+      {(field.accept ?? "image") === "image" ? (
+        <ProjectImagePicker value={str} label={field.label}
+          onChange={(path) => onChange(setNestedValue(value, field.key, path))} />
       ) : null}
       {showPreview && str.trim() !== "" ? (
         <AssetFieldThumb uri={str} tokens={tokens} />

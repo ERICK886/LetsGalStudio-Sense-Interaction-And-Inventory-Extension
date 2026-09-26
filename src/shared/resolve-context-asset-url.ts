@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@avg-studio/sdk";
 import { resolveAssetUrl, type AssetResolveFn } from "./resolve-asset-url";
 
-/** 作者素材库和旧工程资源共用的 URL 解析入口。 */
+/** 工程资源和旧扩展素材共用的 URL 解析入口。 */
 export function resolveContextAssetUrl(ctx: ExtensionContext, uri: string): string {
   return resolveAssetUrl(
     uri,
