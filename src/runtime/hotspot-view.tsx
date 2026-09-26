@@ -283,6 +283,7 @@ export function HotspotView({
    */
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (event.button !== 0) return;
       const hit = syncAlphaHit(event.clientX, event.clientY);
 
       if (!hit) {

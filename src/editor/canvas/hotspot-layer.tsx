@@ -197,6 +197,7 @@ export function HotspotLayer({
    */
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>, hs: HotspotElement) => {
+      if (event.button !== 0) return;
       event.stopPropagation();
       event.preventDefault();
 
@@ -243,6 +244,11 @@ export function HotspotLayer({
       const session = sessionRef.current;
 
       if (session === null || event.pointerId !== session.pointerId) {
+        return;
+      }
+
+      if ((event.buttons & 1) === 0) {
+        onUpEv(event);
         return;
       }
 

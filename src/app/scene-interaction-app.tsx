@@ -13,7 +13,7 @@
  * - ThemeProvider 根背景 transparent；场景壳根 pointer-events:none
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useExtensionContext,
   type ExtensionProps,
@@ -33,18 +33,15 @@ import {
   forceClearPlayerOverlaySession,
   isPlayerOverlaySessionActive,
   markPlayerOverlaySession,
-  setHudUiSession,
   setSceneInteractionRestoreProps,
 } from "../runtime/suspend-overlay-for-fragment";
 import { closeVisualInventoryHud } from "../runtime/visual-inventory-hud";
+import { startAutoHudSession } from "../runtime/auto-hud-session";
 import {
   BACKPACK_HUD_MODULE_ID,
   BACKPACK_MODULE_ID,
   SCENE_INTERACTION_MODULE_ID,
 } from "../shared/module-ids";
-import {
-  BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS,
-} from "../store/hud-ui-show";
 import { logDebug, logError, logWarn } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
 import { useAutoShowHud } from "../store/use-auto-show-hud";
@@ -189,6 +186,7 @@ function SceneInteractionAppContent({
     isPlayerModal || playerPresentation === true;
 
   const autoShowHud = useAutoShowHud(ctx);
+  const hudWantedRef = useRef(isPlayerRuntime && autoShowHud);
   const themeRaw = readAuthorSetting(ctx, "theme");
   const themeMode: ThemeMode = themeRaw === "light" ? "light" : "dark";
 
@@ -268,48 +266,15 @@ function SceneInteractionAppContent({
    * Studio 程序预览勿 ui.show，以免顶掉当前容器导致场景消失。
    */
   useEffect(() => {
+    hudWantedRef.current = isPlayerRuntime && autoShowHud;
     if (!isPlayerRuntime || !autoShowHud) {
       return;
     }
 
-    let cancelled = false;
-
-    (async () => {
-      try {
-        await ctx.ui.show(
-          BACKPACK_HUD_MODULE_ID,
-          { compactHost: false },
-          { ...BACKPACK_HUD_LETTERBOX_SHOW_OPTIONS },
-        );
-
-        if (!cancelled) {
-          setHudUiSession(true);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setHudUiSession(false);
-          logError(
-            "scene-interaction-app",
-            "自动显示快捷栏 HUD 失败",
-            err,
-          );
-        }
-      }
-    })();
-
+    const stop = startAutoHudSession(ctx, () => hudWantedRef.current);
     return () => {
-      cancelled = true;
-      setHudUiSession(false);
-
-      try {
-        closeVisualInventoryHud(ctx);
-      } catch {
-        // Visual 可能未打开
-      }
-
-      void ctx.ui.hide(BACKPACK_HUD_MODULE_ID).catch(() => {
-        // 忽略
-      });
+      hudWantedRef.current = false;
+      stop();
     };
   }, [ctx, isPlayerRuntime, autoShowHud]);
 

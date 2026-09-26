@@ -52,9 +52,10 @@ export function bindSceneViewportGestures(
     (event.target as Element | null)?.closest?.('[data-testid="scene-canvas-view-controls"]'),
   );
   const onWheel = (event: WheelEvent): void => {
-    if (!event.ctrlKey || !options.isEnabled() || inControls(event)) return;
+    if (!event.ctrlKey || !options.isEnabled()) return;
     event.preventDefault();
     event.stopPropagation();
+    if (inControls(event)) return;
     // 拖动中改变视图会打破尺寸手柄的起点坐标，松手后再允许缩放。
     if (activePointers.size > 0) return;
     const layout = options.getLayout();
@@ -63,7 +64,10 @@ export function bindSceneViewportGestures(
   };
   const onDown = (event: PointerEvent): void => {
     if (!options.isEnabled() || inControls(event)) return;
-    if (event.button !== 1) { activePointers.add(event.pointerId); return; }
+    if (event.button !== 1) {
+      if (event.button === 0) activePointers.add(event.pointerId);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (activePointers.size > 0) return;
@@ -73,7 +77,14 @@ export function bindSceneViewportGestures(
     options.onPanning(true);
   };
   const onMove = (event: PointerEvent): void => {
+    // 在窗口外松手时可能收不到 pointerup；返回后根据真实按键状态结束旧会话。
+    if (event.buttons === 0) {
+      activePointers.delete(event.pointerId);
+      onUp(event);
+      return;
+    }
     if (!pan || pan.id !== event.pointerId) return;
+    if ((event.buttons & 4) === 0) { onUp(event); return; }
     event.preventDefault();
     event.stopPropagation();
     const point = clientToLocal(host, event.clientX, event.clientY);

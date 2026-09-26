@@ -246,6 +246,7 @@ export function ResizeHandles({
     event: React.PointerEvent<HTMLDivElement>,
     handle: ResizeHandleId,
   ): void => {
+    if (event.button !== 0) return;
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -271,6 +272,11 @@ export function ResizeHandles({
     const session = sessionRef.current;
 
     if (session === null) {
+      return;
+    }
+
+    if ((event.buttons & 1) === 0) {
+      onPointerUp(event);
       return;
     }
 

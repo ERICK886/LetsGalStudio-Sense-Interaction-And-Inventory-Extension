@@ -143,7 +143,7 @@ export function SceneBaseLayer({
   const handlePointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
   ): void => {
-    if (onBlankPointerDown === undefined) {
+    if (event.button !== 0 || onBlankPointerDown === undefined) {
       return;
     }
 
@@ -273,25 +273,7 @@ export function SceneBaseLayer({
         {/* overlay：与底图同一 transform，坐标为设计像素 */}
         <div
           data-testid="scene-design-stage"
-          onPointerDown={(e) => {
-            // 点到 stage 空白：转交 world 空白逻辑
-            if (
-              e.target === e.currentTarget &&
-              onBlankPointerDown !== undefined
-            ) {
-              const worldEl = worldRef.current;
-
-              if (worldEl !== null) {
-                const local = clientToLocal(
-                  worldEl,
-                  e.clientX,
-                  e.clientY,
-                );
-
-                onBlankPointerDown(local.x, local.y);
-              }
-            }
-          }}
+          // 空白事件仅由 world 处理一次，避免放置模式重复提交及产生两条撤销记录。
           style={{
             position: "absolute",
             left: 0,

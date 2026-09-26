@@ -98,6 +98,7 @@ function gestureFixture() {
   const fire = (target, type, data = {}) => {
     const event = new Event(type, { cancelable: true });
     Object.assign(event, { clientX: 200, clientY: 180, pointerId: 1, button: 0,
+      buttons: type === "pointermove" ? 4 : type === "pointerdown" ? (data.button === 1 ? 4 : 1) : 0,
       deltaY: -120, deltaMode: 0, ctrlKey: false, ...data });
     target.dispatchEvent(event);
     return event;
@@ -122,6 +123,23 @@ test("仅画布内 Ctrl 滚轮被拦截，连续滚轮累积缩放，编辑拖�
   assert.ok(f.getView().zoom > twice.zoom);
   f.disable();
   assert.equal(f.fire(f.host, "wheel", { ctrlKey: true }).defaultPrevented, false);
+  f.dispose();
+});
+
+test("窗口外松手后恢复滚轮缩放，中键不继续平移，控件上的 Ctrl 滚轮不缩放宿主", () => {
+  const f = gestureFixture();
+  f.fire(f.host, "pointerdown");
+  f.fire(f.win, "pointermove", { buttons: 0 });
+  f.fire(f.host, "wheel", { ctrlKey: true });
+  assert.ok(f.getView().zoom > 1);
+  f.fire(f.host, "pointerdown", { button: 1 });
+  const view = f.getView();
+  f.fire(f.win, "pointermove", { clientX: 300, buttons: 0 });
+  assert.equal(f.isPanning(), false);
+  assert.equal(f.getView(), view);
+  f.host.closest = () => f.host;
+  assert.equal(f.fire(f.host, "wheel", { ctrlKey: true }).defaultPrevented, true);
+  assert.equal(f.getView(), view);
   f.dispose();
 });
 

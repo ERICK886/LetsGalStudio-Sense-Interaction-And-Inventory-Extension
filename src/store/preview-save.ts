@@ -84,6 +84,7 @@ export function createPreviewSave(
     progressJson: DEFAULT_PROGRESS,
     isEditMode: false,
     currentSceneId: "",
+    mainSceneId: "",
     sceneReturnStackJson: DEFAULT_SCENE_RETURN_STACK,
     ...initial,
   };
