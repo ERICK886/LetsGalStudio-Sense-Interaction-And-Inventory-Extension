@@ -630,7 +630,7 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
               label: "宽度（设计像素）",
               min: 8,
               step: 1,
-              description: "画布边框手柄可拉伸；最小 8；空则占位 64",
+              description: "换图时自动使用图片原尺寸；空且无图时占位 64；手柄最小 8",
             },
             {
               key: "visual.height",
@@ -638,7 +638,7 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
               label: "高度（设计像素）",
               min: 8,
               step: 1,
-              description: "角手柄默认等比，按住 Shift 自由比例",
+              description: "有图时手柄按图片比例缩放；无图时角手柄按 Shift 可自由比例",
             },
           ],
         },

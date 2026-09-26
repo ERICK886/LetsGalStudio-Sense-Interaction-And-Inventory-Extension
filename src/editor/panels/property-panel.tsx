@@ -29,6 +29,7 @@ import type {
 import { ActionListField } from "../../schema/action-list-field";
 import { FormRenderer } from "../../schema/form-renderer";
 import { hotspotFields } from "../../schema/hotspot-schema";
+import { resetSizeForHotspotImageChange } from "../../shared/hotspot-image-size";
 import { HotspotConditionEditor } from "./hotspot-condition-editor";
 import { inventoryHudGlobalFields } from "../../schema/inventory-hud-schema";
 import { sceneFields } from "../../schema/scene-schema";
@@ -246,6 +247,7 @@ export function PropertyPanel({
         hs.id === next.id
           ? {
               ...next,
+              visual: resetSizeForHotspotImageChange(hs.visual, next.visual),
               motion: normalizeElementMotion(next.motion),
               label: next.label
                 ? {

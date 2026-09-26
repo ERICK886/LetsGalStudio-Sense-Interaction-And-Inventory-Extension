@@ -46,6 +46,8 @@ export interface ApplyResizeDragArgs {
    * 角手柄：true=等比；边手柄忽略（始终单轴）。
    */
   lockAspect: boolean;
+  /** 指定图片比例时，八个手柄均保持该比例。 */
+  aspectRatio?: number;
   minWidth: number;
   minHeight: number;
 }
@@ -127,6 +129,8 @@ function boxFromEdges(
  */
 export function applyResizeDrag(args: ApplyResizeDragArgs): ResizeBox {
   const { handle, start, dx, dy, lockAspect, minWidth, minHeight } = args;
+  const fixedAspect = args.aspectRatio !== undefined && Number.isFinite(args.aspectRatio) && args.aspectRatio > 0
+    ? args.aspectRatio : undefined;
 
   const halfW = start.width / 2;
   const halfH = start.height / 2;
@@ -166,8 +170,24 @@ export function applyResizeDrag(args: ApplyResizeDragArgs): ResizeBox {
     }
   }
 
-  if (isCornerHandle(handle) && lockAspect && start.width > 0 && start.height > 0) {
-    const aspect = start.width / start.height;
+  if (!isCornerHandle(handle) && fixedAspect !== undefined) {
+    if (moveE || moveW) {
+      const newW = Math.max(minWidth, minHeight * fixedAspect, right - left);
+      if (moveW) left = right - newW;
+      else right = left + newW;
+      top = start.centerTop - newW / fixedAspect / 2;
+      bottom = start.centerTop + newW / fixedAspect / 2;
+    } else {
+      const newH = Math.max(minHeight, minWidth / fixedAspect, bottom - top);
+      if (moveN) top = bottom - newH;
+      else bottom = top + newH;
+      left = start.centerLeft - newH * fixedAspect / 2;
+      right = start.centerLeft + newH * fixedAspect / 2;
+    }
+  }
+
+  if (isCornerHandle(handle) && (lockAspect || fixedAspect !== undefined) && start.width > 0 && start.height > 0) {
+    const aspect = fixedAspect ?? start.width / start.height;
     let newW = Math.max(minWidth, right - left);
     let newH = Math.max(minHeight, bottom - top);
 
@@ -179,8 +199,8 @@ export function applyResizeDrag(args: ApplyResizeDragArgs): ResizeBox {
       newW = newH * aspect;
     }
 
-    newW = Math.max(minWidth, newW);
-    newH = Math.max(minHeight, newW / aspect);
+    newW = Math.max(minWidth, minHeight * aspect, newW);
+    newH = newW / aspect;
 
     if (handle === "se") {
       right = left + newW;

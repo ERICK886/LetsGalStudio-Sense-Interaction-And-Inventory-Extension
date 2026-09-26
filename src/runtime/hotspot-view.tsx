@@ -31,13 +31,14 @@ import {
   applyUiTextStyle,
 } from "../domain/ui-style";
 import { isOpaqueImageHit } from "../shared/alpha-hit";
+import { getHotspotImageSize, HOTSPOT_FALLBACK_SIZE, type ImageNaturalSize } from "../shared/hotspot-image-size";
 import {
   normToWorld,
   type ContentRect,
 } from "../shared/scene-layout";
 
 /** 无图时的默认占位边长（设计像素） */
-export const RUNTIME_HOTSPOT_PLACEHOLDER_SIZE = 64;
+export const RUNTIME_HOTSPOT_PLACEHOLDER_SIZE = HOTSPOT_FALLBACK_SIZE;
 
 /**
  * HotspotView 组件属性。
@@ -87,28 +88,6 @@ export interface HotspotViewProps {
    * @default true
    */
   hoverEffectsEnabled?: boolean;
-}
-
-/**
- * 推算交互点在设计画幅中的显示尺寸。
- *
- * @param hs - 交互点
- * @returns `{ width, height }` 设计像素
- */
-function hotspotDisplaySize(hs: HotspotElement): {
-  width: number;
-  height: number;
-} {
-  const w =
-    typeof hs.visual.width === "number" && hs.visual.width > 0
-      ? hs.visual.width
-      : RUNTIME_HOTSPOT_PLACEHOLDER_SIZE;
-  const h =
-    typeof hs.visual.height === "number" && hs.visual.height > 0
-      ? hs.visual.height
-      : RUNTIME_HOTSPOT_PLACEHOLDER_SIZE;
-
-  return { width: w, height: h };
 }
 
 /**
@@ -170,9 +149,10 @@ export function HotspotView({
   const [alphaHit, setAlphaHit] = useState(false);
   /** 指针是否仍在外壳包围盒内（用于 leave 复位 / hover） */
   const [pointerInside, setPointerInside] = useState(false);
-  const size = hotspotDisplaySize(hotspot);
+  const [imageNatural, setImageNatural] = useState<(ImageNaturalSize & { url: string }) | null>(null);
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
+  const size = getHotspotImageSize(hotspot.visual, imageNatural?.url === url ? imageNatural : undefined);
   const hasImage = Boolean(url);
   // 解析运行时实际使用的悬停效果：跟随全局或使用本地
   const resolvedHoverShadow = resolveHotspotHoverShadow(
@@ -388,12 +368,19 @@ export function HotspotView({
     >
       {url ? (
         <img
+          key={url}
           ref={imgRef}
           src={url}
           alt=""
           draggable={false}
           // 尽量允许 canvas 采样；跨域失败时 isOpaqueImageHit 回退整框
           crossOrigin="anonymous"
+          onLoad={(event) => {
+            const img = event.currentTarget;
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              setImageNatural({ url, width: img.naturalWidth, height: img.naturalHeight });
+            }
+          }}
           style={{
             display: "block",
             width: "100%",

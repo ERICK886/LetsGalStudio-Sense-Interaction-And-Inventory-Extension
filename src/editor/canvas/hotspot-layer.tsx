@@ -20,9 +20,10 @@ import {
 import { useTheme } from "../../theme/theme-provider";
 import { ResizeHandles } from "./resize-handles";
 import type { ResizeBox } from "./resize-math";
+import { getHotspotImageSize, HOTSPOT_FALLBACK_SIZE, type ImageNaturalSize } from "../../shared/hotspot-image-size";
 
 /** 无图时的默认占位边长（设计像素） */
-export const HOTSPOT_PLACEHOLDER_SIZE = 64;
+export const HOTSPOT_PLACEHOLDER_SIZE = HOTSPOT_FALLBACK_SIZE;
 
 /** 拉伸最小边长（设计像素），对齐大地图地点下限 */
 export const HOTSPOT_MIN_SIZE = 8;
@@ -89,28 +90,6 @@ export interface HotspotLayerProps {
 }
 
 /**
- * 推算 hotspot 在设计画幅中的显示尺寸。
- *
- * @param hs - 交互点
- * @returns `{ width, height }` 设计像素
- */
-function hotspotDisplaySize(hs: HotspotElement): {
-  width: number;
-  height: number;
-} {
-  const w =
-    typeof hs.visual.width === "number" && hs.visual.width > 0
-      ? hs.visual.width
-      : HOTSPOT_PLACEHOLDER_SIZE;
-  const h =
-    typeof hs.visual.height === "number" && hs.visual.height > 0
-      ? hs.visual.height
-      : HOTSPOT_PLACEHOLDER_SIZE;
-
-  return { width: w, height: h };
-}
-
-/**
  * 拖拽移动会话状态。
  */
 interface DragSession {
@@ -151,6 +130,16 @@ export function HotspotLayer({
   worldElement,
 }: HotspotLayerProps): React.ReactElement {
   const { tokens } = useTheme();
+  const [imageSizes, setImageSizes] = useState<Map<string, ImageNaturalSize>>(() => new Map());
+  const imageUrlsKey = JSON.stringify(hotspots.map((hs) => resolveUrl(hs.visual.src)));
+
+  useEffect(() => {
+    const activeUrls = new Set<string>(JSON.parse(imageUrlsKey));
+    setImageSizes((previous) => {
+      if ([...previous.keys()].every((url) => activeUrls.has(url))) return previous;
+      return new Map([...previous].filter(([url]) => activeUrls.has(url)));
+    });
+  }, [imageUrlsKey]);
   const [dragPose, setDragPose] = useState<{
     id: string;
     x: number;
@@ -335,12 +324,13 @@ export function HotspotLayer({
           : dragPose?.id === hs.id
             ? dragPose.y
             : hs.y;
-        const baseSize = hotspotDisplaySize(hs);
+        const url = resolveUrl(hs.visual.src);
+        const natural = imageSizes.get(url);
+        const baseSize = getHotspotImageSize(hs.visual, natural);
         const width = resizing ? resizing.width : baseSize.width;
         const height = resizing ? resizing.height : baseSize.height;
         const center = normToWorld(poseX, poseY, contentRect);
         const selected = hs.id === selectedId;
-        const url = resolveUrl(hs.visual.src);
 
         return (
           <chakra.div
@@ -355,7 +345,7 @@ export function HotspotLayer({
               width,
               height,
               boxSizing: "border-box",
-              border: selected
+              outline: selected
                 ? `2px solid ${tokens.accent}`
                 : "1px dashed rgba(180, 180, 200, 0.55)",
               borderRadius: 4,
@@ -370,9 +360,18 @@ export function HotspotLayer({
           >
             {url ? (
               <chakra.img
+                key={url}
                 src={url}
                 alt=""
                 draggable={false}
+                onLoad={(event) => {
+                  const img = event.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    setImageSizes((previous) => new Map(previous).set(url, {
+                      width: img.naturalWidth, height: img.naturalHeight,
+                    }));
+                  }
+                }}
                 style={{
                   display: "block",
                   width: "100%",
@@ -406,6 +405,7 @@ export function HotspotLayer({
                 minWidth={HOTSPOT_MIN_SIZE}
                 minHeight={HOTSPOT_MIN_SIZE}
                 accentColor={tokens.accent}
+                aspectRatio={natural ? natural.width / natural.height : undefined}
                 onResizeLive={(next) => {
                   const geo = boxToGeometry(next);
 

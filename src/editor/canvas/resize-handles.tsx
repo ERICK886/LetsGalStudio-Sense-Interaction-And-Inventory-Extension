@@ -43,6 +43,9 @@ export interface ResizeHandlesProps {
   /** 手柄强调色（默认场景交互青绿） */
   accentColor?: string;
 
+  /** 有图时固定图片比例，边手柄也等比缩放。 */
+  aspectRatio?: number;
+
   /**
    * 拖拽过程预览。
    *
@@ -196,6 +199,7 @@ export function ResizeHandles({
   minWidth = 8,
   minHeight = 8,
   accentColor = "#2EC4A4",
+  aspectRatio,
   onResizeLive,
   onResizeCommit,
 }: ResizeHandlesProps): React.ReactElement {
@@ -287,6 +291,7 @@ export function ResizeHandles({
       dx,
       dy,
       lockAspect,
+      aspectRatio,
       minWidth,
       minHeight,
     });
