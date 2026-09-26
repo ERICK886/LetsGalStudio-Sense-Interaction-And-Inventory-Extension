@@ -1,4 +1,5 @@
 import { EditorSelect, EditorSelectOption } from "../editor/ui/editor-select";
+import { editorButtonProps, editorInputProps } from "../editor/ui/editor-control-styles";
 /**
  * form-renderer.tsx
  * 作者: 池水三两升
@@ -518,27 +519,26 @@ function SchemaAssetField<T extends Record<string, unknown>>({
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
       <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      <Input size="xs"
+      <Input {...editorInputProps(tokens)} size="xs" h="28px" w="100%"
         id={id}
         type="text"
         value={str}
         placeholder={field.placeholder ?? "asset://… 或 https://…"}
-        style={inputStyle(tokens)}
         onChange={(e) => {
           onChange(setNestedValue(value, field.key, e.target.value));
         }}
       />
       {showPreview ? (
         <>
-          <Button size="xs" variant="outline" type="button" onClick={() => setPickerOpen(!pickerOpen)}>
+          <Button {...editorButtonProps(tokens)} size="xs" h="28px" w="100%" variant="outline" type="button" aria-expanded={pickerOpen} onClick={() => setPickerOpen(!pickerOpen)}>
             从素材库选择（{entries.length}）
           </Button>
           {pickerOpen ? (
             <chakra.div style={{ padding: 8, border: `1px solid ${tokens.border}`, borderRadius: 6, background: tokens.bgSunken }}>
-              <Input size="xs" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索图片名称" />
+              <Input {...editorInputProps(tokens)} size="xs" h="28px" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索图片名称" />
               <chakra.div style={{ maxHeight: 210, overflowY: "auto", marginTop: 7, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
                 {matching.map((entry) => (
-                  <Button key={entry.id} size="xs" variant="outline" type="button"
+                  <Button {...editorButtonProps(tokens)} key={entry.id} size="xs" variant="outline" type="button"
                     title={entry.name} onClick={() => {
                       onChange(setNestedValue(value, field.key, materialReference(entry.path)));
                       setPickerOpen(false);

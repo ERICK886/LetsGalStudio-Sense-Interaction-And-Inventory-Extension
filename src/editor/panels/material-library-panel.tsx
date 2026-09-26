@@ -4,6 +4,7 @@ import { useExtensionContext } from "@avg-studio/sdk";
 import { useMaterialLibrary } from "../material-library-context";
 import type { MaterialKind } from "../material-library";
 import { EditorSelect, EditorSelectOption } from "../ui/editor-select";
+import { editorButtonProps, editorInputProps } from "../ui/editor-control-styles";
 import { materialReference } from "../../shared/material-reference";
 import { resolveContextAssetUrl } from "../../shared/resolve-context-asset-url";
 import { useTheme } from "../../theme/theme-provider";
@@ -36,10 +37,10 @@ export function MaterialLibraryPanel(): React.ReactElement {
 
         <chakra.div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: 12, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgElevated }}>
           <chakra.label htmlFor="material-root" style={{ fontSize: 12, fontWeight: 600 }}>扩展源目录</chakra.label>
-          <Input id="material-root" size="sm" value={draftRoot} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraftRoot(event.target.value)}
+          <Input {...editorInputProps(tokens)} id="material-root" size="sm" value={draftRoot} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraftRoot(event.target.value)}
             placeholder="包含 extension.json 的扩展目录绝对路径"
-            style={{ flex: "1 1 420px", minWidth: 220, color: tokens.textPrimary, background: tokens.bgSunken, border: `1px solid ${tokens.border}` }} />
-          <Button size="sm" disabled={busy || !draftRoot.trim()} onClick={() => { void connectRoot(draftRoot).catch(() => {}); }}>
+            style={{ flex: "1 1 420px", minWidth: 220 }} />
+          <Button {...editorButtonProps(tokens)} size="sm" disabled={busy || !draftRoot.trim()} onClick={() => { void connectRoot(draftRoot).catch(() => {}); }}>
             {root ? "重新连接" : "连接目录"}
           </Button>
           <chakra.p style={{ width: "100%", margin: 0, color: tokens.textMuted, fontSize: 11 }}>
@@ -61,17 +62,17 @@ export function MaterialLibraryPanel(): React.ReactElement {
               event.currentTarget.value = "";
               if (files.length) void importFiles(files, kind).catch(() => {});
             }} />
-          <Button size="sm" disabled={!root || busy} onClick={() => inputRef.current?.click()} data-testid="material-import-button">
+          <Button {...editorButtonProps(tokens)} size="sm" disabled={!root || busy} onClick={() => inputRef.current?.click()} data-testid="material-import-button">
             {busy ? "正在处理…" : "导入图片"}
           </Button>
           <chakra.span style={{ fontSize: 11, color: tokens.textMuted }}>支持 PNG、JPEG、WebP、GIF、AVIF；单张不超过 25 MB</chakra.span>
         </chakra.div>
 
         <chakra.div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18 }}>
-          <Input size="sm" value={sourceUri} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSourceUri(event.target.value)}
+          <Input {...editorInputProps(tokens)} size="sm" value={sourceUri} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSourceUri(event.target.value)}
             placeholder="也可填写工程图片路径（ui/…、asset://…）或图片 URL"
-            style={{ flex: 1, minWidth: 0, color: tokens.textPrimary, background: tokens.bgSunken }} />
-          <Button size="sm" disabled={!root || busy || !sourceUri.trim()} onClick={() => {
+            style={{ flex: 1, minWidth: 0 }} />
+          <Button {...editorButtonProps(tokens)} size="sm" disabled={!root || busy || !sourceUri.trim()} onClick={() => {
             void importUri(sourceUri, kind).then(() => setSourceUri("")).catch(() => {});
           }}>收录已有图片</Button>
         </chakra.div>
@@ -79,7 +80,7 @@ export function MaterialLibraryPanel(): React.ReactElement {
         {error && <chakra.p role="alert" style={{ color: "#f87171", fontSize: 12 }}>{error}</chakra.p>}
         <chakra.div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
           <chakra.span style={{ fontSize: 12, color: tokens.textMuted, flexShrink: 0 }}>已收录 {entries.length} 张图片</chakra.span>
-          <Input size="sm" value={query} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="搜索素材名称" style={{ maxWidth: 260 }} />
+          <Input {...editorInputProps(tokens)} size="sm" value={query} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="搜索素材名称" style={{ maxWidth: 260 }} />
         </chakra.div>
         {entries.length === 0 ? (
           <chakra.div style={{ padding: 30, textAlign: "center", color: tokens.textMuted, border: `1px dashed ${tokens.borderStrong}`, borderRadius: 8 }}>
