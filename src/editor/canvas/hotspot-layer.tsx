@@ -347,7 +347,7 @@ export function HotspotLayer({
               boxSizing: "border-box",
               outline: selected
                 ? `2px solid ${tokens.accent}`
-                : "1px dashed rgba(180, 180, 200, 0.55)",
+                : "none",
               borderRadius: 4,
               background: url ? "transparent" : "rgba(46, 196, 164, 0.12)",
               cursor: "grab",
