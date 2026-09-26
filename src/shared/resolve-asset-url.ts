@@ -1,4 +1,5 @@
 import { MATERIAL_REFERENCE_PREFIX, materialPath } from "./material-reference";
+import { projectResourcePath } from "./project-resource-reference";
 
 /**
  * resolve-asset-url.ts
@@ -75,7 +76,8 @@ export function resolveAssetUrl(
   }
 
   try {
-    return resolve(trimmed).url || trimmed;
+    // 老版 asset:// 路径按工程相对路径解析，持久化的原字符串保持不变。
+    return resolve(projectResourcePath(trimmed) ?? trimmed).url || trimmed;
   } catch {
     return trimmed;
   }

@@ -55,6 +55,14 @@ export class EditorExtension extends Extension<EditorAppProps> {
     recipesLibraryJson: s
       .string("配方库 JSON（自动维护）")
       .default('{"version":1,"recipes":[]}'),
+    projectResourceLibrary: s
+      .array("引用素材库（自动维护）", (item) => ({
+        path: item.asset("工程资源"),
+        usedBy: item.string("使用位置"),
+      }))
+      .table({ titleField: "path", columns: ["usedBy"] })
+      .emptyHint("打开场景编辑器后，根据图片与音效配置自动生成。")
+      .describe("随工程保存，供 Studio 统计引用与打包；请在编辑器的图片和音效字段修改资源。"),
     editorLeftWidth: s
       .number("编辑器左栏宽度")
       .default(260)

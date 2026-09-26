@@ -23,6 +23,7 @@ import { parseScenesLibraryJson } from "../domain/serialize";
 import { stringifySceneReturnStack } from "../domain/scene-return-stack";
 import { logError } from "../shared/logger";
 import { readAuthorSetting } from "../store/author-settings";
+import { startProjectResourceLibrarySync } from "../store/project-resource-library";
 import { setForcedOpenSceneId } from "../store/open-scene-target";
 import { createSettingsPreviewSave } from "../store/preview-save";
 import { readScenesLibraryJson } from "../store/scenes-persistence";
@@ -208,6 +209,7 @@ function MountPlaceholder({
  */
 function EditorAppContent(): React.ReactElement {
   const ctx = useExtensionContext();
+  useEffect(() => startProjectResourceLibrarySync(ctx.settings), [ctx.settings]);
   const [themeSetting] = ctx.settings.useValue("theme");
   const themeMode: ThemeMode = themeSetting === "light" ? "light" : "dark";
 

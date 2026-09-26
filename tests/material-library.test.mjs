@@ -18,7 +18,7 @@ test("素材引用和旧资源路径分别走扩展资源与工程资源解析",
   assert.equal(resolveAssetUrl(ref, () => ({ url: "wrong" }), (path) => `/extension/${path}`),
     "/extension/assets/materials/abc-123.png");
   assert.equal(resolveAssetUrl("asset://items/old.png", (uri) => ({ url: `/project/${uri}` })),
-    "/project/asset://items/old.png");
+    "/project/items/old.png");
   assert.equal(resolveAssetUrl("https://example.test/old.png", undefined), "https://example.test/old.png");
   assert.equal(resolveAssetUrl("extension-resource://assets/../outside.png", undefined), "");
   const resolver = createContextAssetResolver({
