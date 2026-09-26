@@ -9,6 +9,7 @@ import { connectMaterialRoot, importMaterialFile, editMaterialMetadata, setMater
 import { MATERIAL_USAGE_FIELDS, readMaterialUsageReport, type MaterialUsageReport } from "./material-usage";
 import { subscribeSettingsField } from "../store/settings-sync";
 import { resolveContextAssetUrl } from "../shared/resolve-context-asset-url";
+import { canPickMaterialDirectory, selectMaterialRoot } from "./material-directory-picker";
 
 const LOCAL_ROOT_KEY = "ink.zenly.ext-27b96b.material-root";
 
@@ -20,6 +21,8 @@ interface MaterialLibraryState {
   busy: boolean;
   error: string;
   connectRoot(path: string): Promise<void>;
+  canChooseRoot: boolean;
+  chooseRoot(initialDirectory?: string): Promise<void>;
   importFiles(files: readonly File[], kind: MaterialKind): Promise<void>;
   importUri(uri: string, kind: MaterialKind): Promise<void>;
   refresh(): Promise<void>;
@@ -112,6 +115,26 @@ export function MaterialLibraryProvider({ children }: { children: React.ReactNod
       setBusy(false);
     }
   }, [ctx]);
+
+  const chooseRoot = useCallback(async (initialDirectory = root): Promise<void> => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const connected = await selectMaterialRoot(ctx, initialDirectory);
+      if (!connected) return;
+      setRoot(connected.root);
+      setEntries(connected.manifest.materials);
+      try { localStorage.setItem(LOCAL_ROOT_KEY, connected.root); } catch { /* 可不记忆 */ }
+    } catch (failure) {
+      setError(message(failure));
+      throw failure;
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [ctx, root]);
 
   const importFiles = useCallback(async (files: readonly File[], kind: MaterialKind): Promise<void> => {
     if (busyRef.current) return;
@@ -221,6 +244,7 @@ export function MaterialLibraryProvider({ children }: { children: React.ReactNod
       entries: allEntries.filter((entry) => !entry.trashedAt),
       trashEntries: allEntries.filter((entry) => Boolean(entry.trashedAt)),
       usage, root, busy, error, connectRoot, importFiles, importUri, refresh,
+      canChooseRoot: canPickMaterialDirectory(ctx), chooseRoot,
       updateEntry: (id, name, kind) => manageEntry(id, "edit", name, kind),
       trashEntry: (id) => manageEntry(id, "trash"),
       restoreEntry: (id) => manageEntry(id, "restore"),

@@ -15,7 +15,7 @@ import { collectMaterialUsage } from "../material-usage";
 export function MaterialLibraryPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
-  const { entries, trashEntries, usage, root, busy, error, connectRoot, importFiles, importUri, refresh } = useMaterialLibrary();
+  const { entries, trashEntries, usage, root, busy, error, connectRoot, canChooseRoot, chooseRoot, importFiles, importUri, refresh } = useMaterialLibrary();
   const [draftRoot, setDraftRoot] = useState(root);
   const [kind, setKind] = useState<MaterialKind>("scene");
   const [sourceUri, setSourceUri] = useState("");
@@ -51,11 +51,14 @@ export function MaterialLibraryPanel(): React.ReactElement {
           <Input {...editorInputProps(tokens)} id="material-root" size="sm" value={draftRoot} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraftRoot(event.target.value)}
             placeholder="包含 extension.json 的扩展目录绝对路径"
             style={{ flex: "1 1 420px", minWidth: 220 }} />
+          <Button {...editorButtonProps(tokens)} size="sm" disabled={busy || !canChooseRoot} data-testid="material-choose-root"
+            onClick={() => { void chooseRoot(draftRoot).catch(() => {}); }}>选择文件夹</Button>
           <Button {...editorButtonProps(tokens)} size="sm" disabled={busy || !draftRoot.trim()} onClick={() => { void connectRoot(draftRoot).catch(() => {}); }}>
             {root ? "重新连接" : "连接目录"}
           </Button>
           <chakra.p style={{ width: "100%", margin: 0, color: tokens.textMuted, fontSize: 11 }}>
-            目录必须是本扩展的源码目录；路径只记在这台电脑，绝不写入游戏设置或存档。
+            选择文件夹后自动校验并连接，也可手动填写路径。目录须包含本扩展的 extension.json；路径只记在这台电脑。
+            {!canChooseRoot && "当前环境不支持文件夹选择，请手动填写路径。"}
           </chakra.p>
         </chakra.div>
 
