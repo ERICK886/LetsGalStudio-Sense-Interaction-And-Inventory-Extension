@@ -24,6 +24,7 @@ import {
   craftRecipe,
   getItemCount,
   giveItem,
+  removeItem,
   hasItem,
 } from "../methods/inventory-methods";
 import {
@@ -115,8 +116,9 @@ export class SceneInteractionExtension extends Extension<SceneInteractionAppProp
   static getCurrentSceneId = getCurrentSceneId;
   static setHotspotVisible = setHotspotVisible;
 
-  /** 剧本 methods：库存给予 / 查询 / 合成 */
+  /** 剧本 methods：库存给予 / 扣除 / 查询 / 合成 */
   static giveItem = giveItem;
+  static removeItem = removeItem;
   static hasItem = hasItem;
   static getItemCount = getItemCount;
   static craftRecipe = craftRecipe;

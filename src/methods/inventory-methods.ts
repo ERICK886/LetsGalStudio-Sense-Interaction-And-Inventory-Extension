@@ -4,7 +4,7 @@
  * 日期: 2026-08-08
  * 版本: 0.3.2
  *
- * 场景交互扩展剧本 methods：给予物品、是否持有、数量查询、配方合成。
+ * 场景交互扩展剧本 methods：给予物品、扣除物品、是否持有、数量查询、配方合成。
  * 物品/配方定义从 editor settings（cross）读取；
  * 库存优先写已绑定会话（玩家 slot 或预览 settings 沙箱），否则写 this.save。
  *
@@ -16,6 +16,7 @@ import { craftRecipeInInventory } from "../domain/crafting";
 import {
   getItemCount as domainGetItemCount,
   giveItemToInventory,
+  consumeItemFromInventory,
   hasItem as domainHasItem,
 } from "../domain/inventory";
 import { findItem } from "../domain/item-registry";
@@ -268,6 +269,55 @@ export const giveItem = method({
   run: applyGiveItem,
   runImmediately: applyGiveItem,
   skip: applyGiveItem,
+});
+
+type RemoveItemParams = {
+  itemId: string;
+  amount: number;
+  resultVariable: string;
+};
+
+/** 按指定数量扣除库存；无效参数或数量不足时不写库存。 */
+function applyRemoveItem(
+  this: MethodThis,
+  ctx: ExtensionContext,
+  params: RemoveItemParams,
+): void {
+  const itemId = normalizeItemId(params.itemId);
+  const amount = params.amount === undefined ? 1 : params.amount;
+
+  if (itemId === null || !Number.isSafeInteger(amount) || amount < 1) {
+    logError("inventory-methods", "removeItem: 物品 ID 或数量无效，数量须为正整数");
+    writeBoolResult(ctx, params.resultVariable, false);
+    return;
+  }
+
+  const save = narrowSave(this.save);
+  const result = consumeItemFromInventory(readInventoryState(save), itemId, amount);
+
+  if (!result.ok) {
+    logError("inventory-methods", `removeItem: 扣除失败 (${itemId} x${amount}): ${result.reason}`);
+    writeBoolResult(ctx, params.resultVariable, false);
+    return;
+  }
+
+  writeInventoryState(save, result.state);
+  writeBoolResult(ctx, params.resultVariable, true);
+}
+
+/** 剧情 block 扣除物品，与场景动作共用扣物规则及玩家库存。 */
+export const removeItem = method({
+  id: "remove-item",
+  title: "扣除物品",
+  description: "按数量扣除玩家物品；数量不足时不扣除，可将成功与否写入变量",
+  schema: {
+    itemId: { type: "string", label: "物品 ID", required: true },
+    amount: { type: "number", label: "数量", default: 1, min: 1, step: 1, required: false },
+    resultVariable: { type: "string", label: "结果写入变量", required: false },
+  },
+  run: applyRemoveItem,
+  runImmediately: applyRemoveItem,
+  skip: applyRemoveItem,
 });
 
 type HasItemParams = {
