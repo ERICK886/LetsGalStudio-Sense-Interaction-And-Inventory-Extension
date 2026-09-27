@@ -363,20 +363,29 @@ function renderBooleanField<T extends Record<string, unknown>>(
 ): React.ReactElement {
   const raw = getNestedValue(value, field.key);
   const checked = Boolean(raw);
-  const id = `field-${field.key}`;
 
   return (
     <chakra.div style={fieldWrapStyle()} data-testid={`schema-field-${field.key}`}>
-      <chakra.div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Checkbox.Root checked={checked}
-          onCheckedChange={(details) =>
-            onChange(setNestedValue(value, field.key, details.checked === true))
-          } colorPalette="teal">
-          <Checkbox.HiddenInput id={id} />
-          <Checkbox.Control />
-        </Checkbox.Root>
-        <FieldLabel label={field.label} tokens={tokens} htmlFor={id} />
-      </chakra.div>
+      <Checkbox.Root
+        checked={checked}
+        onCheckedChange={(details) =>
+          onChange(setNestedValue(value, field.key, details.checked === true))
+        }
+        colorPalette="teal"
+      >
+        <Checkbox.HiddenInput />
+        <Checkbox.Control />
+        <Checkbox.Label
+          style={{
+            fontSize: FONT_SIZE_DEFAULT,
+            fontWeight: 550,
+            color: tokens.textPrimary,
+            whiteSpace: field.label === "其他交互点完成后显示" ? "nowrap" : "pre-line",
+          }}
+        >
+          {field.label}
+        </Checkbox.Label>
+      </Checkbox.Root>
       <FieldHint text={field.description} tokens={tokens} />
     </chakra.div>
   );
