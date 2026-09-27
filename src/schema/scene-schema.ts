@@ -8,9 +8,18 @@
  * 含名称、底图、切换转场、动效；画面底色配置已移除（运行时透明铺底）。
  */
 
-import type { SceneDefinition, SceneTransitionMode } from "../domain/types";
+import type { SceneBaseImageFit, SceneDefinition, SceneTransitionMode } from "../domain/types";
 import { motionSection } from "./motion-section";
 import type { FieldSchema } from "./types";
+
+/** 底图展示方式。 */
+export const SCENE_BASE_IMAGE_FIT_OPTIONS: ReadonlyArray<{
+  value: SceneBaseImageFit;
+  label: string;
+}> = [
+  { value: "contain", label: "完整显示" },
+  { value: "cover", label: "裁剪填充" },
+];
 
 /** 场景切换转场选项 */
 export const SCENE_TRANSITION_MODE_OPTIONS: ReadonlyArray<{
@@ -53,6 +62,23 @@ export function sceneFields(_scene: SceneDefinition): FieldSchema[] {
           showPreview: true,
           placeholder: "asset://scenes/room.png",
           description: "支持 asset:// 或 HTTP(S) URL；无底图时透明铺底",
+        },
+        {
+          key: "baseImageFit",
+          kind: "enum",
+          label: "底图展示",
+          options: SCENE_BASE_IMAGE_FIT_OPTIONS,
+          description: "裁剪填充会居中裁掉超出画幅的部分；完整显示会保留整张图片",
+        },
+        {
+          key: "showQuickbar",
+          kind: "boolean",
+          label: "显示快捷栏",
+        },
+        {
+          key: "showOpenBagButton",
+          kind: "boolean",
+          label: "显示打开背包按钮",
         },
       ],
     },

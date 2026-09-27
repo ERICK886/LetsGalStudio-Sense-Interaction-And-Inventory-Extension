@@ -548,6 +548,7 @@ function hotspotLocalHoverShadowLayerFields(): FieldSchema[] {
  */
 export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
   const followGlobal = hotspot.hoverShadow?.useGlobal !== false;
+  const hasImage = hotspot.visual.src.trim() !== "";
   const followGlobalLabelStyle = hotspot.label?.useGlobalStyle !== false;
   return [
     {
@@ -571,6 +572,12 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
           kind: "boolean",
           label: "仅触发一次",
           description: "执行动作后标记已消耗并隐藏",
+        },
+        {
+          key: "showAfterAllOthers",
+          kind: "boolean",
+          label: "其他交互点完成后显示",
+          description: "同场景所有普通交互点各完成至少一次未中断的动作链后显示",
         },
       ],
     },
@@ -625,23 +632,49 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
           gap: 8,
           children: [
             {
-              key: "visual.width",
+              key: "visual.widthRatio",
               kind: "number",
-              label: "宽度（设计像素）",
-              min: 8,
-              step: 1,
-              description: "换图时自动使用图片原尺寸；空且无图时占位 64；手柄最小 8",
+              label: hasImage ? "宽度比例" : "边长比例",
+              min: 0.001,
+              step: 0.005,
+              description: "相对底图宽度；无底图时相对设计画幅宽度",
             },
-            {
-              key: "visual.height",
-              kind: "number",
-              label: "高度（设计像素）",
-              min: 8,
-              step: 1,
-              description: "有图时手柄按图片比例缩放；无图时角手柄按 Shift 可自由比例",
-            },
+            ...(hasImage ? [{
+              key: "visual.heightRatio",
+              kind: "number" as const,
+              label: "高度比例",
+              min: 0.001,
+              step: 0.005,
+              description: "相对底图高度；无底图时相对设计画幅高度",
+            }] : []),
           ],
         },
+        ...(!hasImage ? ([
+          {
+            key: "visual.placeholderColor",
+            kind: "color" as const,
+            label: "无图颜色",
+            placeholder: "#2EC4A4",
+          },
+          {
+            key: "visual.placeholderOpacity",
+            kind: "number" as const,
+            label: "无图透明度",
+            min: 0,
+            max: 1,
+            step: 0.05,
+            description: "0 完全透明，1 完全不透明",
+          },
+          {
+            key: "visual.placeholderShape",
+            kind: "enum" as const,
+            label: "无图形状",
+            options: [
+              { value: "square", label: "正方形" },
+              { value: "circle", label: "圆形" },
+            ],
+          },
+        ] as FieldSchema[]) : []),
         {
           key: "hoverShadow.useGlobal",
           kind: "boolean",
@@ -738,7 +771,7 @@ export function hotspotFields(hotspot: HotspotElement): FieldSchema[] {
                   {
                     kind: "grid" as const,
                     id: "label-padding",
-                    columns: 2,
+                    columns: 2 as const,
                     gap: 8,
                     children: [
                       {

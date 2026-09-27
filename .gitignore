@@ -3,6 +3,8 @@ dist
 sdk
 *.log
 .DS_Store
+llms.txt
+DEVELOPMENT.md
 
 # Agent / SDD scratch
 .superpowers/

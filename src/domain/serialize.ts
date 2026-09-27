@@ -12,6 +12,7 @@ import { clamp01 } from "../shared/coords";
 import { logError } from "../shared/logger";
 import { normalizeHotspotHoverShadow } from "./hover-shadow";
 import { normalizeHotspotConditionGroup } from "./hotspot-condition";
+import { DEFAULT_PLACEHOLDER_COLOR, DEFAULT_PLACEHOLDER_OPACITY } from "./hotspot-visual";
 import { normalizeHotspotLabel } from "./hotspot-label";
 import {
   defaultBackpackScreen,
@@ -442,6 +443,19 @@ function normalizeHotspotVisual(
   if (typeof obj.height === "number" && Number.isFinite(obj.height)) {
     visual.height = obj.height;
   }
+  if (typeof obj.widthRatio === "number" && Number.isFinite(obj.widthRatio) && obj.widthRatio > 0) {
+    visual.widthRatio = obj.widthRatio;
+  }
+  if (typeof obj.heightRatio === "number" && Number.isFinite(obj.heightRatio) && obj.heightRatio > 0) {
+    visual.heightRatio = obj.heightRatio;
+  }
+  visual.placeholderColor = typeof obj.placeholderColor === "string" && /^#[0-9a-fA-F]{6}$/.test(obj.placeholderColor)
+    ? obj.placeholderColor
+    : DEFAULT_PLACEHOLDER_COLOR;
+  visual.placeholderOpacity = typeof obj.placeholderOpacity === "number" && Number.isFinite(obj.placeholderOpacity)
+    ? Math.min(1, Math.max(0, obj.placeholderOpacity))
+    : DEFAULT_PLACEHOLDER_OPACITY;
+  visual.placeholderShape = obj.placeholderShape === "circle" ? "circle" : "square";
 
   return visual;
 }
@@ -483,6 +497,7 @@ function normalizeHotspotElement(raw: unknown): HotspotElement | null {
     once: Boolean(obj.once),
     visibleByDefault:
       obj.visibleByDefault === undefined ? true : Boolean(obj.visibleByDefault),
+    showAfterAllOthers: obj.showAfterAllOthers === true,
     customCss: typeof obj.customCss === "string" ? obj.customCss : "",
     motion: normalizeElementMotion(obj.motion ?? defaultElementMotion()),
   };
@@ -525,6 +540,10 @@ function normalizeSceneDefinition(raw: unknown): SceneDefinition | null {
     baseImage: typeof obj.baseImage === "string" ? obj.baseImage : "",
     hotspots,
   };
+
+  scene.baseImageFit = obj.baseImageFit === "cover" ? "cover" : "contain";
+  scene.showQuickbar = obj.showQuickbar !== false;
+  scene.showOpenBagButton = obj.showOpenBagButton !== false;
 
   const letterboxMode = normalizeLetterboxMode(obj.letterboxMode);
   if (letterboxMode !== undefined) {
@@ -970,11 +989,16 @@ export function parseProgressJson(raw: string): SceneProgress {
   const obj = parsed as Record<string, unknown>;
   const consumed = normalizeBooleanRecord(obj.consumed);
   const visibilityRaw = normalizeBooleanRecord(obj.visibility);
+  const interacted = normalizeBooleanRecord(obj.interacted);
 
   const progress: SceneProgress = { consumed };
 
   if (Object.keys(visibilityRaw).length > 0) {
     progress.visibility = visibilityRaw;
+  }
+
+  if (Object.keys(interacted).length > 0) {
+    progress.interacted = interacted;
   }
 
   return progress;

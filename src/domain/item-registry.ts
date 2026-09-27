@@ -20,7 +20,7 @@ import type { ItemDefinition } from "./types";
  * if (potion) giveItemToInventory(state, potion, 1, Date.now());
  */
 export function findItem(
-  items: ItemDefinition[],
+  items: readonly ItemDefinition[],
   id: string,
 ): ItemDefinition | undefined {
   return items.find((item) => item.id === id);

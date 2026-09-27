@@ -19,6 +19,8 @@ import { useExtensionContext } from "@avg-studio/sdk";
 import { scaleBackpackScreenLayout } from "../domain/backpack-screen-config";
 import type { DesignSize } from "../domain/design-resolution";
 import { scaleInventoryHudLayout } from "../domain/inventory-hud";
+import { normalizeHotspotSize } from "../domain/hotspot-visual";
+import type { ImageNaturalSize } from "../shared/hotspot-image-size";
 import {
   parseBackpackScreenJson,
   parseInventoryHudJson,
@@ -813,7 +815,7 @@ export function EditorShell({
   );
 
   /**
-   * 边框拉伸 hotspot：写回中心坐标与 visual.width / visual.height。
+   * 边框拉伸 hotspot：写回中心坐标与相对底图的尺寸比例。
    *
    * @param id - hotspot id
    * @param geometry - 中心归一化 + 设计像素尺寸
@@ -821,7 +823,7 @@ export function EditorShell({
   const handleHotspotResize = useCallback(
     (
       id: string,
-      geometry: { x: number; y: number; width: number; height: number },
+      geometry: { x: number; y: number; widthRatio: number; heightRatio: number },
     ) => {
       if (selectedScene === null) {
         return;
@@ -838,13 +840,27 @@ export function EditorShell({
           y: geometry.y,
           visual: {
             ...hs.visual,
-            width: geometry.width,
-            height: geometry.height,
+            widthRatio: geometry.widthRatio,
+            heightRatio: geometry.heightRatio,
+            width: undefined,
+            height: undefined,
           },
         };
       });
 
       handleSceneChange({ ...selectedScene, hotspots });
+    },
+    [selectedScene, handleSceneChange],
+  );
+
+  /** 旧场景的像素尺寸在底图实际尺寸确定后迁移为比例。 */
+  const handleNormalizeHotspotSizes = useCallback(
+    (sceneId: string, rect: { width: number; height: number }, imageSizes?: ReadonlyMap<string, ImageNaturalSize>) => {
+      if (selectedScene === null || selectedScene.id !== sceneId) return;
+      const hotspots = selectedScene.hotspots.map((hs) => normalizeHotspotSize(hs, rect, imageSizes?.get(hs.id)));
+      if (hotspots.some((hs, index) => hs !== selectedScene.hotspots[index])) {
+        handleSceneChange({ ...selectedScene, hotspots });
+      }
     },
     [selectedScene, handleSceneChange],
   );
@@ -1373,6 +1389,7 @@ export function EditorShell({
                   onSelectHotspot={setSelectedHotspotId}
                   onHotspotMove={handleHotspotMove}
                   onHotspotResize={handleHotspotResize}
+                  onNormalizeHotspotSizes={handleNormalizeHotspotSizes}
                   onCanvasPlace={handleCanvasPlace}
                   placementActive={placementActive}
                   designWidth={designSize.width}

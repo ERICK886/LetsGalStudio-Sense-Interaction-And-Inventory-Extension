@@ -228,6 +228,7 @@ export function SceneBaseLayer({
             top: contentRect.originY,
             width: contentRect.width,
             height: contentRect.height,
+            clipPath: `inset(${Math.max(0, -contentRect.originY)}px ${Math.max(0, contentRect.originX + contentRect.width - designW)}px ${Math.max(0, contentRect.originY + contentRect.height - designH)}px ${Math.max(0, -contentRect.originX)}px)`,
             pointerEvents: "none",
             zIndex: 0,
             opacity: clampedOpacity,

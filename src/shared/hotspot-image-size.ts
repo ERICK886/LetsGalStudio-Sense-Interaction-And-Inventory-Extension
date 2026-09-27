@@ -37,5 +37,7 @@ export function resetSizeForHotspotImageChange(
   previous: HotspotElement["visual"],
   next: HotspotElement["visual"],
 ): HotspotElement["visual"] {
-  return previous.src === next.src ? next : { kind: next.kind, src: next.src };
+  if (previous.src === next.src) return next;
+  const { width, height, widthRatio, heightRatio, ...rest } = next;
+  return rest;
 }

@@ -20,6 +20,7 @@ import {
   resolveHotspotLabelAppearance,
 } from "../domain/hotspot-label";
 import { buildHoverRuntimeStyle } from "../domain/hover-shadow";
+import { hotspotDisplaySize, placeholderBackground, placeholderBorderRadius } from "../domain/hotspot-visual";
 import { resolveHotspotHoverShadow } from "../domain/scene-ui-config";
 import type {
   HotspotElement,
@@ -152,7 +153,7 @@ export function HotspotView({
   const [imageNatural, setImageNatural] = useState<(ImageNaturalSize & { url: string }) | null>(null);
   const center = normToWorld(hotspot.x, hotspot.y, contentRect);
   const url = resolveUrl(hotspot.visual.src);
-  const size = getHotspotImageSize(hotspot.visual, imageNatural?.url === url ? imageNatural : undefined);
+  const size = hotspotDisplaySize(hotspot, contentRect, imageNatural?.url === url ? imageNatural : undefined);
   const hasImage = Boolean(url);
   // 解析运行时实际使用的悬停效果：跟随全局或使用本地
   const resolvedHoverShadow = resolveHotspotHoverShadow(
@@ -189,15 +190,10 @@ export function HotspotView({
     labelMode === "always" ||
     (labelMode === "hover" && interactiveHover);
 
-  /**
-   * 有图：仅剪影命中时接收指针，透明区放行给下方对话框。
-   * 无图：整框可点。
-   */
-  const rootPointerEvents: "auto" | "none" = hasImage
-    ? alphaHit
-      ? "auto"
-      : "none"
-    : "auto";
+  /** 图片由透明像素命中；无图由内层形状接收指针，圆形角落可穿透。 */
+  const rootPointerEvents: "auto" | "none" = hasImage && alphaHit
+    ? "auto"
+    : "none";
 
   /**
    * 按指针位置同步剪影命中状态。
@@ -397,11 +393,12 @@ export function HotspotView({
           style={{
             width: "100%",
             height: "100%",
-            borderRadius: 4,
-            background: "rgba(46, 196, 164, 0.18)",
-            border: "1px dashed rgba(180, 180, 200, 0.45)",
+            borderRadius: placeholderBorderRadius(hotspot.visual),
+            background: placeholderBackground(hotspot.visual),
+            border: "none",
             boxSizing: "border-box",
-            pointerEvents: "none",
+            clipPath: hotspot.visual.placeholderShape === "circle" ? "circle(50% at 50% 50%)" : undefined,
+            pointerEvents: "auto",
           }}
         />
       )}

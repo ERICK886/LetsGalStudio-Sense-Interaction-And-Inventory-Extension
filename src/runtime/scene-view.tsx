@@ -405,6 +405,7 @@ export function SceneView({
         painted.natural.width,
         painted.natural.height,
         1,
+        painted.scene.baseImageFit,
       );
     },
     [hostSize, designWidth, designHeight],
@@ -683,7 +684,7 @@ export function SceneView({
   const hotspotsFor = useCallback(
     (painted: PaintedScene): HotspotElement[] =>
       painted.scene.hotspots.filter((hotspot) =>
-        isHotspotVisible(hotspot, progress, (name) => ctx.variables.get(name)),
+        isHotspotVisible(hotspot, progress, (name) => ctx.variables.get(name), painted.scene.hotspots),
       ),
     [progress, ctx],
   );

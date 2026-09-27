@@ -61,6 +61,8 @@ import {
 } from "../store/hud-ui-show";
 import { useInventorySession } from "../store/inventory-session";
 import { useItemsLibrary } from "../store/items-persistence";
+import { readSceneHudVisibility, sceneHudVisibility, subscribeSceneHudVisibility } from "../store/scene-hud-visibility";
+import type { SceneDefinition } from "../domain/types";
 import { subscribeSettingsField } from "../store/settings-sync";
 import { useTheme } from "../theme/theme-provider";
 
@@ -74,6 +76,8 @@ export interface HudShellProps {
    * @default true（经 backpack-hud ui.show 打开时）
    */
   compactHost?: boolean;
+  /** 预览直接传当前场景，避免读取玩家存档。 */
+  scene?: SceneDefinition | null;
 }
 
 /**
@@ -129,6 +133,7 @@ function padSlots(
  */
 export function HudShell({
   compactHost = true,
+  scene,
 }: HudShellProps): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
@@ -141,6 +146,11 @@ export function HudShell({
   const { size: designSize } = useDesignSize();
   const [hudJsonLocal] = ctx.settings.useValue(INVENTORY_HUD_JSON_KEY);
   const [hudTick, setHudTick] = useState(0);
+  const [sceneVisibility, setSceneVisibility] = useState(() => readSceneHudVisibility(ctx));
+  useEffect(() => subscribeSceneHudVisibility(() => {
+    setSceneVisibility(readSceneHudVisibility(ctx));
+  }), [ctx]);
+  const visibility = scene === undefined ? sceneVisibility : sceneHudVisibility(scene);
 
   useEffect(() => {
     return subscribeSettingsField((key) => {
@@ -402,7 +412,7 @@ export function HudShell({
             pointerEvents: "none",
           }}
         >
-          {slots.map((entry, index) => {
+          {visibility.showQuickbar ? slots.map((entry, index) => {
             const rect = layout.slots[index] ?? {
               x: layout.root.x,
               y:
@@ -519,10 +529,13 @@ export function HudShell({
                 ) : null}
               </button>
             );
-          })}
+          }) : null}
 
           <UiOverlayLayer
-            overlays={hud.overlays ?? []}
+            overlays={(hud.overlays ?? []).filter((el) =>
+              visibility.showOpenBagButton ||
+              (el.id !== HUD_CHROME_OVERLAY_IDS.openBag && el.role !== "openBag")
+            )}
             originX={originX}
             originY={originY}
             layoutScale={layoutScale}

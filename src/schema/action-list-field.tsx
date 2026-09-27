@@ -230,7 +230,7 @@ function updateToastStyle(
   if (value === "" || value === undefined) {
     delete style[key];
   } else {
-    style[key] = value as (UiBoxStyle & UiTextStyle)[typeof key];
+    (style as Record<string, string | number | undefined>)[key] = value;
   }
 
   if (Object.keys(style).length === 0) {

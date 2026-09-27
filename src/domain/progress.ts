@@ -15,8 +15,8 @@ import { evaluateHotspotConditionGroup } from "./hotspot-condition";
  *
  * 规则（优先级从高到低）：
  * 1. `once === true` 且 `progress.consumed[id] === true` → 隐藏
- * 2. `progress.visibility` 显式覆盖该 id → 以覆盖值为准
- * 3. 否则回退 `hotspot.visibleByDefault`
+ * 2. 开启完成后显示时，同场景普通交互点须全部完成
+ * 3. 显式显隐覆盖或默认可见状态均须满足游戏变量条件
  *
  * @param hotspot - 交互点定义
  * @param progress - 当前场景进度（consumed / visibility）
@@ -25,7 +25,7 @@ import { evaluateHotspotConditionGroup } from "./hotspot-condition";
  *
  * @example
  * ```ts
- * if (isHotspotVisible(hs, progress)) {
+ * if (isHotspotVisible(hs, progress, getVariable, scene.hotspots)) {
  *   // 渲染 HotspotView
  * }
  * ```
@@ -34,8 +34,22 @@ export function isHotspotVisible(
   hotspot: HotspotElement,
   progress: SceneProgress,
   getVariable: (name: string) => unknown = () => undefined,
+  sceneHotspots: readonly HotspotElement[] = [],
 ): boolean {
   if (hotspot.once && progress.consumed[hotspot.id] === true) {
+    return false;
+  }
+
+  if (
+    hotspot.showAfterAllOthers === true &&
+    sceneHotspots.some(
+      (other) =>
+        other.id !== hotspot.id &&
+        other.showAfterAllOthers !== true &&
+        progress.interacted?.[other.id] !== true &&
+        progress.consumed[other.id] !== true,
+    )
+  ) {
     return false;
   }
 
@@ -55,6 +69,20 @@ export function isHotspotVisible(
     hotspot.visibleByDefault !== false &&
     evaluateHotspotConditionGroup(hotspot.visibleIf, getVariable)
   );
+}
+
+/** 记录成功交互；一次性交互点同时标记为已消耗。 */
+export function markHotspotInteracted(
+  progress: SceneProgress,
+  hotspot: HotspotElement,
+): SceneProgress {
+  return {
+    ...progress,
+    interacted: { ...progress.interacted, [hotspot.id]: true },
+    consumed: hotspot.once
+      ? { ...progress.consumed, [hotspot.id]: true }
+      : progress.consumed,
+  };
 }
 
 /**

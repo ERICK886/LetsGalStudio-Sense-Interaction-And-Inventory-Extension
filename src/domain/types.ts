@@ -40,6 +40,9 @@ export type HotspotLabelMode = "hover" | "always" | "hidden";
  */
 export type SceneTransitionMode = "fade" | "cover";
 
+/** 场景底图在设计画幅内的展示方式。 */
+export type SceneBaseImageFit = "contain" | "cover";
+
 /** 交互点悬停阴影的单层配置（光晕 glow 或底影 base） */
 export interface HoverShadowLayer {
   enabled: boolean;
@@ -219,13 +222,27 @@ export interface HotspotElement {
   name: string;
   x: number;
   y: number;
-  visual: { kind: "image"; src: string; width?: number; height?: number };
+  visual: {
+    kind: "image";
+    src: string;
+    /** 相对底图内容区宽高的比例；无底图时相对设计画幅。 */
+    widthRatio?: number;
+    heightRatio?: number;
+    /** 旧场景的设计像素尺寸，仅用于兼容读取。 */
+    width?: number;
+    height?: number;
+    placeholderColor?: string;
+    placeholderOpacity?: number;
+    placeholderShape?: "square" | "circle";
+  };
   hoverShadow: HotspotHoverShadow;
   label?: HotspotLabel;
   actions: SceneAction[];
   once: boolean;
   visibleByDefault: boolean;
   visibleIf?: HotspotConditionGroup;
+  /** 同场景其他普通交互点均完成过交互后才显示。 */
+  showAfterAllOthers?: boolean;
   customCss: string;
   motion: ElementMotion;
 }
@@ -234,6 +251,12 @@ export interface SceneDefinition {
   id: string;
   name: string;
   baseImage: string;
+  /** 缺省为完整显示，以兼容旧场景。 */
+  baseImageFit?: SceneBaseImageFit;
+  /** 旧场景缺省显示。 */
+  showQuickbar?: boolean;
+  /** 旧场景缺省显示。 */
+  showOpenBagButton?: boolean;
   hotspots: HotspotElement[];
   /**
    * @deprecated 已弃用：运行时恒透明铺底，编辑器不再提供画面底色配置。
@@ -303,6 +326,8 @@ export interface InventoryState {
 export interface SceneProgress {
   consumed: Record<string, boolean>;
   visibility?: Record<string, boolean>;
+  /** 完成过未中断动作链的交互点，包含非一次性交互点。 */
+  interacted?: Record<string, boolean>;
 }
 
 export type InventoryHudMode = "withScene" | "always";

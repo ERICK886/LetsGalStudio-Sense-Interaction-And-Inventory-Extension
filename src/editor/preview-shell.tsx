@@ -48,6 +48,7 @@ type RuntimeShellComponent = React.ComponentType<{
 
 type HudShellComponent = React.ComponentType<{
   compactHost?: boolean;
+  scene?: SceneDefinition | null;
 }>;
 
 /**
@@ -338,7 +339,7 @@ export function PreviewShell({
               pointerEvents: "none",
             }}
           >
-            <HudShellComp compactHost={false} />
+            <HudShellComp compactHost={false} scene={scene} />
           </chakra.div>
         ) : null}
       </chakra.div>

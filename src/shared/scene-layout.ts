@@ -9,6 +9,7 @@
  */
 
 import { containInWorld } from "../domain/design-resolution";
+import type { SceneBaseImageFit } from "../domain/types";
 
 /** 编辑器外层 fit 留白（便于看到画框边缘） */
 export const SCENE_FIT_MARGIN_EDITOR = 0.92;
@@ -115,6 +116,7 @@ export function contentRectForBase(
   designH: number,
   imageW: number,
   imageH: number,
+  fit: SceneBaseImageFit = "contain",
 ): ContentRect {
   const dw = Math.max(1, designW);
   const dh = Math.max(1, designH);
@@ -123,7 +125,14 @@ export function contentRectForBase(
     return { originX: 0, originY: 0, width: dw, height: dh };
   }
 
-  const layout = containInWorld(dw, dh, imageW, imageH);
+  const layout = fit === "cover"
+    ? (() => {
+        const scale = Math.max(dw / imageW, dh / imageH);
+        const width = imageW * scale;
+        const height = imageH * scale;
+        return { x: (dw - width) / 2, y: (dh - height) / 2, width, height };
+      })()
+    : containInWorld(dw, dh, imageW, imageH);
 
   return {
     originX: layout.x,
@@ -153,6 +162,7 @@ export function buildSceneLayout(
   imageW: number,
   imageH: number,
   margin: number = SCENE_FIT_MARGIN_EDITOR,
+  fit: SceneBaseImageFit = "contain",
 ): SceneLayout {
   const dw = Math.max(1, designW);
   const dh = Math.max(1, designH);
@@ -163,7 +173,7 @@ export function buildSceneLayout(
     designW: dw,
     designH: dh,
     world: fitDesignToHost(hostW, hostH, dw, dh, margin),
-    contentRect: contentRectForBase(dw, dh, imageW, imageH),
+    contentRect: contentRectForBase(dw, dh, imageW, imageH, fit),
   };
 }
 
