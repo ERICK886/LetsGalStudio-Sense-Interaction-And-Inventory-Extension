@@ -41,6 +41,7 @@ export class BackpackHudExtension extends Extension<BackpackHudAppProps> {
   static settings = settings((s) => ({
     inventoryHudJson: s.string("物品栏外观 JSON").default(""),
     autoShowHud: s.boolean("场景交互时自动显示背包快捷栏").default(true),
+    showOpenBagButton: s.boolean("显示打开背包按钮").default(true),
     itemToastJson: s.string("获得物品提示 JSON").default(""),
   }));
 

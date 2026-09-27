@@ -54,6 +54,7 @@ import { fitDesignToHost } from "../shared/scene-layout";
 import {
   INVENTORY_HUD_JSON_KEY,
   readHudSetting,
+  readShowOpenBagButton,
 } from "../store/hud-settings";
 import {
   BACKPACK_HUD_FULLSCREEN_SHOW_OPTIONS,
@@ -150,7 +151,9 @@ export function HudShell({
   useEffect(() => subscribeSceneHudVisibility(() => {
     setSceneVisibility(readSceneHudVisibility(ctx));
   }), [ctx]);
-  const visibility = scene === undefined ? sceneVisibility : sceneHudVisibility(scene);
+  const visibility = scene === undefined
+    ? sceneVisibility
+    : sceneHudVisibility(scene, readShowOpenBagButton(ctx));
 
   useEffect(() => {
     return subscribeSettingsField((key) => {

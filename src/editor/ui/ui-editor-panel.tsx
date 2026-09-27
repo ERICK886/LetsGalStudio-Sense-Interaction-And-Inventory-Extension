@@ -66,12 +66,14 @@ import { createHistory } from "../../store/history";
 import {
   BACKPACK_SCREEN_JSON_KEY,
   AUTO_SHOW_HUD_KEY,
+  SHOW_OPEN_BAG_BUTTON_KEY,
   INVENTORY_HUD_JSON_KEY,
   readHudSetting,
   writeHudSetting,
 } from "../../store/hud-settings";
 import { notifySettingsField } from "../../store/settings-sync";
 import { useAutoShowHud } from "../../store/use-auto-show-hud";
+import { useShowOpenBagButton } from "../../store/use-show-open-bag-button";
 import {
   notifyUiHistoryTick,
   registerUiHistoryBridge,
@@ -343,6 +345,7 @@ export function UiEditorPanel(): React.ReactElement {
   const { tokens } = useTheme();
   const ctx = useExtensionContext();
   const autoShowHud = useAutoShowHud(ctx);
+  const showOpenBagButton = useShowOpenBagButton(ctx);
   const { size: designSize } = useDesignSize();
 
   const [sub, setSub] = useState<UiSubSection>("hud");
@@ -389,6 +392,14 @@ export function UiEditorPanel(): React.ReactElement {
       notifyUiHistoryTick();
     }
   }, [bag]);
+
+  const handleShowOpenBagButtonChange = useCallback(
+    (enabled: boolean): void => {
+      writeHudSetting(ctx, SHOW_OPEN_BAG_BUTTON_KEY, enabled);
+      notifySettingsField(SHOW_OPEN_BAG_BUTTON_KEY);
+    },
+    [ctx],
+  );
 
   const handleAutoShowHudChange = useCallback(
     (enabled: boolean): void => {
@@ -1022,6 +1033,29 @@ export function UiEditorPanel(): React.ReactElement {
             </Checkbox.Root>
             <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
               关闭后场景交互不再自动显示，也不会播放物品飞入快捷栏动画；剧本方法仍可手动打开。
+            </chakra.span>
+            <Checkbox.Root
+              checked={showOpenBagButton}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 8,
+                color: tokens.textPrimary,
+                fontSize: FONT_SIZE_DEFAULT,
+                cursor: "pointer",
+              }}
+              onCheckedChange={(details) =>
+                handleShowOpenBagButtonChange(details.checked === true)
+              }
+              colorPalette="teal"
+            >
+              <Checkbox.HiddenInput data-testid="ui-editor-show-open-bag-button" />
+              <Checkbox.Control />
+              <Checkbox.Label>显示打开背包按钮</Checkbox.Label>
+            </Checkbox.Root>
+            <chakra.span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.45 }}>
+              关闭后所有场景都隐藏背包按钮；开启时遵循场景属性中的开关。快捷栏物品仍可显示。
             </chakra.span>
           </chakra.div>
         ) : null}

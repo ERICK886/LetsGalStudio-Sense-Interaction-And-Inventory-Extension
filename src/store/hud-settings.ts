@@ -27,6 +27,14 @@ export function readAutoShowHud(ctx: ExtensionContext): boolean {
   return readHudSetting(ctx, AUTO_SHOW_HUD_KEY) !== false;
 }
 
+/** 全局打开背包按钮开关；关闭时覆盖各场景的显示设置。 */
+export const SHOW_OPEN_BAG_BUTTON_KEY = "showOpenBagButton";
+
+/** 缺少开关字段的旧项目默认显示按钮。 */
+export function readShowOpenBagButton(ctx: ExtensionContext): boolean {
+  return readHudSetting(ctx, SHOW_OPEN_BAG_BUTTON_KEY) !== false;
+}
+
 /** 全屏背包布局 JSON */
 export const BACKPACK_SCREEN_JSON_KEY = "backpackScreenJson";
 
